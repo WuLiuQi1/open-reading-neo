@@ -197,18 +197,20 @@ extension _BookSourcesPageListContent on _BookSourcesPageState {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
-              const SizedBox(width: 16),
-              Flexible(
-                child: Text(
-                  selectedCategory.source.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+              if (!_usesDiscoverySidebar || _state.selectedSourceId == null)
+                const SizedBox(width: 16),
+              if (!_usesDiscoverySidebar || _state.selectedSourceId == null)
+                Flexible(
+                  child: Text(
+                    selectedCategory.source.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
               if (_state.selectedSourceId == null)
                 _sourceActions(selectedCategory.source),
             ],
@@ -303,11 +305,10 @@ extension _BookSourcesPageListContent on _BookSourcesPageState {
 
     final tabletGrid =
         LayoutHelper.usesTabletLayout(context) &&
+        MediaQuery.textScalerOf(context).scale(14) <= 18.2 &&
         _layoutController.layout.value == BookSourceDiscoverLayout.standard;
     if (!tabletGrid) {
-      final horizontalPadding = LayoutHelper.usesTabletLayout(context)
-          ? LayoutHelper.tabletPagePadding
-          : 16.0;
+      final horizontalPadding = _sectionHorizontalPadding;
       return SliverPadding(
         padding: EdgeInsets.fromLTRB(
           horizontalPadding,
@@ -325,14 +326,14 @@ extension _BookSourcesPageListContent on _BookSourcesPageState {
 
     return SliverLayoutBuilder(
       builder: (context, constraints) {
-        const horizontalPadding = LayoutHelper.tabletPagePadding;
+        final horizontalPadding = _sectionHorizontalPadding;
         final usableWidth = math.max(
           0.0,
           constraints.crossAxisExtent - horizontalPadding * 2,
         );
         final columns = ((usableWidth + 20) / (340 + 20))
             .floor()
-            .clamp(2, 3)
+            .clamp(1, 3)
             .toInt();
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(
@@ -352,7 +353,10 @@ extension _BookSourcesPageListContent on _BookSourcesPageState {
               crossAxisCount: columns,
               crossAxisSpacing: 20,
               mainAxisSpacing: 4,
-              mainAxisExtent: 160,
+              mainAxisExtent:
+                  180 +
+                  math.max(0, MediaQuery.textScalerOf(context).scale(14) - 14) *
+                      6,
             ),
           ),
         );
@@ -377,9 +381,7 @@ extension _BookSourcesPageListContent on _BookSourcesPageState {
     double topPadding = 8,
     required double bottomPadding,
   }) {
-    final horizontalPadding = LayoutHelper.usesTabletLayout(context)
-        ? LayoutHelper.tabletPagePadding
-        : 16.0;
+    final horizontalPadding = _sectionHorizontalPadding;
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,

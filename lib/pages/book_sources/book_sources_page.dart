@@ -27,12 +27,14 @@ import 'widgets/book_source_list_reveal.dart';
 import 'widgets/book_source_sliver_transition.dart';
 import 'widgets/book_source_organization_actions.dart';
 import 'widgets/book_source_pill.dart';
+import 'widgets/book_source_tablet_sidebar.dart';
 import 'models/sourced_book.dart';
 import 'widgets/sourced_book_actions.dart';
 import 'widgets/sourced_book_cards.dart';
 
 part 'book_sources_page_list_content.dart';
 part 'book_sources_page_organization.dart';
+part 'book_sources_page_tablet.dart';
 
 enum BookSourceDiscoverLayout { standard, list }
 
@@ -365,6 +367,7 @@ class _BookSourcesPageState extends State<BookSourcesPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_usesDiscoverySidebar) return _buildTabletDiscovery();
     final useRailNavigation =
         NavigationContext.of(context)?.useRailNavigation ?? false;
     final usesTabletLayout = LayoutHelper.usesTabletLayout(context);
@@ -741,9 +744,7 @@ class _BookSourcesPageState extends State<BookSourcesPage> {
     BookSourcesSectionCache cache,
     double bottomPadding,
   ) {
-    final horizontalPadding = LayoutHelper.usesTabletLayout(context)
-        ? LayoutHelper.tabletPagePadding
-        : 16.0;
+    final horizontalPadding = _sectionHorizontalPadding;
     final shelves = (cache.shelves ?? const <BookSourceDiscoveryShelf>[])
         .where((shelf) => _state.matchesSelectedSource(shelf.source))
         .toList(growable: false);

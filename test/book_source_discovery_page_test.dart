@@ -934,10 +934,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        tester
-            .getTopLeft(find.byKey(const Key('bookSourceDiscoverScopeControl')))
-            .dy,
-        greaterThanOrEqualTo(chrome.pageTopPadding),
+        tester.getTopLeft(find.byKey(const Key('bookSourceTabletSidebar'))).dy,
+        0,
       );
 
       await tester.tap(find.text('Latest'));
@@ -947,25 +945,24 @@ void main() {
       );
       var delegate =
           grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 2);
+      expect(delegate.crossAxisCount, 1);
 
       tester.view.physicalSize = const Size(1366, 900);
       await tester.pumpAndSettle();
-      const expectedContentLeft = (1366 - 1200) / 2 + 28;
+      const expectedSourceLeft = (1366 - 1200) / 2 + 28;
+      const expectedResultLeft = expectedSourceLeft + 240 + 24;
       expect(
-        tester
-            .getTopLeft(find.byKey(const Key('bookSourceDiscoverScopeControl')))
-            .dx,
-        expectedContentLeft,
+        tester.getTopLeft(find.byKey(const Key('bookSourceTabletSidebar'))).dx,
+        expectedSourceLeft,
       );
       grid = tester.widget(find.byKey(const Key('bookSourceTabletBookGrid')));
       delegate = grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, 3);
+      expect(delegate.crossAxisCount, 2);
       expect(
         tester
             .getSize(find.byKey(const Key('bookSourceDiscoverScrollView')))
             .width,
-        1200,
+        880,
       );
       final bookRects = find
           .byWidgetPredicate((widget) {
@@ -982,14 +979,14 @@ void main() {
       final firstRow = bookRects
           .where((rect) => (rect.top - firstRowTop).abs() < 0.1)
           .toList();
-      expect(firstRow, hasLength(3));
+      expect(firstRow, hasLength(2));
       expect(
         firstRow.map((rect) => rect.left).reduce((a, b) => a < b ? a : b),
-        expectedContentLeft,
+        expectedResultLeft,
       );
       expect(
         firstRow.map((rect) => rect.right).reduce((a, b) => a > b ? a : b),
-        1366 - expectedContentLeft,
+        1366 - expectedSourceLeft,
       );
 
       await layoutController.setLayout(BookSourceDiscoverLayout.list);
@@ -998,10 +995,154 @@ void main() {
       final firstSource = find.byKey(
         const Key('bookSourceListSource-source-a'),
       );
-      expect(tester.getTopLeft(sourceSearch).dx, expectedContentLeft);
-      expect(tester.getTopRight(sourceSearch).dx, 1366 - expectedContentLeft);
-      expect(tester.getTopLeft(firstSource).dx, expectedContentLeft);
-      expect(tester.getTopRight(firstSource).dx, 1366 - expectedContentLeft);
+      expect(tester.getTopLeft(sourceSearch).dx, expectedSourceLeft);
+      expect(tester.getTopRight(sourceSearch).dx, 1366 - expectedSourceLeft);
+      expect(tester.getTopLeft(firstSource).dx, expectedSourceLeft);
+      expect(tester.getTopRight(firstSource).dx, 1366 - expectedSourceLeft);
+      expect(tester.takeException(), isNull);
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
+  testWidgets(
+    'tablet discovery sidebar keeps scopes aligned and searches locally',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1366, 900);
+      addTearDown(tester.view.reset);
+
+      final sourceA = _source('source-a', 'Source A').copyWith(groups: ['常用']);
+      final sourceB = _source(
+        'source-b',
+        'Source B',
+      ).copyWith(isFavorite: true);
+      final sourceC = _source('source-c', 'Source C');
+      SharedPreferences.setMockInitialValues({
+        'open_reading_book_sources_v1': jsonEncode(
+          [sourceA, sourceB, sourceC].map((s) => s.toJson()).toList(),
+        ),
+      });
+      final controller = BookSourcesPageController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: HomeMobileChromeScope(
+            metrics: const HomeMobileChromeMetrics(
+              systemTopInset: 24,
+              systemBottomInset: 20,
+              navigationAtTop: true,
+            ),
+            child: Scaffold(
+              body: BookSourcesPage(
+                client: _DiscoveryClient(),
+                controller: controller,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final sidebar = find.byKey(const Key('bookSourceTabletSidebar'));
+      final content = find.byKey(const Key('bookSourceTabletContent'));
+      final sidebarPanel = find.byKey(
+        const Key('bookSourceTabletSidebarPanel'),
+      );
+      final header = find.byKey(const Key('bookSourceTabletHeader'));
+      expect(sidebar, findsOneWidget);
+      expect(content, findsOneWidget);
+      expect(tester.getSize(sidebar).width, 240);
+      expect(tester.getTopLeft(sidebar).dx, 111);
+      expect(tester.getTopLeft(content).dx, 375);
+      expect(tester.getTopLeft(sidebar).dy, tester.getTopLeft(content).dy);
+      expect(tester.getTopLeft(sidebarPanel).dy, greaterThan(0));
+      expect(tester.getTopLeft(header).dy, tester.getTopLeft(sidebarPanel).dy);
+
+      final allSource = find.byKey(const Key('bookSourceTabletSourceAll'));
+      final sourceARow = find.byKey(
+        const Key('bookSourceTabletSource-source-a'),
+      );
+      final sourceBRow = find.byKey(
+        const Key('bookSourceTabletSource-source-b'),
+      );
+      expect(allSource, findsOneWidget);
+      expect(sourceARow, findsOneWidget);
+      expect(sourceBRow, findsOneWidget);
+      expect(
+        tester.getTopLeft(sourceARow).dx,
+        tester.getTopLeft(sourceBRow).dx,
+      );
+
+      await tester.tap(find.text('Latest'));
+      await tester.pumpAndSettle();
+      final grid = find.byKey(const Key('bookSourceTabletBookGrid'));
+      expect(grid, findsOneWidget);
+      final gridBooks = find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith(
+              'bookSourceBookReveal-',
+            ),
+      );
+      final gridRect = tester
+          .getRect(gridBooks.at(0))
+          .expandToInclude(tester.getRect(gridBooks.at(1)));
+      expect(gridRect.left, tester.getRect(content).left);
+      expect(gridRect.right, tester.getRect(content).right);
+      await tester.tap(find.text('Categories'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: content, matching: find.text('Source A')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('For you'));
+      await tester.pumpAndSettle();
+
+      final contentScroll = tester.widget<CustomScrollView>(
+        find.descendant(of: content, matching: find.byType(CustomScrollView)),
+      );
+      final contentController = contentScroll.controller!;
+      await tester.drag(content, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(contentController.offset, greaterThan(0));
+
+      await tester.tap(sourceBRow);
+      await tester.pumpAndSettle();
+      expect(find.text('Source B picks'), findsOneWidget);
+      expect(contentController.offset, 0);
+
+      final search = find.byKey(const Key('bookSourceTabletSourceSearch'));
+      expect(search, findsOneWidget);
+      await tester.enterText(search, 'source-c');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('bookSourceTabletSource-source-c')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('bookSourceTabletSource-source-a')),
+        findsNothing,
+      );
+      expect(find.text('Source B picks'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const Key('bookSourceOrganizationFavorites')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Source B picks'), findsOneWidget);
+      expect(find.text('Source A picks'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('bookSourceOrganizationGroups')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('bookSourceGroupPicker-常用')));
+      await tester.pumpAndSettle();
+      expect(find.text('Source A picks'), findsOneWidget);
+      expect(find.text('Source B picks'), findsNothing);
       expect(tester.takeException(), isNull);
       debugDefaultTargetPlatformOverride = null;
     },

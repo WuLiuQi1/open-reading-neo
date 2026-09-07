@@ -35,6 +35,14 @@ class HomeTabletToolbar extends StatelessWidget {
               fontWeight: FontWeight.w700,
               height: 1,
               color: Theme.of(context).colorScheme.onSurface,
+              shadows: [
+                Shadow(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.9),
+                  blurRadius: 10,
+                ),
+              ],
             ),
           ),
         ),

@@ -110,6 +110,7 @@ flutter:
   generate: true  # 启用国际化生成
   shaders:
     - shaders/reader_classic_page_fold.frag
+    - shaders/tablet_variable_gaussian.frag
 
   # To add assets to your application, add an assets section, like this:
   assets:

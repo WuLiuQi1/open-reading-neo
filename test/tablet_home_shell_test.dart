@@ -314,16 +314,18 @@ void main() {
     Finder nav(HomeNavigationDestination destination) => find.byWidgetPredicate(
       (w) => w is HomeBounceNavigationItem && w.item.destination == destination,
     );
-    Future<void> capture(String name) async {
+    Future<void> capture(String name, {bool settle = true}) async {
       if (screenshotDirectory == null) return;
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)),
-      );
-      await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)),
-      );
-      await tester.pump();
+      if (settle) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)),
+        );
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)),
+        );
+        await tester.pump();
+      }
       for (final rawImage in tester.widgetList<RawImage>(
         find.byType(RawImage),
       )) {
@@ -489,6 +491,23 @@ void main() {
       of: find.byType(SettingsPage),
       matching: find.byType(ListView),
     );
+    if (screenshotDirectory != null &&
+        Platform.environment['TABLET_SCROLL_VIDEO'] == '1') {
+      await tester.runAsync(
+        () => Directory('$screenshotDirectory/scroll').create(recursive: true),
+      );
+      final controller = tester.widget<ListView>(settingsScroll).controller!;
+      for (var frame = 0; frame < 48; frame++) {
+        controller.jumpTo(320 * Curves.easeInOut.transform(frame / 47));
+        await tester.pump();
+        await capture(
+          'scroll/frame-${frame.toString().padLeft(3, '0')}',
+          settle: false,
+        );
+      }
+      controller.jumpTo(0);
+      await tester.pump();
+    }
     final fixedTitlePosition = tester.getTopLeft(toolbar);
     await tester.drag(settingsScroll, const Offset(0, -120));
     await tester.pumpAndSettle();

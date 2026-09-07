@@ -349,7 +349,6 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                 right: 0,
                 child: HomeTabletTopBackdrop(
                   height: metrics.pageTopPadding,
-                  controlsBottom: metrics.topBarHeight,
                   blurEnabled: !_disableShellBlur,
                 ),
               ),

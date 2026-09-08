@@ -159,6 +159,8 @@ class BookSourceAddPanel extends StatelessWidget {
                       decoration: InputDecoration(
                         hintText: context.l10n.bookSourcesUrlHint,
                         labelText: context.l10n.bookSourcesUrlLabel,
+                        helperText: context.l10n.bookSourcesImportIntro,
+                        helperMaxLines: 3,
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -440,16 +442,26 @@ class _DetectedSourceSummary extends StatelessWidget {
         Text(
           preview == null
               ? context.l10n.bookSourcesDetectedOrsp
-              : context.l10n.bookSourcesImportTypeSummary(
-                  preview.runnableTextSources,
-                  preview.runnableImageSources,
-                  preview.unsupported,
-                ),
+              : context.l10n.bookSourcesDetectedAdditional,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
             height: 1.4,
           ),
         ),
+        if (preview != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.bookSourcesImportTypeSummary(
+              preview.runnableTextSources,
+              preview.runnableImageSources,
+              preview.unsupported,
+            ),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+        ],
         if (preview != null && preview.dedupeResult.groups.isNotEmpty) ...[
           const SizedBox(height: 8),
           TextButton.icon(

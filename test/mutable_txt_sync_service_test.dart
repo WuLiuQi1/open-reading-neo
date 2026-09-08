@@ -115,6 +115,36 @@ void main() {
     return book;
   }
 
+  test('no TXT bindings skip mutable capability checks', () async {
+    final sync = service(Directory('${root.path}/state'));
+    final result = await sync.reconcile();
+    expect(result.failed, 0);
+    expect(dav.capabilityChecks, 0);
+    expect(dav.files, isEmpty);
+  });
+
+  test('a bound TXT with no pending write skips capability probing', () async {
+    final book = await createBook('已同步', '内容');
+    final sync = service(Directory('${root.path}/state'));
+    await sync.join(book, bookUid: 'synced-book');
+    await sync.reconcile();
+    expect(dav.capabilityChecks, 1);
+    await database.delete('mutable_txt_spaces');
+    final result = await sync.reconcile();
+    expect(result.failed, 0);
+    expect(dav.capabilityChecks, 1);
+  });
+
+  test('paused TXT jobs do not trigger capability probing', () async {
+    final book = await createBook('已暂停', '内容');
+    final sync = service(Directory('${root.path}/state'));
+    await sync.join(book, bookUid: 'paused-book');
+    await sync.setEnabled('paused-book', false);
+    await sync.reconcile();
+    expect(dav.capabilityChecks, 0);
+    expect(dav.files, isEmpty);
+  });
+
   test(
     'publishes edits to one stable current path and durable revisions',
     () async {
@@ -1275,6 +1305,7 @@ class _FakeDavStore {
   final Map<String, int> versions = {};
   String? mutateBeforeNextCurrentWrite;
   bool weakEtags = false;
+  int capabilityChecks = 0;
   int chunkUploadBytes = 0;
   Completer<void>? blockNextCurrentWrite;
   Completer<void> currentWriteStarted = Completer<void>();
@@ -1309,7 +1340,9 @@ class _FakeDavClient extends WebDavClient {
   ) async {}
 
   @override
-  Future<void> verifyMutableWritePreconditions() async {}
+  Future<void> verifyMutableWritePreconditions() async {
+    store.capabilityChecks++;
+  }
 
   @override
   Future<WebDavResourceState> resourceState(Uri uri) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:xxread/services/sync/mutable_txt_sync_service.dart';
 import 'package:xxread/services/sync/sync_models.dart';
 import 'package:xxread/services/sync/webdav_sync_controller.dart';
 import 'package:xxread/utils/localization_extension.dart';
@@ -8,9 +9,8 @@ import 'package:xxread/utils/page_style_helper.dart';
 import 'package:xxread/widgets/floating_subpage_scaffold.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
-import 'webdav_setup_page.dart';
 import 'txt_sync_details_page.dart';
-import '../../../services/sync/mutable_txt_sync_service.dart';
+import 'webdav_setup_page.dart';
 import 'webdav_sync_content_page.dart';
 import 'webdav_sync_translator.dart';
 
@@ -20,21 +20,61 @@ class WebDavSyncPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sync = context.watch<WebDavSyncController>();
+    final l10n = context.l10n;
+    final status = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SyncOverview(sync: sync),
+        const SizedBox(height: 18),
+        _SyncActivity(sync: sync),
+        if (sync.lastFailure case final failure?) ...[
+          const SizedBox(height: 20),
+          Text(
+            webDavSyncErrorText(context, failure.code),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            webDavSyncFailurePhaseText(
+              context,
+              sync.lastFailedPhase,
+              bookFiles: sync.lastFailureIsFile,
+            ),
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          WebDavSyncFailureDetails(failure: failure),
+        ],
+      ],
+    );
+    final settings = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Section(
+          title: l10n.cloudSyncResumeTitle,
+          child: _ContinuationSettings(sync: sync),
+        ),
+        const SizedBox(height: 24),
+        _Section(
+          title: l10n.webDavSyncContent,
+          child: _SyncNavigation(sync: sync),
+        ),
+        const SizedBox(height: 16),
+        _ConnectionFooter(sync: sync),
+      ],
+    );
     return FloatingSubpageScaffold(
-      title: context.l10n.cloudSyncTitle,
+      title: l10n.cloudSyncTitle,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 820;
-          final sections = <Widget>[
-            _StatusCard(sync: sync),
-            _ContinuationCard(sync: sync),
-            _BookFilesCard(sync: sync),
-            _ScopeCard(sync: sync),
-            _ConnectionCard(sync: sync),
-            _ActivityCard(sync: sync),
-          ];
+          // Keep readable controls when accessibility text consumes more width.
+          final wide =
+              constraints.maxWidth >= 860 &&
+              MediaQuery.textScalerOf(context).scale(16) <= 22;
           return ListView(
-            padding: floatingSubpagePadding(context, top: 20, bottom: 40),
+            padding: floatingSubpagePadding(context, top: 24, bottom: 40),
             children: [
               Center(
                 child: ConstrainedBox(
@@ -43,40 +83,17 @@ class WebDavSyncPage extends StatelessWidget {
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              flex: 4,
-                              child: Column(
-                                children: [
-                                  sections[0],
-                                  const SizedBox(height: 16),
-                                  sections[5],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              flex: 6,
-                              child: Column(
-                                children: [
-                                  sections[1],
-                                  const SizedBox(height: 16),
-                                  sections[2],
-                                  const SizedBox(height: 16),
-                                  sections[3],
-                                  const SizedBox(height: 16),
-                                  sections[4],
-                                ],
-                              ),
-                            ),
+                            Expanded(flex: 4, child: status),
+                            const SizedBox(width: 40),
+                            Expanded(flex: 5, child: settings),
                           ],
                         )
                       : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            for (var i = 0; i < sections.length; i++) ...[
-                              sections[i],
-                              if (i != sections.length - 1)
-                                const SizedBox(height: 16),
-                            ],
+                            status,
+                            const SizedBox(height: 24),
+                            settings,
                           ],
                         ),
                 ),
@@ -89,179 +106,305 @@ class WebDavSyncPage extends StatelessWidget {
   }
 }
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.sync});
-
+class _SyncOverview extends StatelessWidget {
+  const _SyncOverview({required this.sync});
   final WebDavSyncController sync;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final configured = sync.isConfigured;
-    final syncing =
+    final busy =
         sync.status == WebDavSyncStatus.syncing ||
-        sync.status == WebDavSyncStatus.testing;
+        sync.status == WebDavSyncStatus.testing ||
+        sync.syncingText;
     final failed =
+        sync.lastError != null ||
         sync.status == WebDavSyncStatus.failed ||
         sync.status == WebDavSyncStatus.partialFailure;
-
     final title = !configured
         ? l10n.webDavNotConfigured
-        : failed
-        ? (sync.status == WebDavSyncStatus.partialFailure
-              ? l10n.webDavPartialFailure
-              : l10n.webDavSyncFailed)
-        : syncing
+        : busy
         ? l10n.webDavSyncing
-        : l10n.webDavConnected;
-    final subtitle = !configured
-        ? l10n.webDavConfigureSubtitle
         : failed
-        ? sync.lastError == null
-              ? l10n.cloudSyncPendingFiles
-              : '${webDavSyncErrorText(context, sync.lastError)}\n'
-                    '${webDavSyncFailurePhaseText(context, sync.lastFailedPhase)}'
-        : sync.pendingChanges > 0
-        ? l10n.webDavPendingChanges(sync.pendingChanges)
-        : sync.lastSuccessfulSync == null
-        ? l10n.webDavNeverSynced
-        : l10n.webDavLastSync(
-            DateFormat.yMd(
-              Localizations.localeOf(context).toLanguageTag(),
-            ).add_Hm().format(sync.lastSuccessfulSync!.toLocal()),
-          );
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: (failed ? scheme.error : scheme.primary).withValues(
-                    alpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: syncing
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )
-                    : Icon(
-                        failed
-                            ? Icons.cloud_off_outlined
-                            : configured
-                            ? Icons.cloud_done_outlined
-                            : Icons.cloud_outlined,
-                        color: failed ? scheme.error : scheme.primary,
-                      ),
+        ? sync.status == WebDavSyncStatus.partialFailure
+              ? l10n.webDavPartialFailure
+              : l10n.webDavSyncFailed
+        : l10n.webDavConnected;
+    final host = Uri.tryParse(sync.serverUrl ?? '')?.host;
+    final lastSync = sync.lastSuccessfulSync;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 3, right: 12),
+              child: Icon(
+                failed ? Icons.cloud_off_outlined : Icons.cloud_sync_outlined,
+                size: 30,
+                color: failed ? scheme.error : scheme.primary,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
                       title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    configured
+                        ? host != null && host.isNotEmpty
+                              ? host
+                              : 'WebDAV'
+                        : l10n.webDavConfigureSubtitle,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(l10n.cloudSyncTagline),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: syncing
-                  ? null
-                  : configured
-                  ? () => _perform(context, () async {
-                      await sync.syncNow();
-                    })
-                  : () => _openSetup(context),
-              icon: Icon(configured ? Icons.sync_rounded : Icons.settings),
-              label: Text(configured ? l10n.webDavSyncNow : l10n.webDavSetUp),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        if (configured) ...[
+          Text(
+            sync.pendingChanges > 0
+                ? l10n.webDavPendingChanges(sync.pendingChanges)
+                : lastSync == null
+                ? l10n.webDavNeverSynced
+                : l10n.webDavLastSync(
+                    DateFormat.yMd(
+                      Localizations.localeOf(context).toLanguageTag(),
+                    ).add_Hm().format(lastSync.toLocal()),
+                  ),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 12),
         ],
-      ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          onPressed: busy
+              ? null
+              : configured
+              ? () => _perform(context, () async {
+                  await sync.syncNow();
+                })
+              : () => _openSetup(context),
+          icon: busy && !MediaQuery.disableAnimationsOf(context)
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  configured ? Icons.sync_rounded : Icons.add_rounded,
+                  size: 20,
+                ),
+          label: Text(
+            busy
+                ? sync.status == WebDavSyncStatus.testing
+                      ? l10n.webDavTestingConnection
+                      : sync.phase != WebDavSyncPhase.none
+                      ? webDavSyncPhaseText(context, sync.phase)
+                      : l10n.webDavSyncing
+                : configured
+                ? l10n.webDavSyncNow
+                : l10n.webDavSetUp,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _ContinuationCard extends StatelessWidget {
-  const _ContinuationCard({required this.sync});
-
+class _SyncActivity extends StatelessWidget {
+  const _SyncActivity({required this.sync});
   final WebDavSyncController sync;
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
+    final l10n = context.l10n;
+    final metadataBusy = sync.status == WebDavSyncStatus.syncing;
+    final fileFailed =
+        sync.lastFailureIsFile ||
+        sync.textStates.any(
+          (state) =>
+              state.status == MutableTxtSyncStatus.failed ||
+              state.status == MutableTxtSyncStatus.conflict,
+        );
+    final progress = !sync.scope.progress
+        ? l10n.cloudSyncLocalOnly
+        : metadataBusy
+        ? sync.phase == WebDavSyncPhase.none
+              ? l10n.webDavSyncing
+              : webDavSyncPhaseText(context, sync.phase)
+        : sync.lastError != null && !sync.lastFailureIsFile
+        ? l10n.cloudSyncFailed
+        : sync.progressPending
+        ? l10n.cloudSyncPending
+        : sync.lastProgressSyncAt != null
+        ? l10n.cloudSyncMetadataComplete
+        : l10n.cloudSyncNoActivity;
+    final files = !sync.scope.bookFiles
+        ? l10n.cloudSyncLocalOnly
+        : sync.syncingText
+        ? l10n.webDavSyncing
+        : fileFailed
+        ? l10n.cloudSyncPendingFiles
+        : sync.textStates.isEmpty
+        ? l10n.cloudSyncNoBooks
+        : sync.textStates.every(
+            (state) => state.status == MutableTxtSyncStatus.synced,
+          )
+        ? l10n.cloudSyncCurrent
+        : l10n.cloudSyncFileIdle;
+    return _Surface(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            context.l10n.cloudSyncResumeTitle,
-            style: Theme.of(context).textTheme.titleMedium,
+          _StatusRow(
+            icon: Icons.bookmark_border_rounded,
+            title: l10n.cloudSyncProgress,
+            detail: progress,
+            failed: sync.lastError != null && !sync.lastFailureIsFile,
           ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.l10n.webDavAutomaticSync),
-            subtitle: Text(context.l10n.cloudSyncAutoHint),
-            value: sync.autoSync,
-            onChanged: sync.isConfigured
-                ? (value) => _perform(context, () => sync.setAutoSync(value))
-                : null,
+          const _InsetDivider(),
+          _StatusRow(
+            icon: Icons.description_outlined,
+            title: l10n.cloudSyncText,
+            detail: files,
+            failed: sync.scope.bookFiles && fileFailed,
+            onTap: sync.isConfigured ? () => _openBooks(context) : null,
           ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.l10n.webDavScopeProgress),
-            value: sync.scope.progress,
-            onChanged: sync.isConfigured
-                ? (value) => _perform(
-                    context,
-                    () => sync.setScope(sync.scope.copyWith(progress: value)),
-                  )
-                : null,
-          ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.l10n.cloudSyncAutoResume),
-            subtitle: Text(context.l10n.cloudSyncAutoResumeHint),
-            value: sync.autoResume,
-            onChanged: sync.isConfigured && sync.scope.progress
-                ? (value) => _perform(context, () => sync.setAutoResume(value))
-                : null,
-          ),
-          if (sync.isConfigured && !sync.autoSync)
-            Text(context.l10n.cloudSyncPaused),
         ],
       ),
     );
   }
 }
 
-class _ScopeCard extends StatelessWidget {
-  const _ScopeCard({required this.sync});
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    this.failed = false,
+    this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String detail;
+  final bool failed;
+  final VoidCallback? onTap;
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      minLeadingWidth: 24,
+      horizontalTitleGap: 12,
+      leading: Icon(icon, size: 22, color: theme.colorScheme.onSurfaceVariant),
+      title: Text(title, style: theme.textTheme.titleSmall),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          detail,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: failed
+                ? theme.colorScheme.error
+                : theme.colorScheme.onSurfaceVariant,
+            height: 1.4,
+          ),
+        ),
+      ),
+      trailing: onTap == null
+          ? null
+          : const Icon(Icons.chevron_right_rounded, size: 20),
+      onTap: onTap,
+    );
+  }
+}
+
+class _ContinuationSettings extends StatelessWidget {
+  const _ContinuationSettings({required this.sync});
+  final WebDavSyncController sync;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      children: [
+        SwitchListTile.adaptive(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          title: Text(l10n.webDavAutomaticSync),
+          subtitle: Text(
+            sync.isConfigured && !sync.autoSync
+                ? l10n.cloudSyncPaused
+                : l10n.cloudSyncAutoHint,
+          ),
+          value: sync.autoSync,
+          onChanged: sync.isConfigured
+              ? (value) => _perform(context, () => sync.setAutoSync(value))
+              : null,
+        ),
+        const _InsetDivider(),
+        SwitchListTile.adaptive(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 2,
+          ),
+          title: Text(l10n.webDavScopeProgress),
+          value: sync.scope.progress,
+          onChanged: sync.isConfigured
+              ? (value) => _perform(
+                  context,
+                  () => sync.setScope(sync.scope.copyWith(progress: value)),
+                )
+              : null,
+        ),
+        const _InsetDivider(),
+        SwitchListTile.adaptive(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          title: Text(l10n.cloudSyncAutoResume),
+          subtitle: Text(l10n.cloudSyncAutoResumeHint),
+          value: sync.autoResume,
+          onChanged: sync.isConfigured && sync.scope.progress
+              ? (value) => _perform(context, () => sync.setAutoResume(value))
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _SyncNavigation extends StatelessWidget {
+  const _SyncNavigation({required this.sync});
   final WebDavSyncController sync;
 
   @override
@@ -272,33 +415,128 @@ class _ScopeCard extends StatelessWidget {
       if (sync.scope.books) l10n.webDavScopeBooks,
       if (sync.scope.progress) l10n.webDavScopeProgress,
       if (sync.scope.bookmarks) l10n.webDavScopeBookmarks,
+      if (sync.scope.notes) l10n.webDavScopeNotes,
       if (sync.scope.readingSessions) l10n.webDavScopeReadingSessions,
+      if (sync.scope.readerSettings) l10n.webDavScopeReaderSettings,
+      if (sync.scope.replaceRules) l10n.webDavScopeReplaceRules,
       if (sync.scope.bookFiles) l10n.webDavScopeBookFiles,
     ];
-    return _Card(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.sync_alt_rounded),
-        title: Text(l10n.cloudSyncMoreContent),
-        subtitle: Text(enabled.join(' · ')),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        enabled: sync.isConfigured,
-        onTap: sync.isConfigured
-            ? () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const WebDavSyncContentPage(),
-                ),
-              )
-            : null,
-      ),
+    final available = sync.remoteBooks
+        .where((book) => book.fileAvailable)
+        .length;
+    final busy =
+        sync.status == WebDavSyncStatus.syncing ||
+        sync.status == WebDavSyncStatus.testing ||
+        sync.syncingText;
+    return Column(
+      children: [
+        _NavigationRow(
+          icon: Icons.menu_book_outlined,
+          title: l10n.cloudSyncBooks,
+          detail: available == 0
+              ? l10n.cloudSyncBooksHint
+              : '${l10n.webDavFilesAvailableDownload}：$available',
+          onTap: sync.isConfigured ? () => _openBooks(context) : null,
+        ),
+        const _InsetDivider(),
+        _NavigationRow(
+          icon: Icons.tune_rounded,
+          title: l10n.cloudSyncMoreContent,
+          detail: enabled.isEmpty
+              ? l10n.cloudSyncLocalOnly
+              : enabled.join(' · '),
+          onTap: sync.isConfigured
+              ? () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const WebDavSyncContentPage(),
+                  ),
+                )
+              : null,
+        ),
+        const _InsetDivider(),
+        _NavigationRow(
+          icon: Icons.dns_outlined,
+          title: l10n.cloudSyncStorage,
+          detail: sync.isConfigured
+              ? Uri.tryParse(sync.serverUrl ?? '')?.host ?? 'WebDAV'
+              : l10n.webDavNotConfigured,
+          onTap: busy ? null : () => _openSetup(context),
+        ),
+      ],
     );
   }
 }
 
-class _ConnectionCard extends StatelessWidget {
-  const _ConnectionCard({required this.sync});
+class _NavigationRow extends StatelessWidget {
+  const _NavigationRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String detail;
+  final VoidCallback? onTap;
 
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    minLeadingWidth: 24,
+    horizontalTitleGap: 12,
+    leading: Icon(icon, size: 22),
+    title: Text(title),
+    subtitle: Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        detail,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4),
+      ),
+    ),
+    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+    enabled: onTap != null,
+    onTap: onTap,
+  );
+}
+
+class _ConnectionFooter extends StatelessWidget {
+  const _ConnectionFooter({required this.sync});
   final WebDavSyncController sync;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final busy =
+        sync.status == WebDavSyncStatus.syncing ||
+        sync.status == WebDavSyncStatus.testing ||
+        sync.syncingText;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (sync.isConfigured)
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: busy
+                ? null
+                : () => _perform(context, () => _clear(context)),
+            icon: const Icon(Icons.link_off_rounded, size: 18),
+            label: Text(l10n.webDavClearConfiguration),
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            '${l10n.cloudSyncCheckHint}\n${l10n.webDavSecurityNotice}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _clear(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -320,175 +558,59 @@ class _ConnectionCard extends StatelessWidget {
     );
     if (confirmed == true) await sync.clearConfiguration();
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.tune_rounded),
-            title: Text(context.l10n.cloudSyncStorage),
-            subtitle: Text(
-              sync.isConfigured
-                  ? (sync.serverUrl ?? '')
-                  : context.l10n.webDavNotConfigured,
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _openSetup(context),
-          ),
-          if (sync.isConfigured) ...[
-            const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                Icons.link_off_rounded,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(context.l10n.webDavClearConfiguration),
-              onTap: () => _clear(context),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
-class _BookFilesCard extends StatelessWidget {
-  const _BookFilesCard({required this.sync});
-
-  final WebDavSyncController sync;
-
-  @override
-  Widget build(BuildContext context) {
-    final available = sync.remoteBooks
-        .where((book) => book.fileAvailable)
-        .length;
-    return _Card(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.cloud_download_outlined),
-        title: Text(context.l10n.cloudSyncBooks),
-        subtitle: Text(
-          available == 0
-              ? context.l10n.cloudSyncBooksHint
-              : '${context.l10n.webDavFilesAvailableDownload}：$available',
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        enabled: sync.isConfigured,
-        onTap: sync.isConfigured
-            ? () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const TxtSyncDetailsPage(),
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-}
-
-class _ActivityCard extends StatelessWidget {
-  const _ActivityCard({required this.sync});
-
-  final WebDavSyncController sync;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.cloudSyncActivity,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.cloudSyncProgress,
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          Text(
-            !sync.scope.progress
-                ? l10n.cloudSyncLocalOnly
-                : sync.progressPending
-                ? l10n.cloudSyncPending
-                : sync.lastProgressSyncAt != null
-                ? l10n.cloudSyncMetadataComplete
-                : l10n.cloudSyncNoActivity,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.cloudSyncText,
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          Text(
-            !sync.scope.bookFiles
-                ? l10n.cloudSyncLocalOnly
-                : sync.syncingText
-                ? l10n.webDavSyncing
-                : sync.textStates.isEmpty
-                ? l10n.cloudSyncNoBooks
-                : sync.textStates.every(
-                    (state) => state.status == MutableTxtSyncStatus.synced,
-                  )
-                ? l10n.cloudSyncCurrent
-                : l10n.cloudSyncPendingFiles,
-          ),
-          if (sync.isConfigured)
-            TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const TxtSyncDetailsPage(),
-                ),
-              ),
-              child: Text(l10n.cloudSyncActivity),
-            ),
-          if (sync.lastError != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              webDavSyncErrorText(context, sync.lastError),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-          const Divider(height: 28),
-          Text(
-            l10n.cloudSyncCheckHint,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l10n.webDavSecurityNotice,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.child});
+  final String title;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = PageStyleHelper.palette(context);
-    return Material(
-      color: palette.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: palette.border),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 10),
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(padding: const EdgeInsets.all(18), child: child),
-    );
-  }
+      _Surface(child: child),
+    ],
+  );
 }
+
+class _Surface extends StatelessWidget {
+  const _Surface({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: PageStyleHelper.palette(context).card,
+    borderRadius: BorderRadius.circular(18),
+    clipBehavior: Clip.antiAlias,
+    child: child,
+  );
+}
+
+class _InsetDivider extends StatelessWidget {
+  const _InsetDivider();
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1,
+    thickness: 0.5,
+    indent: 16,
+    endIndent: 16,
+    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.65),
+  );
+}
+
+Future<void> _openBooks(BuildContext context) => Navigator.of(
+  context,
+).push(MaterialPageRoute<void>(builder: (_) => const TxtSyncDetailsPage()));
 
 Future<void> _openSetup(BuildContext context) => Navigator.of(
   context,

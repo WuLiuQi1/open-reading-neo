@@ -10,12 +10,107 @@ import 'package:xxread/book_sources/dedupe/book_source_dedupe_models.dart';
 import 'package:xxread/book_sources/services/book_source_import_analyzer.dart';
 import 'package:xxread/book_sources/services/book_source_client.dart';
 import 'package:xxread/book_sources/networking/book_source_network_policy.dart';
+import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/source_engine/source_import_service.dart';
 
 Uint8List _bytes(Object value) =>
     Uint8List.fromList(utf8.encode(jsonEncode(value)));
 
 void main() {
+  final manifest = {
+    'protocol': 'open-reading-source',
+    'protocolVersion': '1.5',
+    'id': 'org.example.books',
+    'name': 'Example Books',
+    'apiBaseUrl': 'https://example.org/api/',
+    'capabilities': ['search', 'detail', 'catalog', 'content'],
+  };
+  final legado = {
+    'bookSourceName': 'Legado source',
+    'bookSourceUrl': 'https://books.example',
+    'searchUrl': '/search?q={{key}}',
+    'ruleSearch': {'bookList': '.book'},
+    'ruleToc': {'chapterList': '.chapter'},
+    'ruleContent': {'content': '#content@text'},
+  };
+
+  for (final entry in <String, Object>{
+    'single': legado,
+    'array': [legado],
+    'wrapped': {
+      'bookSourceList': [legado],
+    },
+    'orsp': manifest,
+  }.entries) {
+    test('detects ${entry.key} by URL content without discovery', () async {
+      const url = 'https://sources.example/share?id=123';
+      final adapter = _ImportAdapter({url: _bytes(entry.value)});
+      final dio = Dio()..httpClientAdapter = adapter;
+      final service = SourceImportService(
+        dio: dio,
+        networkPolicy: BookSourceNetworkPolicy(
+          lookup: (_) async => [InternetAddress('93.184.216.34')],
+        ),
+      );
+      var discoveryCalls = 0;
+      final analyzer = BookSourceImportAnalyzer(
+        additionalImporter: service,
+        discoveryClientFactory: () {
+          discoveryCalls++;
+          return _DiscoveryClient();
+        },
+      );
+      addTearDown(service.close);
+      addTearDown(analyzer.close);
+
+      final result = await analyzer.analyzeUrl('  $url  ');
+
+      expect(discoveryCalls, 0);
+      expect(adapter.requests, [url]);
+      if (entry.key == 'orsp') {
+        expect(result.kind, BookSourceImportKind.orsp);
+        expect(result.sources.single.manifestUrl, Uri.parse(url));
+      } else {
+        expect(result.kind, BookSourceImportKind.additional);
+        final source = result.additionalPreview!.sources.single;
+        expect(source.name, 'Legado source');
+        expect(source.raw, legado);
+      }
+    });
+  }
+
+  test('discovers ORSP when the service root returns unrelated JSON', () async {
+    final service = _ImmediateImportService(_bytes({'status': 'ok'}));
+    final discovery = _SuccessfulDiscoveryClient(
+      DiscoveredBookSource(
+        manifestUrl: Uri.parse('https://example.org/.well-known/orsp.json'),
+        manifest: BookSourceManifest.fromJson(manifest),
+      ),
+    );
+    final analyzer = BookSourceImportAnalyzer(
+      additionalImporter: service,
+      discoveryClientFactory: () => discovery,
+    );
+    addTearDown(service.close);
+    addTearDown(analyzer.close);
+
+    final result = await analyzer.analyzeUrl('https://example.org');
+
+    expect(result.kind, BookSourceImportKind.orsp);
+    expect(result.sources.single.id, 'org.example.books');
+    expect(discovery.inputs, ['https://example.org']);
+    expect(discovery.closed, isTrue);
+  });
+
+  test('unrelated JSON files are not reported as Legado sources', () {
+    final analyzer = BookSourceImportAnalyzer();
+    addTearDown(analyzer.close);
+    expect(
+      () => analyzer.analyzeBytes(_bytes({'status': 'ok'})),
+      throwsFormatException,
+    );
+  });
+
   test('detects an ORSP discovery document', () {
     final result = BookSourceImportAnalyzer().analyzeBytes(
       _bytes({
@@ -513,6 +608,26 @@ class _DiscoveryClient extends BookSourceClient {
   @override
   Future<DiscoveredBookSource> discover(String input) =>
       throw StateError('Unexpected ORSP discovery.');
+}
+
+class _SuccessfulDiscoveryClient extends BookSourceClient {
+  _SuccessfulDiscoveryClient(this.result);
+
+  final DiscoveredBookSource result;
+  final inputs = <String>[];
+  bool closed = false;
+
+  @override
+  Future<DiscoveredBookSource> discover(String input) async {
+    inputs.add(input);
+    return result;
+  }
+
+  @override
+  void close({bool force = true}) {
+    closed = true;
+    super.close(force: force);
+  }
 }
 
 class _HangingDiscoveryClient extends BookSourceClient {

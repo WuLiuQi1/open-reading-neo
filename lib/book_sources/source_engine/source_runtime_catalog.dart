@@ -227,6 +227,7 @@ class SourceRuntimeCatalog {
       source,
       decodeSourceDataTarget(bookId) ?? bookId,
       variables: requestVariables(ruleState, {'bookUrl': bookId}),
+      book: bookContext,
     );
     _state.rememberBookInfoResponse(source, bookId, response);
     final document = _requests.document(

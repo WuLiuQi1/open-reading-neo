@@ -8,6 +8,7 @@ import 'sync_models.dart';
 /// materialize those retained records without changing remote identities.
 enum SyncDataset {
   bookSources('book_sources'),
+  bookSourceGroups('book_source_groups'),
   books('books'),
   progress('progress'),
   bookmarks('bookmarks'),
@@ -34,6 +35,7 @@ class SyncDatasetCatalog {
 
   static bool isSupported(SyncDataset dataset) => switch (dataset) {
     SyncDataset.bookSources ||
+    SyncDataset.bookSourceGroups ||
     SyncDataset.books ||
     SyncDataset.progress ||
     SyncDataset.bookmarks ||
@@ -48,6 +50,7 @@ class SyncDatasetCatalog {
     if (!isSupported(dataset)) return false;
     return switch (dataset) {
       SyncDataset.bookSources => scope.bookSources,
+      SyncDataset.bookSourceGroups => scope.bookSources,
       SyncDataset.books => scope.books,
       SyncDataset.progress => scope.progress,
       SyncDataset.bookmarks => scope.bookmarks,
@@ -96,7 +99,9 @@ class SyncDatasetCatalog {
         recordId.startsWith('image_direction:')) {
       return true;
     }
-    if ((parsed == SyncDataset.bookSources || parsed == SyncDataset.books) &&
+    if ((parsed == SyncDataset.bookSources ||
+            parsed == SyncDataset.bookSourceGroups ||
+            parsed == SyncDataset.books) &&
         payload?['sync_schema'] != 1) {
       return true;
     }

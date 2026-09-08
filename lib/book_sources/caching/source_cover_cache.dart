@@ -53,7 +53,9 @@ class SourceCoverCache {
     this.maxDiskBytes = 96 * 1024 * 1024,
     this.diskMaintenanceInterval = const Duration(minutes: 5),
     this._beforeDiskRename,
-    BookSourceNetworkPolicy networkPolicy = const BookSourceNetworkPolicy(),
+    BookSourceNetworkPolicy networkPolicy = const BookSourceNetworkPolicy(
+      allowSyntheticDns: true,
+    ),
     this._platformLoader = const SourceWebViewLoader(),
   }) : assert(maxConcurrent > 0),
        assert(maxImageBytes > 0),

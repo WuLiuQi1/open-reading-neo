@@ -1,7 +1,11 @@
 class SourceRequestExpressions {
   const SourceRequestExpressions._();
 
-  static String expand(String input, Map<String, String> variables) {
+  static String expand(
+    String input,
+    Map<String, String> variables, {
+    bool expandPages = true,
+  }) {
     final normalized = input.replaceAllMapped(
       RegExp(r'\{\{\s*([^{}]+?)\s*\}([*/]\s*\d+)\}'),
       (match) {
@@ -22,11 +26,11 @@ class SourceRequestExpressions {
           if (calculated != null) value = '$calculated';
         }
         if (value == null) return match.group(0)!;
-        return Uri.encodeQueryComponent(value);
+        return value;
       },
     );
     final page = int.tryParse(variables['page'] ?? '');
-    if (page == null || page < 1) return expanded;
+    if (!expandPages || page == null || page < 1) return expanded;
     return expanded.replaceAllMapped(RegExp(r'<([^<>]*)>'), (match) {
       final alternatives = match.group(1)!.split(',');
       if (alternatives.isEmpty) return '';

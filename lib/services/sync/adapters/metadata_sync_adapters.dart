@@ -8,6 +8,7 @@ import '../../../book_sources/models/registered_book_source.dart';
 import '../../../book_sources/services/book_source_reading_progress.dart';
 import '../../../book_sources/services/book_source_registry.dart';
 import '../../../core/reader/paged_image_reader_settings.dart';
+import '../../../core/reader/reader_auto_page_turn_controller.dart';
 import '../../../core/reader/reader_custom_theme.dart';
 import '../../../core/reader/reader_layout.dart';
 import '../../../core/reader/reader_settings.dart';
@@ -24,6 +25,7 @@ import '../sync_protocol.dart';
 import '../book_sync_identity.dart';
 import '../reading_progress_event.dart';
 import '../reading_progress_sync_service.dart';
+import 'book_source_groups_sync_adapter.dart';
 
 abstract interface class MetadataSyncAdapter {
   String get dataset;
@@ -58,6 +60,7 @@ class MetadataSyncAdapters {
           sourceProgressStore ?? const BookSourceReadingProgressStore();
       adapters.addAll([
         BookSourcesSyncAdapter(store, registry),
+        BookSourceGroupsSyncAdapter(store, registry),
         BooksSyncAdapter(store, _databaseProvider),
         ProgressSyncAdapter(store, _databaseProvider, progressStore),
         BookmarksSyncAdapter(store, _databaseProvider),
@@ -140,6 +143,10 @@ class MetadataSyncAdapters {
     if (scope != null && !SyncDatasetCatalog.isEnabled(dataset, scope)) {
       return false;
     }
+    // Catalog records arrive before source records in sorted batches. Restore
+    // the directory during scan, after source memberships have materialized,
+    // so an old membership cannot resurrect a remotely removed group.
+    if (dataset == SyncDataset.bookSourceGroups) return false;
     final adapter = adapters.where((item) => item.dataset == operation.dataset);
     if (adapter.isEmpty) return false;
     return adapter.first.apply(txn, operation);
@@ -1219,6 +1226,32 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
   ReaderSettingsSyncAdapter(super.store, super.database);
 
   static const _imageDirectionPrefix = 'image_direction:';
+  static const _autoPageTurnPreferences = <String, String>{
+    'auto_page_turn_horizontal_mode':
+        ReaderAutoPageTurnController.horizontalModePreferenceKey,
+    'auto_page_turn_vertical_mode':
+        ReaderAutoPageTurnController.verticalModePreferenceKey,
+    'auto_page_turn_timed_seconds':
+        ReaderAutoPageTurnController.timedSecondsPreferenceKey,
+    'auto_page_turn_sweep_seconds':
+        ReaderAutoPageTurnController.sweepSecondsPreferenceKey,
+    'auto_page_turn_continuous_seconds':
+        ReaderAutoPageTurnController.continuousSecondsPreferenceKey,
+    'auto_page_turn_vertical_interval_seconds':
+        ReaderAutoPageTurnController.intervalSecondsPreferenceKey,
+    'auto_page_turn_shortcut_visible':
+        ReaderAutoPageTurnController.shortcutVisiblePreferenceKey,
+  };
+  static const _autoPageTurnDefaults = <String, double>{
+    'auto_page_turn_timed_seconds':
+        ReaderAutoPageTurnController.defaultTimedSeconds,
+    'auto_page_turn_sweep_seconds':
+        ReaderAutoPageTurnController.defaultSweepSeconds,
+    'auto_page_turn_continuous_seconds':
+        ReaderAutoPageTurnController.defaultContinuousSeconds,
+    'auto_page_turn_vertical_interval_seconds':
+        ReaderAutoPageTurnController.defaultVerticalIntervalSeconds,
+  };
   static const _knownSettingKeys = <String>{
     'font_size',
     'text_brightness',
@@ -1274,6 +1307,7 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
       'tap_zones': (await settingsStore.loadTapZones()).encode(),
       'image_reader_background':
           (await const PagedImageReaderSettingsStore().loadBackground()).name,
+      ...await _autoPageTurnValues(),
     };
     for (final entry in values.entries) {
       await store.recordLocal(
@@ -1290,6 +1324,60 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
     // identity mapping; also discard any unpublished records produced by
     // earlier builds so the reader-settings scope cannot bypass Books privacy.
     await store.forgetDirtyRecordsWithPrefix(dataset, _imageDirectionPrefix);
+  }
+
+  Future<Map<String, Object?>> _autoPageTurnValues() async {
+    final preferences = await SharedPreferences.getInstance();
+    final legacy = preferences.get(
+      ReaderAutoPageTurnController.intervalPreferenceKey,
+    );
+    final recordedKeys = (await store.recordsForDataset(
+      dataset,
+    )).map((record) => record.recordId).toSet();
+    final legacyKeys = legacy is num && legacy.isFinite
+        ? const {
+            'auto_page_turn_timed_seconds',
+            'auto_page_turn_vertical_interval_seconds',
+          }
+        : const <String>{};
+    return {
+      for (final entry in _autoPageTurnPreferences.entries)
+        // A fresh device has no user preference to publish. Staging defaults
+        // before pulling remote changes would assign them a newer HLC and
+        // overwrite the user's saved preferences on the other device.
+        if (preferences.containsKey(entry.value) ||
+            legacyKeys.contains(entry.key) ||
+            recordedKeys.contains(entry.key))
+          entry.key: _normalizeAutoPageTurnValue(
+            entry.key,
+            preferences.get(entry.value) ??
+                (legacyKeys.contains(entry.key) ? legacy : null),
+          ),
+    };
+  }
+
+  Object _normalizeAutoPageTurnValue(String key, Object? value) {
+    final fallbackSeconds = _autoPageTurnDefaults[key];
+    if (fallbackSeconds != null) {
+      return (value is num && value.isFinite
+              ? value.toDouble()
+              : fallbackSeconds)
+          .clamp(
+            ReaderAutoPageTurnController.minIntervalSeconds.toDouble(),
+            ReaderAutoPageTurnController.maxIntervalSeconds.toDouble(),
+          );
+    }
+    if (key == 'auto_page_turn_shortcut_visible') {
+      return value is bool ? value : true;
+    }
+    final vertical = key == 'auto_page_turn_vertical_mode';
+    final fallbackMode = vertical
+        ? ReaderAutoPageTurnMode.continuous
+        : ReaderAutoPageTurnMode.timed;
+    final alternateMode = vertical
+        ? ReaderAutoPageTurnMode.interval
+        : ReaderAutoPageTurnMode.sweep;
+    return value == alternateMode.name ? alternateMode.name : fallbackMode.name;
   }
 
   @override
@@ -1321,6 +1409,18 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
       throw _corruptSyncData('A synced reader setting has no value.');
     }
     final value = payload['value'];
+    if (_autoPageTurnPreferences.containsKey(operation.entityKey)) {
+      final key = operation.entityKey;
+      if (_autoPageTurnDefaults.containsKey(key)) {
+        _syncNum(value);
+      } else if (key == 'auto_page_turn_shortcut_visible') {
+        _syncBool(value);
+      } else if (_syncString(value) !=
+          _normalizeAutoPageTurnValue(key, value)) {
+        throw _corruptSyncData('A synced automatic paging mode is invalid.');
+      }
+      return;
+    }
     switch (operation.entityKey) {
       case 'font_size':
       case 'text_brightness':
@@ -1374,13 +1474,37 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
     }
     if (operation.recordId != operation.entityKey) return true;
     if (operation.deleted) {
-      return _knownSettingKeys.contains(operation.entityKey);
+      return _knownSettingKeys.contains(operation.entityKey) ||
+          _autoPageTurnPreferences.containsKey(operation.entityKey);
     }
     final payload = operation.payload;
     if (payload == null || !payload.containsKey('value')) {
       throw _corruptSyncData('A synced reader setting has no value.');
     }
     final value = payload['value'];
+    final autoPageTurnPreference =
+        _autoPageTurnPreferences[operation.entityKey];
+    if (autoPageTurnPreference != null) {
+      await validate(operation);
+      final normalized = _normalizeAutoPageTurnValue(
+        operation.entityKey,
+        value,
+      );
+      final preferences = await SharedPreferences.getInstance();
+      // Restore preferences only. Running/paused state belongs to the active
+      // reader session and must never start paging on another device.
+      if (normalized is double) {
+        await preferences.setDouble(autoPageTurnPreference, normalized);
+      } else if (normalized is bool) {
+        await preferences.setBool(autoPageTurnPreference, normalized);
+      } else {
+        await preferences.setString(
+          autoPageTurnPreference,
+          normalized as String,
+        );
+      }
+      return true;
+    }
     const settingsStore = ReaderSettingsStore();
     final settings = await settingsStore.load();
     switch (operation.entityKey) {

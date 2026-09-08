@@ -53,8 +53,8 @@ class BookSourceNetworkPolicy {
     return addresses;
   }
 
-  HttpClient createPinnedHttpClient() {
-    final client = HttpClient();
+  HttpClient createPinnedHttpClient({SecurityContext? securityContext}) {
+    final client = HttpClient(context: securityContext);
     client.connectionFactory = (uri, proxyHost, proxyPort) async {
       final targetHost = proxyHost ?? uri.host;
       final targetPort = proxyPort ?? uri.port;
@@ -74,6 +74,7 @@ class BookSourceNetworkPolicy {
         ),
       ];
       ConnectionTask<Socket>? activeTask;
+      Socket? activeSocket;
       var cancelled = false;
       final socket = () async {
         Object? lastError;
@@ -83,7 +84,7 @@ class BookSourceNetworkPolicy {
           }
           try {
             activeTask = await Socket.startConnect(address, targetPort);
-            return await activeTask!.socket.timeout(
+            final connected = await activeTask!.socket.timeout(
               const Duration(seconds: 3),
               onTimeout: () {
                 activeTask?.cancel();
@@ -92,7 +93,41 @@ class BookSourceNetworkPolicy {
                 );
               },
             );
+            activeSocket = connected;
+            if (cancelled) {
+              connected.destroy();
+              throw const SocketException('Connection attempt was cancelled.');
+            }
+            if (proxyHost != null || uri.scheme != 'https') {
+              return connected;
+            }
+            final secure =
+                await SecureSocket.secure(
+                  connected,
+                  host: uri.host,
+                  context: securityContext,
+                ).timeout(
+                  const Duration(seconds: 3),
+                  onTimeout: () {
+                    connected.destroy();
+                    throw SocketException(
+                      'Timed out negotiating TLS with ${uri.host}:$targetPort.',
+                    );
+                  },
+                );
+            activeSocket = secure;
+            if (cancelled) {
+              secure.destroy();
+              throw const SocketException('Connection attempt was cancelled.');
+            }
+            return secure;
+          } on TlsException {
+            activeSocket?.destroy();
+            activeSocket = null;
+            rethrow;
           } on Object catch (error) {
+            activeSocket?.destroy();
+            activeSocket = null;
             lastError = error;
           }
         }
@@ -104,6 +139,7 @@ class BookSourceNetworkPolicy {
       return ConnectionTask.fromSocket(socket, () {
         cancelled = true;
         activeTask?.cancel();
+        activeSocket?.destroy();
       });
     };
     return client;

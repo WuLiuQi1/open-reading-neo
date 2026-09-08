@@ -6,6 +6,10 @@ import 'package:html/parser.dart' as html_parser;
 import 'source_remote_asset.dart';
 
 typedef SourceContentImagePage = ({String content, Uri baseUri});
+typedef SourceContentImageReference = ({
+  String key,
+  SourceRuntimeRemoteAsset asset,
+});
 
 class SourceContentImageAccumulator {
   final Map<Uri, SourceRuntimeRemoteAsset> _assets = {};
@@ -43,50 +47,68 @@ class SourceContentImageExtractor {
     bool allowPlainValues = false,
   }) {
     final assets = SourceContentImageAccumulator();
-
-    bool add(String raw, Uri baseUri, {bool srcset = false}) {
-      final value = srcset ? _firstSrcsetCandidate(raw) : raw.trim();
-      final asset = parseRemoteAsset(value, baseUri, fallbackHeaders);
-      if (asset == null) return false;
-      assets.add(asset);
-      return true;
-    }
-
     for (final page in pages) {
-      final content = page.content.trim();
-      if (content.isEmpty) continue;
-      if (allowPlainValues && !content.contains('<')) {
-        for (final value in content.split(RegExp(r'[\r\n]+'))) {
-          if (_looksLikePlainImageValue(value)) {
-            add(value, page.baseUri, srcset: _hasSrcsetDescriptor(value));
-          }
-        }
-        continue;
-      }
-
-      final fragment = html_parser.parseFragment(content);
-      for (final element in fragment.querySelectorAll('*')) {
-        for (final name in _attributeNames) {
-          final raw = element.attributes[name];
-          if (raw == null || raw.trim().isEmpty) {
-            continue;
-          }
-          if (add(raw, page.baseUri, srcset: name.endsWith('srcset'))) break;
-        }
-      }
-
-      // Imported reading-source rules may append request options inside an HTML
-      // attribute. Nested quotes can make a standards parser truncate the
-      // value, so recover only this narrow compatibility shape from raw HTML.
-      for (final match in _legacyAttributePattern.allMatches(content)) {
-        final raw = match.group(2)!;
-        if (raw.contains(RegExp(r',\s*\{'))) add(raw, page.baseUri);
-      }
-      for (final match in _legacyOptionsPattern.allMatches(content)) {
-        add(match.group(1)!, page.baseUri);
+      for (final reference in references(
+        page,
+        fallbackHeaders: fallbackHeaders,
+        allowPlainValues: allowPlainValues,
+      )) {
+        assets.add(reference.asset);
       }
     }
     return assets.values;
+  }
+
+  List<SourceContentImageReference> references(
+    SourceContentImagePage page, {
+    Map<String, String> fallbackHeaders = const {},
+    bool allowPlainValues = false,
+  }) {
+    final references = <SourceContentImageReference>[];
+
+    bool add(String key, String raw, {bool srcset = false}) {
+      final value = srcset ? _firstSrcsetCandidate(raw) : raw.trim();
+      final asset = parseRemoteAsset(value, page.baseUri, fallbackHeaders);
+      if (asset == null) return false;
+      references.add((key: key, asset: asset));
+      return true;
+    }
+
+    final content = page.content.trim();
+    if (content.isEmpty) return references;
+    if (allowPlainValues && !content.contains('<')) {
+      for (final value in content.split(RegExp(r'[\r\n]+'))) {
+        final raw = value.trim();
+        if (_looksLikePlainImageValue(raw)) {
+          add('plain\u0000$raw', raw, srcset: _hasSrcsetDescriptor(raw));
+        }
+      }
+      return references;
+    }
+
+    final fragment = html_parser.parseFragment(content);
+    for (final element in fragment.querySelectorAll('*')) {
+      for (final name in _attributeNames) {
+        final raw = element.attributes[name]?.trim() ?? '';
+        if (raw.isEmpty) continue;
+        if (add('$name\u0000$raw', raw, srcset: name.endsWith('srcset'))) {
+          break;
+        }
+      }
+    }
+
+    // Imported reading-source rules may append request options inside an HTML
+    // attribute. Nested quotes can make a standards parser truncate the
+    // value, so recover only this narrow compatibility shape from raw HTML.
+    for (final match in _legacyAttributePattern.allMatches(content)) {
+      final raw = match.group(2)!;
+      if (raw.contains(RegExp(r',\s*\{'))) add('legacy\u0000$raw', raw);
+    }
+    for (final match in _legacyOptionsPattern.allMatches(content)) {
+      final raw = match.group(1)!;
+      add('legacy\u0000$raw', raw);
+    }
+    return references;
   }
 
   List<SourceContentImagePage> recoverComicContainers(

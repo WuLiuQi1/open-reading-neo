@@ -26,7 +26,8 @@ List<Object?> evaluateSourceJsonPath(
 List<Object?> _evaluateSourceJsonPathMatches(Object? root, String path) {
   var normalized = path.trim();
   if (normalized == r'$') return [root];
-  if (normalized.startsWith(r'$')) {
+  if (normalized.startsWith(r'$') || _usesJsonPathSyntax(normalized)) {
+    if (!normalized.startsWith(r'$')) normalized = r'$.' + normalized;
     try {
       return JsonPath(
         normalizeLegacySourceJsonPath(normalized),
@@ -62,6 +63,15 @@ List<Object?> _evaluateSourceJsonPathMatches(Object? root, String path) {
     values = next;
   }
   return values;
+}
+
+bool _usesJsonPathSyntax(String path) {
+  return path.contains('[?') ||
+      path.contains('..') ||
+      path.contains('[*]') ||
+      path.contains("['") ||
+      path.contains('["') ||
+      RegExp(r'\[[^\]]*[:,][^\]]*\]').hasMatch(path);
 }
 
 String normalizeLegacySourceJsonPath(String input) {

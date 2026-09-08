@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:xxread/core/reader/paged_image_reader_settings.dart';
+import 'package:xxread/core/reader/reader_auto_page_turn_controller.dart';
 import 'package:xxread/core/reader/reader_custom_theme.dart';
 import 'package:xxread/core/reader/reader_layout.dart';
 import 'package:xxread/core/reader/reader_settings.dart';
@@ -44,6 +45,263 @@ void main() {
   });
 
   tearDown(() => database.close());
+
+  test(
+    'automatic paging preferences round-trip without starting paging',
+    () async {
+      final original = ReaderAutoPageTurnController(
+        onAdvance: () async => true,
+      );
+      addTearDown(original.dispose);
+      for (final selection in const [
+        ReaderAutoPageTurnSelection(
+          mode: ReaderAutoPageTurnMode.timed,
+          seconds: 21,
+        ),
+        ReaderAutoPageTurnSelection(
+          mode: ReaderAutoPageTurnMode.sweep,
+          seconds: 8.5,
+        ),
+        ReaderAutoPageTurnSelection(
+          mode: ReaderAutoPageTurnMode.continuous,
+          seconds: 42,
+        ),
+        ReaderAutoPageTurnSelection(
+          mode: ReaderAutoPageTurnMode.interval,
+          seconds: 17,
+        ),
+      ]) {
+        await original.applySelection(selection);
+      }
+      await original.setShortcutVisible(false);
+      final adapter = ReaderSettingsSyncAdapter(
+        changeStore,
+        () async => database,
+      );
+      await adapter.scan(
+        HybridLogicalClock(deviceId: 'local', nowMillis: () => 1000),
+      );
+      final records = (await changeStore.recordsForDataset('reader_settings'))
+          .where((record) => record.recordId.startsWith('auto_page_turn_'))
+          .toList();
+      expect(records, hasLength(7));
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      for (final record in records) {
+        final operation = record.toOperation();
+        await adapter.validate(operation);
+        await database.transaction((txn) => adapter.apply(txn, operation));
+      }
+      final restored = ReaderAutoPageTurnController(
+        onAdvance: () async => true,
+      );
+      addTearDown(restored.dispose);
+      await restored.loadInterval();
+      expect(restored.modeFor(false), ReaderAutoPageTurnMode.sweep);
+      expect(restored.modeFor(true), ReaderAutoPageTurnMode.interval);
+      expect(restored.secondsFor(ReaderAutoPageTurnMode.timed), 21);
+      expect(restored.secondsFor(ReaderAutoPageTurnMode.sweep), 8.5);
+      expect(restored.secondsFor(ReaderAutoPageTurnMode.continuous), 42);
+      expect(restored.secondsFor(ReaderAutoPageTurnMode.interval), 17);
+      expect(restored.shortcutVisible, isFalse);
+      expect(restored.isActive, isFalse);
+      expect(restored.isRunning, isFalse);
+    },
+  );
+
+  test(
+    'automatic paging sync migrates the legacy interval without losing new speeds',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        ReaderAutoPageTurnController.intervalPreferenceKey: 24,
+        ReaderAutoPageTurnController.timedSecondsPreferenceKey: 9.5,
+      });
+      final adapter = ReaderSettingsSyncAdapter(
+        changeStore,
+        () async => database,
+      );
+      await adapter.scan(
+        HybridLogicalClock(deviceId: 'local', nowMillis: () => 1000),
+      );
+      final values = {
+        for (final record in await changeStore.recordsForDataset(
+          'reader_settings',
+        ))
+          record.entityKey: record.payload?['value'],
+      };
+      expect(values['auto_page_turn_timed_seconds'], 9.5);
+      expect(values['auto_page_turn_vertical_interval_seconds'], 24);
+      expect(values.containsKey('auto_page_turn_sweep_seconds'), isFalse);
+      expect(values.containsKey('auto_page_turn_continuous_seconds'), isFalse);
+      expect(values.containsKey('auto_page_turn_horizontal_mode'), isFalse);
+      expect(values.containsKey('auto_page_turn_vertical_mode'), isFalse);
+      expect(values.containsKey('auto_page_turn_shortcut_visible'), isFalse);
+    },
+  );
+
+  test(
+    'automatic paging restores deferred settings once after scope is enabled',
+    () async {
+      final adapter = ReaderSettingsSyncAdapter(
+        changeStore,
+        () async => database,
+      );
+      final adapters = MetadataSyncAdapters(
+        store: changeStore,
+        database: () async => database,
+        registeredAdapters: [adapter],
+      );
+      const key = 'auto_page_turn_sweep_seconds';
+      final clock = HybridLogicalClock(
+        deviceId: 'local',
+        nowMillis: () => 3000,
+      );
+      // Match SyncEngine's first scan before downloading older remote data.
+      await adapters.scan(const WebDavSyncScope(), clock);
+      expect(
+        (await changeStore.recordsForDataset(
+          'reader_settings',
+        )).where((record) => record.recordId.startsWith('auto_page_turn_')),
+        isEmpty,
+      );
+      const operation = SyncOperation(
+        dataset: 'reader_settings',
+        recordId: key,
+        entityKey: key,
+        hlc: '2000-0000-remote',
+        deleted: false,
+        payload: {'value': 12.5},
+      );
+      await changeStore.applyRemoteBatch(
+        SyncBatch.create(
+          deviceId: 'remote',
+          sequence: 1,
+          createdHlc: operation.hlc,
+          operations: const [operation],
+        ),
+        validateWinner: adapters.validate,
+        applyWinner: (txn, op) => adapters.apply(
+          txn,
+          op,
+          scope: const WebDavSyncScope(readerSettings: false),
+        ),
+      );
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.get(ReaderAutoPageTurnController.sweepSecondsPreferenceKey),
+        isNull,
+      );
+      await adapters.scan(const WebDavSyncScope(), clock);
+      expect(
+        preferences.getDouble(
+          ReaderAutoPageTurnController.sweepSecondsPreferenceKey,
+        ),
+        12.5,
+      );
+      final restored = (await changeStore.recordsForDataset(
+        'reader_settings',
+      )).singleWhere((record) => record.recordId == key);
+      expect(restored.hlc, operation.hlc);
+      expect(restored.dirty, isFalse);
+
+      await changeStore.markUploaded(await changeStore.dirtyRecords());
+      await adapters.scan(const WebDavSyncScope(), clock);
+      expect(await changeStore.dirtyRecords(), isEmpty);
+      await preferences.setDouble(
+        ReaderAutoPageTurnController.sweepSecondsPreferenceKey,
+        18,
+      );
+      await adapters.scan(const WebDavSyncScope(), clock);
+      final changed = (await changeStore.dirtyRecords()).single;
+      expect(changed.recordId, key);
+      expect(changed.payload?['value'], 18);
+    },
+  );
+
+  test('automatic paging duration restores within supported bounds', () async {
+    final adapter = ReaderSettingsSyncAdapter(
+      changeStore,
+      () async => database,
+    );
+    for (final entry in const {
+      'auto_page_turn_timed_seconds': -1,
+      'auto_page_turn_sweep_seconds': 900,
+    }.entries) {
+      final operation = SyncOperation(
+        dataset: 'reader_settings',
+        recordId: entry.key,
+        entityKey: entry.key,
+        hlc: '2000-0000-remote',
+        deleted: false,
+        payload: {'value': entry.value},
+      );
+      await adapter.validate(operation);
+      await database.transaction((txn) => adapter.apply(txn, operation));
+    }
+    final restored = ReaderAutoPageTurnController(onAdvance: () async => true);
+    addTearDown(restored.dispose);
+    await restored.loadInterval();
+    expect(restored.secondsFor(ReaderAutoPageTurnMode.timed), 5);
+    expect(restored.secondsFor(ReaderAutoPageTurnMode.sweep), 120);
+  });
+
+  for (final entry in const <String, Object>{
+    'auto_page_turn_horizontal_mode': 'continuous',
+    'auto_page_turn_vertical_mode': 'sweep',
+    'auto_page_turn_timed_seconds': '15',
+    'auto_page_turn_shortcut_visible': 'false',
+  }.entries) {
+    test(
+      'invalid ${entry.key} rejects the whole batch before changing settings',
+      () async {
+        final adapters = MetadataSyncAdapters(
+          store: changeStore,
+          database: () async => database,
+          registeredAdapters: [
+            ReaderSettingsSyncAdapter(changeStore, () async => database),
+          ],
+        );
+        final batch = SyncBatch.create(
+          deviceId: 'remote',
+          sequence: 1,
+          createdHlc: '2000-0000-remote',
+          operations: [
+            const SyncOperation(
+              dataset: 'reader_settings',
+              recordId: 'font_size',
+              entityKey: 'font_size',
+              hlc: '2000-0000-remote',
+              deleted: false,
+              payload: {'value': 27},
+            ),
+            SyncOperation(
+              dataset: 'reader_settings',
+              recordId: entry.key,
+              entityKey: entry.key,
+              hlc: '2001-0000-remote',
+              deleted: false,
+              payload: {'value': entry.value},
+            ),
+          ],
+        );
+        final before = await const ReaderSettingsStore().load();
+        await expectLater(
+          changeStore.applyRemoteBatch(
+            batch,
+            validateWinner: adapters.validate,
+            applyWinner: adapters.apply,
+          ),
+          throwsA(isA<WebDavSyncFailure>()),
+        );
+        expect(
+          (await const ReaderSettingsStore().load()).fontSize,
+          before.fontSize,
+        );
+        expect(await changeStore.cursorFor('remote'), 0);
+        expect(await changeStore.recordsForDataset('reader_settings'), isEmpty);
+      },
+    );
+  }
 
   test(
     'reader settings scan covers current text and navigation controls',

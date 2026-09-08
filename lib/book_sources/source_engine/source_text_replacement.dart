@@ -2,11 +2,47 @@ import '../protocol/book_source_protocol.dart';
 import 'rules/source_rule_parser.dart';
 import 'rules/source_rule_regex.dart';
 import 'source_content_images.dart';
+import 'source_remote_asset.dart';
 
 typedef SourceTextReplacement = ({
   String content,
   List<SourceContentImagePage> pages,
 });
+
+/// Attributes images that survived an arbitrary full-rule replacement to the
+/// page where the same raw image value originated. A newly generated relative
+/// value has no source page, so it uses [fallbackBaseUri].
+List<SourceRuntimeRemoteAsset> evaluatedReplacementImages(
+  List<SourceContentImagePage> originalPages,
+  String output, {
+  required Uri fallbackBaseUri,
+  required bool allowPlainValues,
+}) {
+  const extractor = SourceContentImageExtractor();
+  final origins = <String, List<SourceRuntimeRemoteAsset>>{};
+  for (final page in originalPages) {
+    for (final image in extractor.references(
+      page,
+      allowPlainValues: allowPlainValues,
+    )) {
+      origins.putIfAbsent(image.key, () => []).add(image.asset);
+    }
+  }
+
+  final assets = <SourceRuntimeRemoteAsset>[];
+  for (final image in extractor.references((
+    content: output,
+    baseUri: fallbackBaseUri,
+  ), allowPlainValues: allowPlainValues)) {
+    final matchingOrigins = origins[image.key];
+    assets.add(
+      matchingOrigins == null || matchingOrigins.isEmpty
+          ? image.asset
+          : matchingOrigins.removeAt(0),
+    );
+  }
+  return assets;
+}
 
 /// Applies a chapter-wide replacement while retaining the response base for
 /// each output span. Image extraction can then resolve relative URLs from the

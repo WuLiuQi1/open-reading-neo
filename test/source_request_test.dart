@@ -16,7 +16,7 @@ void main() {
 
       expect(request.url, Uri.parse('https://books.test/search'));
       expect(request.method, SourceRequestMethod.post);
-      expect(request.body, 'q=%E5%89%91+%E6%9D%A5&p=2');
+      expect(request.body, 'q=%BD%A3+%C0%B4&p=2');
       expect(request.charset, 'gbk');
       expect(request.headers['User-Agent'], sourceDefaultUserAgent);
       expect(request.headers['Referer'], 'https://books.test/');
@@ -85,7 +85,7 @@ void main() {
         '/search,${jsonEncode({'method': 'POST', 'body': '{query=book'})}',
         baseUri: Uri.parse('https://books.test/'),
       );
-      expect(form.body, '{query=book');
+      expect(form.body, '%7Bquery=book');
       expect(
         form.headers['Content-Type'],
         'application/x-www-form-urlencoded; charset=utf-8',
@@ -115,7 +115,7 @@ void main() {
 
       expect(request.method, SourceRequestMethod.post);
       expect(request.charset, 'gbk');
-      expect(request.body, 'q=%E5%89%91%E6%9D%A5');
+      expect(request.body, 'q=%BD%A3%C0%B4');
     });
 
     test('accepts a bare User-Agent in legacy request options', () {
@@ -203,7 +203,7 @@ void main() {
 
       expect(
         request.url,
-        Uri.parse('https://books.test/last?offset=60&q=%E5%89%91+%E6%9D%A5'),
+        Uri.parse('https://books.test/last?offset=60&q=%E5%89%91%20%E6%9D%A5'),
       );
     });
 

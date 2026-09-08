@@ -348,7 +348,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookSourcesDetectedOrsp => 'Detected: ORSP';
 
   @override
-  String get bookSourcesDetectedAdditional => 'Detected: Other protocol';
+  String get bookSourcesDetectedAdditional => 'Detected: Legado';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP sources';
@@ -595,8 +595,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookSourcesUrlLabel => 'Source address';
 
   @override
-  String get bookSourcesUrlHint =>
-      'https://example.com or a discovery document URL';
+  String get bookSourcesUrlHint => 'https://example.com or a source JSON URL';
 
   @override
   String get bookSourcesNoOfficialSourcesNotice =>
@@ -5059,6 +5058,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get webDavScopeBookSources => 'Book sources';
 
   @override
+  String get webDavScopeBookSourcesHint =>
+      'Sync public ORSP sources and favorites, plus all group names, empty groups, and their order. Source credentials and private configurations stay on this device.';
+
+  @override
   String get webDavScopeBooks => 'Library and online books';
 
   @override
@@ -5082,7 +5085,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get webDavScopeReaderSettingsHint =>
-      'Sync typography, themes, page turns, tap zones, and image-reader preferences.';
+      'Sync typography, themes, page turns, automatic paging preferences, tap zones, and image-reader preferences.';
 
   @override
   String get webDavScopeReplaceRules => 'Replacement rules';
@@ -5171,7 +5174,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get webDavErrorUnsupported =>
-      'This WebDAV server does not support safe synchronization.';
+      'The server response is incompatible with the synchronization protocol.';
+
+  @override
+  String get webDavErrorServer =>
+      'The WebDAV server could not complete the request.';
 
   @override
   String get webDavErrorNetwork =>
@@ -5195,6 +5202,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get webDavErrorUnknown => 'WebDAV could not complete the operation.';
+
+  @override
+  String get webDavErrorDetails => 'Server response details';
+
+  @override
+  String get webDavErrorMissingEtagDetail =>
+      'The server did not return a strong file version identifier (ETag). The ETag may be missing or too weak, so the app cannot tell whether another device changed the remote file.';
+
+  @override
+  String get webDavErrorIfMatchIgnoredDetail =>
+      'The server ignored the condition that permits writing only when the file version matches (If-Match). Continuing could overwrite a newer change from another device.';
+
+  @override
+  String get webDavErrorIfNoneMatchIgnoredDetail =>
+      'The server ignored the condition that permits creation only when the file does not exist (If-None-Match). Continuing could overwrite an existing file.';
+
+  @override
+  String webDavErrorReason(String reason) {
+    return 'Reason: $reason';
+  }
+
+  @override
+  String webDavErrorHttpStatus(int status) {
+    return 'HTTP status: $status';
+  }
+
+  @override
+  String webDavErrorRequestMethod(String method) {
+    return 'Request method: $method';
+  }
+
+  @override
+  String webDavErrorResourcePath(String path) {
+    return 'Resource path: $path';
+  }
 
   @override
   String webDavErrorPhase(String phase) {
@@ -5978,7 +6020,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesImportIntro =>
-      'Choose a link or JSON file, then review before adding.';
+      'Automatically detects ORSP and Legado sources. Review before importing.';
 
   @override
   String get bookSourcesImportInputStep => 'Choose source';

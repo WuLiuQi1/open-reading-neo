@@ -600,12 +600,31 @@ class MutableTxtSyncService {
         failed: 0,
       );
     }
-    await _ensureMutableCapabilities(db, client, currentSpaceKey);
+    final candidates = (await _bindings(db, bookUid: bookUid))
+        .where(
+          (binding) =>
+              binding.enabled &&
+              binding.status != MutableTxtSyncStatus.conflict &&
+              binding.spaceKey == currentSpaceKey,
+        )
+        .toList(growable: false);
+    // Only pending writes need a conditional-PUT probe. A device that is
+    // merely checking for remote changes must not require write capability.
+    final pendingBookUids = (await db.query(
+      'mutable_txt_jobs',
+      columns: ['book_uid'],
+    )).map((row) => row['book_uid'] as String).toSet();
+    if (candidates.any(
+          (binding) => pendingBookUids.contains(binding.bookUid),
+        ) &&
+        shouldContinue?.call() != false) {
+      await _ensureMutableCapabilities(db, client, currentSpaceKey);
+    }
     var uploaded = 0;
     var downloaded = 0;
     var conflicts = 0;
     var failed = 0;
-    for (final stale in await _bindings(db, bookUid: bookUid)) {
+    for (final stale in candidates) {
       if (shouldContinue?.call() == false) break;
       if (!stale.enabled || stale.status == MutableTxtSyncStatus.conflict) {
         continue;

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:xxread/book_sources/networking/book_source_network_policy.dart';
 import 'package:xxread/book_sources/caching/source_cover_cache.dart';
+import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/source_engine/source_webview_loader.dart';
 
 void main() {
@@ -182,6 +183,32 @@ void main() {
 
     expect(bytes.take(8), [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
+
+  test(
+    'default image policy allows FakeDNS but still rejects private targets',
+    () async {
+      BookSourceNetworkPolicy.preferredPrivateNetwork = false;
+      addTearDown(() {
+        BookSourceNetworkPolicy.preferredPrivateNetwork = false;
+      });
+      final directory = await Directory.systemTemp.createTemp(
+        'source-fake-dns-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final dio = Dio()..httpClientAdapter = _SignatureCoverAdapter();
+      final cache = SourceCoverCache(dio: dio, cacheDirectory: directory);
+
+      final bytes = await cache.load(
+        Uri.parse('https://198.18.1.54/chapter/page.jpg'),
+      );
+
+      expect(bytes.take(8), [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      await expectLater(
+        cache.load(Uri.parse('https://192.168.1.8/private.jpg')),
+        throwsA(isA<BookSourceProtocolException>()),
+      );
+    },
+  );
 
   test(
     'falls back to the Android platform loader when pinned image GET fails',

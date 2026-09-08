@@ -27,6 +27,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
   var _saving = false;
   var _connectionVerified = false;
   WebDavSyncErrorCode? _connectionError;
+  WebDavSyncFailure? _connectionFailure;
 
   @override
   void initState() {
@@ -59,6 +60,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
       _testing = true;
       _connectionVerified = false;
       _connectionError = null;
+      _connectionFailure = null;
     });
     final result = await context.read<WebDavSyncController>().testConnection(
       _draft,
@@ -68,6 +70,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
       _testing = false;
       _connectionVerified = result.success;
       _connectionError = result.errorCode;
+      _connectionFailure = result.failure;
     });
   }
 
@@ -86,6 +89,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
       setState(() {
         _connectionVerified = false;
         _connectionError = null;
+        _connectionFailure = null;
       });
     }
   }
@@ -94,6 +98,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     final sync = context.watch<WebDavSyncController>();
     final hasStoredConfiguration = sync.isConfigured;
     return FloatingSubpageScaffold(
@@ -109,9 +114,31 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _SectionCard(
+                    _ConnectionHeader(
+                      key: const ValueKey('webdav-connection-header'),
                       title: l10n.webDavConnectionTitle,
-                      icon: Icons.cloud_outlined,
+                      description: l10n.webDavSecurityNotice,
+                    ),
+                    const SizedBox(height: 20),
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        inputDecorationTheme: InputDecorationTheme(
+                          filled: true,
+                          fillColor: palette.cardStrong.withValues(alpha: 0.58),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: palette.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: palette.border),
+                          ),
+                        ),
+                      ),
                       child: Column(
                         children: [
                           TextFormField(
@@ -192,20 +219,36 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
                                 : l10n.webDavErrorUnknown,
                           ),
                           const SizedBox(height: 18),
-                          FilledButton.icon(
-                            onPressed: _testing ? null : _testConnection,
-                            icon: _testing
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.wifi_tethering_rounded),
-                            label: Text(
-                              _testing
-                                  ? l10n.webDavTestingConnection
-                                  : l10n.webDavTestConnection,
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              key: const ValueKey('webdav-test-action'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                backgroundColor: _connectionVerified
+                                    ? scheme.secondaryContainer
+                                    : null,
+                                foregroundColor: _connectionVerified
+                                    ? scheme.onSecondaryContainer
+                                    : null,
+                              ),
+                              onPressed: _testing ? null : _testConnection,
+                              icon: _testing
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.wifi_tethering_rounded),
+                              label: Text(
+                                _testing
+                                    ? l10n.webDavTestingConnection
+                                    : l10n.webDavTestConnection,
+                              ),
                             ),
                           ),
                           if (_connectionVerified ||
@@ -227,6 +270,7 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Icon(
                                       _connectionVerified
@@ -238,13 +282,25 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
-                                      child: Text(
-                                        _connectionVerified
-                                            ? l10n.webDavConnectionSuccess
-                                            : webDavSyncErrorText(
-                                                context,
-                                                _connectionError,
-                                              ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _connectionVerified
+                                                ? l10n.webDavConnectionSuccess
+                                                : webDavSyncErrorText(
+                                                    context,
+                                                    _connectionError,
+                                                  ),
+                                          ),
+                                          if (_connectionFailure != null) ...[
+                                            const SizedBox(height: 10),
+                                            WebDavSyncFailureDetails(
+                                              failure: _connectionFailure!,
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -255,30 +311,30 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: palette.card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: palette.border),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.security_outlined,
-                            color: Theme.of(context).colorScheme.primary,
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('webdav-save-action'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(child: Text(l10n.webDavSecurityNotice)),
-                        ],
+                        ),
+                        onPressed: _connectionVerified && !_saving
+                            ? _save
+                            : null,
+                        icon: _saving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(l10n.webDavSaveConfiguration),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _connectionVerified && !_saving ? _save : null,
-                      child: Text(l10n.webDavSaveConfiguration),
                     ),
                   ],
                 ),
@@ -291,47 +347,53 @@ class _WebDavSetupPageState extends State<WebDavSetupPage> {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
+class _ConnectionHeader extends StatelessWidget {
+  const _ConnectionHeader({
+    super.key,
     required this.title,
-    required this.icon,
-    required this.child,
+    required this.description,
   });
 
   final String title;
-  final IconData icon;
-  final Widget child;
+  final String description;
 
   @override
   Widget build(BuildContext context) {
-    final palette = PageStyleHelper.palette(context);
     final scheme = Theme.of(context).colorScheme;
-    return Column(
+    final palette = PageStyleHelper.palette(context);
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-          child: Row(
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(Icons.cloud_outlined, color: scheme.onPrimaryContainer),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 18, color: scheme.primary),
-              const SizedBox(width: 9),
               Text(
                 title,
                 style: Theme.of(
                   context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: palette.textMuted,
+                  height: 1.4,
+                ),
               ),
             ],
           ),
-        ),
-        Material(
-          color: palette.card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: palette.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(padding: const EdgeInsets.all(18), child: child),
         ),
       ],
     );

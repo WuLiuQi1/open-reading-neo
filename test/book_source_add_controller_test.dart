@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +79,62 @@ void main() {
     expect(registry.upserted.single.id, 'source');
     controller.dispose();
   });
+
+  test(
+    'downloads and commits Legado sources with rules and conflict counts',
+    () async {
+      final importService = _FixedDownloadImportService([
+        {
+          'bookSourceName': 'Saved Legado source',
+          'bookSourceUrl': 'https://saved.example',
+          'searchUrl': '/search?q={{key}}',
+          'ruleSearch': {'bookList': '.result', 'name': 'h3@text'},
+          'ruleToc': {'chapterList': '.chapter'},
+          'ruleContent': {'content': '#content@html'},
+        },
+        {
+          'bookSourceName': 'Conflicting Legado source',
+          'bookSourceUrl': 'https://conflict.example',
+          'searchUrl': '/find/{{key}}',
+          'ruleSearch': {'bookList': '.book'},
+        },
+      ]);
+      final analyzer = BookSourceImportAnalyzer(
+        additionalImporter: importService,
+      );
+      final registry = _Registry(
+        conflictedNames: const {'Conflicting Legado source'},
+      );
+      final controller = BookSourceAddController(
+        registry: registry,
+        analyzer: analyzer,
+      );
+      addTearDown(() {
+        controller.dispose();
+        analyzer.close();
+        importService.close();
+      });
+
+      await controller.analyzeUrl('https://sources.example/legado.json');
+      final result = await controller.commit();
+
+      expect(controller.state.analysis?.kind, BookSourceImportKind.additional);
+      expect(registry.bulkUpserted, hasLength(2));
+      final saved = registry.bulkUpserted.singleWhere(
+        (source) => source.name == 'Saved Legado source',
+      );
+      expect(saved.sourceProtocol, BookSourceProtocolKind.readingSource);
+      expect(saved.sourceConfig?['searchUrl'], '/search?q={{key}}');
+      expect(saved.sourceConfig?['ruleSearch'], {
+        'bookList': '.result',
+        'name': 'h3@text',
+      });
+      expect(saved.sourceConfig?['ruleContent'], {'content': '#content@html'});
+      expect(result?.importedCount, 1);
+      expect(result?.conflictedCount, 1);
+      expect(result?.sources.single.name, 'Saved Legado source');
+    },
+  );
 
   test('closes only factory-owned import services', () {
     final owned = _ImportService();
@@ -160,13 +217,43 @@ class _Analyzer extends BookSourceImportAnalyzer {
 }
 
 class _Registry extends BookSourceRegistry {
+  _Registry({this.conflictedNames = const {}});
+
+  final Set<String> conflictedNames;
   List<RegisteredBookSource> upserted = const [];
+  List<RegisteredBookSource> bulkUpserted = const [];
 
   @override
   Future<List<RegisteredBookSource>> upsert(RegisteredBookSource source) async {
     upserted = [source];
     return upserted;
   }
+
+  @override
+  Future<BookSourceUpsertAllResult> upsertAll(
+    Iterable<RegisteredBookSource> imported,
+  ) async {
+    bulkUpserted = imported.toList(growable: false);
+    final conflicted = bulkUpserted
+        .where((source) => conflictedNames.contains(source.name))
+        .toList(growable: false);
+    return BookSourceUpsertAllResult(
+      sources: bulkUpserted
+          .where((source) => !conflictedNames.contains(source.name))
+          .toList(growable: false),
+      conflicted: conflicted,
+    );
+  }
+}
+
+class _FixedDownloadImportService extends SourceImportService {
+  _FixedDownloadImportService(Object json)
+    : bytes = Uint8List.fromList(utf8.encode(jsonEncode(json)));
+
+  final Uint8List bytes;
+
+  @override
+  Future<Uint8List> downloadBytes(String input) async => bytes;
 }
 
 class _ImportService extends SourceImportService {

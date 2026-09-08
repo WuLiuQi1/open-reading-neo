@@ -117,6 +117,7 @@ class WebDavClient {
         success: false,
         errorCode: error.code,
         message: error.message,
+        failure: error,
       );
     }
   }
@@ -225,8 +226,10 @@ class WebDavClient {
         );
       }
       return WebDavConditionalWriteResult(etag: etag, contentLength: total);
+    } on WebDavSyncFailure catch (error) {
+      throw error.withRequest('PUT', uri);
     } on DioException catch (error) {
-      throw _dioFailure(error);
+      throw _dioFailure(error).withRequest('PUT', uri);
     }
   }
 
@@ -254,10 +257,10 @@ class WebDavClient {
     try {
       await ensureMutableProtocolPath(relativeDirectory);
       await putFileConditionally(remote, seedFile, ifNoneMatch: true);
-      await _expectPreconditionRejection(() async {
+      await _expectPreconditionRejection(remote, 'If-None-Match', () async {
         await putFileConditionally(remote, replacementFile, ifNoneMatch: true);
       });
-      await _expectPreconditionRejection(() async {
+      await _expectPreconditionRejection(remote, 'If-Match', () async {
         await putFileConditionally(
           remote,
           replacementFile,
@@ -265,9 +268,11 @@ class WebDavClient {
         );
       });
       if (await getText(remote) != seed) {
-        throw const WebDavSyncFailure(
+        throw WebDavSyncFailure(
           WebDavSyncErrorCode.serverIncompatible,
-          'The WebDAV server ignored mutable-write preconditions.',
+          'The conditional-write probe file changed despite rejected writes.',
+          requestMethod: 'GET',
+          resourcePath: remote.path,
         );
       }
     } finally {
@@ -281,20 +286,22 @@ class WebDavClient {
   }
 
   Future<void> _expectPreconditionRejection(
+    Uri uri,
+    String precondition,
     Future<void> Function() operation,
   ) async {
     try {
       await operation();
     } on WebDavSyncFailure catch (error) {
-      if (error.code == WebDavSyncErrorCode.conflict) return;
-      throw const WebDavSyncFailure(
-        WebDavSyncErrorCode.serverIncompatible,
-        'The WebDAV server could not verify mutable-write preconditions.',
-      );
+      if (error.statusCode == 412) return;
+      rethrow;
     }
-    throw const WebDavSyncFailure(
+    throw WebDavSyncFailure(
       WebDavSyncErrorCode.serverIncompatible,
-      'The WebDAV server ignored mutable-write preconditions.',
+      'The WebDAV server accepted a PUT that should have been rejected '
+      'by $precondition. TXT overwrite protection could not be verified.',
+      requestMethod: 'PUT',
+      resourcePath: uri.path,
     );
   }
 
@@ -360,8 +367,10 @@ class WebDavClient {
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) throw _statusFailure(status);
+    } on WebDavSyncFailure catch (error) {
+      throw error.withRequest('PUT', uri);
     } on DioException catch (error) {
-      throw _dioFailure(error);
+      throw _dioFailure(error).withRequest('PUT', uri);
     }
   }
 
@@ -418,8 +427,10 @@ class WebDavClient {
         } catch (_) {}
         rethrow;
       }
+    } on WebDavSyncFailure catch (error) {
+      throw error.withRequest('GET', uri);
     } on DioException catch (error) {
-      throw _dioFailure(error);
+      throw _dioFailure(error).withRequest('GET', uri);
     }
   }
 
@@ -563,8 +574,10 @@ class WebDavClient {
       }
       if (status < 200 || status >= 300) throw _statusFailure(status);
       return response;
+    } on WebDavSyncFailure catch (error) {
+      throw error.withRequest(method, uri);
     } on DioException catch (error) {
-      throw _dioFailure(error);
+      throw _dioFailure(error).withRequest(method, uri);
     }
   }
 
@@ -635,6 +648,7 @@ WebDavSyncFailure _statusFailure(int status) {
     409 || 412 || 423 => WebDavSyncErrorCode.conflict,
     429 => WebDavSyncErrorCode.rateLimited,
     507 => WebDavSyncErrorCode.storageFull,
+    >= 500 && <= 599 => WebDavSyncErrorCode.serverError,
     _ => WebDavSyncErrorCode.serverIncompatible,
   };
   return WebDavSyncFailure(

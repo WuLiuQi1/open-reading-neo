@@ -60,7 +60,6 @@ class _WebDavSyncContentPageState extends State<WebDavSyncContentPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final sync = context.watch<WebDavSyncController>();
-    final palette = PageStyleHelper.palette(context);
     return FloatingSubpageScaffold(
       title: l10n.webDavSyncContent,
       actions: [
@@ -79,22 +78,17 @@ class _WebDavSyncContentPageState extends State<WebDavSyncContentPage> {
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640),
-              child: Material(
-                color: palette.card,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: palette.border),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 8,
-                  ),
-                  child: Column(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ScopeSection(
+                    key: const ValueKey('webdav-reading-data-section'),
+                    title: l10n.settingsDataSyncTitle,
+                    icon: Icons.auto_stories_outlined,
                     children: [
                       _ScopeSwitch(
                         title: l10n.webDavScopeBookSources,
+                        subtitle: l10n.webDavScopeBookSourcesHint,
                         icon: Icons.hub_outlined,
                         value: _scope.bookSources,
                         enabled: !_saving,
@@ -143,6 +137,14 @@ class _WebDavSyncContentPageState extends State<WebDavSyncContentPage> {
                           _scope.copyWith(readingSessions: value),
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _ScopeSection(
+                    key: const ValueKey('webdav-reading-preferences-section'),
+                    title: l10n.readingSettings,
+                    icon: Icons.tune_rounded,
+                    children: [
                       _ScopeSwitch(
                         title: l10n.webDavScopeReaderSettings,
                         subtitle: l10n.webDavScopeReaderSettingsHint,
@@ -162,10 +164,18 @@ class _WebDavSyncContentPageState extends State<WebDavSyncContentPage> {
                         onChanged: (value) =>
                             _updateScope(_scope.copyWith(replaceRules: value)),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _ScopeSection(
+                    key: const ValueKey('webdav-book-files-section'),
+                    title: l10n.webDavBookFilesTitle,
+                    icon: Icons.folder_copy_outlined,
+                    children: [
                       _ScopeSwitch(
                         title: l10n.webDavScopeBookFiles,
                         subtitle: sync.fileCapabilities.uploadSupported
-                            ? l10n.webDavBookFilesHint
+                            ? l10n.cloudSyncBooksHint
                             : l10n.webDavBookFilesUnavailable,
                         icon: Icons.cloud_upload_outlined,
                         value:
@@ -178,12 +188,68 @@ class _WebDavSyncContentPageState extends State<WebDavSyncContentPage> {
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ScopeSection extends StatelessWidget {
+  const _ScopeSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: scheme.primary),
+              const SizedBox(width: 9),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+        Material(
+          color: palette.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: palette.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                children[index],
+                if (index < children.length - 1)
+                  Divider(height: 1, indent: 56, color: palette.border),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -207,11 +273,29 @@ class _ScopeSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = PageStyleHelper.palette(context);
     return SwitchListTile.adaptive(
-      contentPadding: EdgeInsets.zero,
-      secondary: Icon(icon),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
+      contentPadding: const EdgeInsets.fromLTRB(14, 2, 10, 2),
+      visualDensity: const VisualDensity(vertical: -1),
+      secondary: Icon(icon, size: 22, color: palette.iconMuted),
+      title: Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                subtitle!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: palette.textMuted,
+                  height: 1.35,
+                ),
+              ),
+            ),
       value: value,
       onChanged: enabled ? onChanged : null,
     );

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../utils/chinese_charset_encoder.dart';
 import '../protocol/book_source_protocol.dart';
 import 'source_request_expressions.dart';
 
@@ -48,11 +49,36 @@ class SourceRequestTemplate {
     Map<String, String> variables = const {},
     Map<String, String> sourceHeaders = const {},
     String? cookieJarKey,
+    String? defaultWebJs,
   }) {
-    final expanded = SourceRequestExpressions.expand(
-      template.trim(),
-      variables,
-    );
+    final input = template.trim();
+    if (input.isEmpty) {
+      throw const BookSourceProtocolException(
+        'reading source request URL is empty.',
+      );
+    }
+
+    var urlText = input;
+    var options = const <String, dynamic>{};
+    final optionsStart = _requestOptionsStart(input);
+    if (optionsStart >= 0) {
+      final candidate = input.substring(optionsStart + 1).trim();
+      try {
+        final decoded = _decodeOptions(candidate);
+        if (decoded is! Map) throw const FormatException();
+        options = decoded.map(
+          (key, value) => MapEntry('$key', _expandOption(value, variables)),
+        );
+        urlText = input.substring(0, optionsStart).trim();
+      } on FormatException {
+        throw const BookSourceProtocolException(
+          'reading source request options must be a JSON object.',
+        );
+      }
+    }
+
+    urlText = SourceRequestExpressions.expand(urlText, variables);
+    final expanded = '$urlText,${jsonEncode(options)}';
     if (_unresolvedVariables.hasMatch(expanded)) {
       throw const BookSourceProtocolException(
         'reading source request contains an unsupported template expression.',
@@ -63,29 +89,14 @@ class SourceRequestTemplate {
         'reading source request uses scripting, which is not supported.',
       );
     }
-    if (expanded.isEmpty) {
-      throw const BookSourceProtocolException(
-        'reading source request URL is empty.',
+    final charset = '${options['charset'] ?? 'utf-8'}'.trim().toLowerCase();
+    if (!_supportedCharsets.contains(charset)) {
+      throw BookSourceProtocolException(
+        'Unsupported reading source request charset: $charset.',
       );
     }
-
-    var urlText = expanded;
-    var options = const <String, dynamic>{};
-    final optionsStart = _requestOptionsStart(expanded);
-    if (optionsStart >= 0) {
-      final candidate = expanded.substring(optionsStart + 1).trim();
-      try {
-        final decoded = _decodeOptions(candidate);
-        if (decoded is! Map) throw const FormatException();
-        options = decoded.map((key, value) => MapEntry('$key', value));
-        urlText = expanded.substring(0, optionsStart).trim();
-      } on FormatException {
-        throw const BookSourceProtocolException(
-          'reading source request options must be a JSON object.',
-        );
-      }
-    }
-
+    final methodText = '${options['method'] ?? 'GET'}'.trim().toUpperCase();
+    if (methodText == 'GET') urlText = _encodeQuery(urlText, charset);
     final uri = baseUri.resolve(urlText);
     final syntheticBody = _dataUriSyntheticBody(urlText, options);
     if (syntheticBody != null) {
@@ -104,7 +115,6 @@ class SourceRequestTemplate {
       );
     }
 
-    final methodText = '${options['method'] ?? 'GET'}'.trim().toUpperCase();
     final method = switch (methodText) {
       'GET' => SourceRequestMethod.get,
       'HEAD' => SourceRequestMethod.head,
@@ -115,7 +125,7 @@ class SourceRequestTemplate {
     };
     // AnalyzeUrl serializes structured bodies and only consumes them for POST.
     final rawBody = options['body'];
-    final String? body = method != SourceRequestMethod.post || rawBody == null
+    String? body = method != SourceRequestMethod.post || rawBody == null
         ? null
         : rawBody is String
         ? rawBody
@@ -186,31 +196,37 @@ class SourceRequestTemplate {
         );
       }
     }
-    final charset = '${options['charset'] ?? 'utf-8'}'.trim().toLowerCase();
-    if (!_supportedCharsets.contains(charset)) {
-      throw BookSourceProtocolException(
-        'Unsupported reading source request charset: $charset.',
-      );
-    }
     if (method == SourceRequestMethod.post &&
         !headers.keys.any((name) => name.toLowerCase() == 'content-type')) {
       final contentType = _isJsonBody(body)
           ? 'application/json'
           : 'application/x-www-form-urlencoded';
+      if (body != null &&
+          !_isJsonBody(body) &&
+          !body.trimLeft().startsWith('<')) {
+        body = _encodeForm(
+          body,
+          charset,
+          preserveEncoded: options['charset'] == null,
+        );
+      }
       headers['Content-Type'] = '$contentType; charset=$charset';
     }
+    final useWebView =
+        options['webView'] == true ||
+        '${options['webView']}'.toLowerCase() == 'true';
     return SourceRequestTemplate(
       url: uri,
       method: method,
       headers: Map.unmodifiable(headers),
       charset: charset,
-      useWebView:
-          options['webView'] == true ||
-          '${options['webView']}'.toLowerCase() == 'true',
+      useWebView: useWebView,
       webJs: options['webJs'] is String
           ? options['webJs'] as String
           : options['webjs'] is String
           ? options['webjs'] as String
+          : useWebView
+          ? defaultWebJs
           : null,
       body: body,
       cookieJarKey: cookieJarKey,
@@ -226,6 +242,128 @@ String resolveSourceRequestUrl(Uri baseUri, String value) {
   if (optionsStart < 0) return resolved;
   return '$resolved${value.substring(optionsStart)}';
 }
+
+// Decode options before interpolation: URL escaping is appropriate for query
+// and form values, but would corrupt JSON bodies and header values.
+Object? _expandOption(Object? value, Map<String, String> variables) {
+  if (value is Map) {
+    return value.map(
+      (key, item) => MapEntry(key, _expandOption(item, variables)),
+    );
+  }
+  if (value is List) {
+    return value.map((item) => _expandOption(item, variables)).toList();
+  }
+  if (value is! String ||
+      (!value.contains('{{') && !_requestPageAlternatives.hasMatch(value))) {
+    return value;
+  }
+  if (_isJsonBody(value)) {
+    try {
+      return jsonEncode(_expandOption(jsonDecode(value), variables));
+    } on FormatException {
+      // A non-JSON string remains a source-authored string, not a new object.
+    }
+  }
+  final expanded = SourceRequestExpressions.expand(
+    value,
+    variables,
+    expandPages: false,
+  );
+  // Attributes may contain commas too; preserve literal HTML/XML tags before
+  // interpreting the remaining angle-bracket expressions as page choices.
+  return expanded.replaceAllMapped(_requestPageAlternatives, (match) {
+    final candidate = match.group(0)!;
+    return _requestLiteralTag.hasMatch(candidate)
+        ? candidate
+        : SourceRequestExpressions.expand(candidate, variables);
+  });
+}
+
+final _requestPageAlternatives = RegExp(r'<[^<>]*,[^<>]*>');
+final _requestLiteralTag = RegExp(r'^</?[A-Za-z][\w:.-]*(?:\s+[^<>]*)?/?>$');
+
+String _encodeQuery(String url, String charset) {
+  final question = url.indexOf('?');
+  if (question < 0) return url;
+  final fragment = url.indexOf('#', question);
+  final end = fragment < 0 ? url.length : fragment;
+  final query = _percentEncode(
+    url.substring(question + 1, end),
+    charset,
+    query: true,
+  );
+  return '${url.substring(0, question + 1)}$query${url.substring(end)}';
+}
+
+String _encodeForm(
+  String body,
+  String charset, {
+  required bool preserveEncoded,
+}) {
+  String encode(String part) => preserveEncoded && _encodedForm.hasMatch(part)
+      ? part
+      : _percentEncode(part, charset);
+  return body
+      .split('&')
+      .map((field) {
+        final equals = field.indexOf('=');
+        return equals < 0
+            ? encode(field)
+            : '${encode(field.substring(0, equals))}=${encode(field.substring(equals + 1))}';
+      })
+      .join('&');
+}
+
+String _percentEncode(String text, String charset, {bool query = false}) {
+  final chinese =
+      charset == 'gbk' || charset == 'gb2312' || charset == 'gb18030';
+  final buffer = StringBuffer();
+  final safe = query ? r"-._~!$&()*+,/:;=?@[\]^`{|}" : '*-._';
+  for (var index = 0; index < text.length; index++) {
+    final unit = text.codeUnitAt(index);
+    if (query &&
+        unit == 37 &&
+        index + 2 < text.length &&
+        _isHex(text.codeUnitAt(index + 1)) &&
+        _isHex(text.codeUnitAt(index + 2))) {
+      buffer.write(text.substring(index, index + 3));
+      index += 2;
+    } else if ((unit >= 48 && unit <= 57) ||
+        (unit >= 65 && unit <= 90) ||
+        (unit >= 97 && unit <= 122) ||
+        safe.contains(String.fromCharCode(unit))) {
+      buffer.writeCharCode(unit);
+    } else if (!query && unit == 32) {
+      buffer.write('+');
+    } else {
+      final start = index;
+      if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < text.length) {
+        final next = text.codeUnitAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) index++;
+      }
+      final value = text.substring(start, index + 1);
+      // Escape all bytes of an unsafe character, including digit/letter bytes
+      // inside GB18030/GBK sequences. This matches Java URL encoding.
+      final bytes = chinese
+          ? encodeChineseCharset(value, charset)
+          : utf8.encode(value);
+      for (final byte in bytes) {
+        buffer.write(
+          '%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}',
+        );
+      }
+    }
+  }
+  return buffer.toString();
+}
+
+bool _isHex(int byte) =>
+    (byte >= 48 && byte <= 57) ||
+    (byte >= 65 && byte <= 70) ||
+    (byte >= 97 && byte <= 102);
+
+final _encodedForm = RegExp(r'^(?:[a-zA-Z0-9*._+\-]|%[0-9a-fA-F]{2})*$');
 
 /// Decodes a `data:` request target into the protocol-compatible hex string
 /// that rule scripts expect, or returns null when [value] is not a `data:` URI

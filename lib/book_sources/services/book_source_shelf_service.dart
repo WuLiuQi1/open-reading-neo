@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_initializing_formals
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -112,7 +113,6 @@ class BookSourceShelfService {
       sourceBookId: book.id,
     );
     if (existing != null) return existing;
-    final generatedCoverPath = await _storedCoverPath(source, book);
     final shelfBook = Book(
       title: book.title,
       author: book.author,
@@ -123,11 +123,29 @@ class BookSourceShelfService {
       sourceBookId: book.id,
       sourceJson: jsonEncode(source.toJson()),
       sourceBookJson: jsonEncode(book.toJson()),
-      coverImagePath: generatedCoverPath,
     );
     final id = await _bookDao.insertBook(shelfBook);
     LibraryEventBus().notifyLibraryChanged();
-    return shelfBook.copyWith(id: id);
+    final added = shelfBook.copyWith(id: id);
+    // Cover retrieval must not block leaving the reader. Persist it as a
+    // point update so a concurrent progress update cannot be overwritten.
+    unawaited(_persistOnlineCover(source, book, id));
+    return added;
+  }
+
+  Future<void> _persistOnlineCover(
+    RegisteredBookSource source,
+    BookSourceBook book,
+    int shelfBookId,
+  ) async {
+    try {
+      final coverPath = await _storedCoverPath(source, book);
+      if (coverPath == null) return;
+      await _bookDao.updateBookCoverPath(shelfBookId, coverPath);
+      LibraryEventBus().notifyLibraryChanged();
+    } catch (_) {
+      // Cover persistence is best effort and must not affect shelf creation.
+    }
   }
 
   Future<void> updateShelfProgress({

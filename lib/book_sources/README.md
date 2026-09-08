@@ -85,6 +85,11 @@ Regression fixtures cover the reading-source compatibility contracts around
   content rules in page order, deduplicate redirects, stop before the next
   chapter, and retain the twenty-page limit. Capture prefetch errors immediately
   and surface them when consuming that page.
+- `nextTocUrl` uses the same chain-versus-fixed-list distinction, including
+  current-page entries when deciding the first-page mode. Merge directory
+  pages before applying the leading `+`/`-` order marker and deduplication.
+  Ordinary chapters without a URL may use the final directory URL; an
+  explicitly invalid URL is not equivalent to a missing one.
 - `subContent` and `title` use the first response context after content pages.
   Text sources append local or fetched subcontent before chapter-wide regex
   replacement. Optional title errors preserve the original title and content,
@@ -96,7 +101,7 @@ Regression fixtures cover the reading-source compatibility contracts around
   indentation, image options, and entities; `Jsoup.text()` returns plain text.
 
 The scripting bridge is split into encoding, Java-class adapters, DOM, text,
-and crypto modules. Character conversion covers UTF-8, GBK/GB2312, UTF-16,
+and crypto modules. Character conversion covers UTF-8, GBK/GB2312, GB18030, UTF-16,
 ASCII, and Latin-1; unsupported charset names fail explicitly. Supported Java
 adapters include String, Base64, URL form encoding, ArrayList/Map convenience
 methods, MessageDigest, and the existing cipher/HMAC operations. Class/package
@@ -107,6 +112,13 @@ full Jsoup APIs, and all Java charset/collection overloads are not supplied.
 Existing traditional/simplified conversion remains a limited character table.
 Do not infer complete source compatibility from these individual fixtures or
 compensate for unsupported APIs with broad raw-page scraping.
+
+Script variables belong to their actual chapter/book/rule/source context.
+Pass the same entity maps through request scripts and content rules so a token
+saved in book initialization remains available to later chapter requests.
+Do not emulate this by storing every book's variables in global source state.
+Content-page writes must also reach the next page request. Stateful scripted
+fixed pages run sequentially; plain selector-based fixed pages retain prefetch.
 
 Image extraction lives in `source_content_images.dart`; shared cover/chapter
 asset URL and request-option parsing lives in `source_remote_asset.dart`.
@@ -121,3 +133,14 @@ source/login headers and cookies after content scripts have finished.
 Raw-page recovery is a bounded compatibility path for missing comic rules.
 It must not replace a successful explicit selection or revive images removed
 by `replaceRegex`. Normal successful extraction should not scan the raw page.
+
+Full-rule `replaceRegex` scripts run once after pages and subcontent merge.
+Their surviving image references reuse the shared extractor to recover the
+original response base. Newly generated relative references use the first
+page base; plain regex replacements continue to retain per-span provenance.
+
+Pinned HTTPS must upgrade the validated socket with TLS using the original
+hostname for SNI and certificate checks. A custom `HttpClient.connectionFactory`
+owns that handshake. Do not restore HTTP 400 retries to mask missing TLS.
+Both source transport and image caches accept the explicit VPN FakeDNS range;
+the ordinary private-network restrictions remain in force.

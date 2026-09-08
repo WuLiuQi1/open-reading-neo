@@ -155,7 +155,13 @@ class _TxtSyncDetailsPageState extends State<TxtSyncDetailsPage> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: floatingSubpagePadding(
+            context,
+            left: 20,
+            top: 20,
+            right: 20,
+            bottom: 20,
+          ),
           children: [
             Text(l10n.cloudSyncBooksHint),
             if (_states.isNotEmpty) ...[

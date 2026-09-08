@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:gbk_codec/gbk_codec.dart';
 
+import '../../utils/chinese_charset_encoder.dart';
 import '../../utils/fast_gbk_decoder.dart';
 import 'source_cookie_utils.dart';
 
@@ -12,8 +12,11 @@ class SourceResponseCodec {
   const SourceResponseCodec._();
 
   static List<int> encode(String value, String charset) {
-    if (charset == 'gbk' || charset == 'gb2312') {
-      return gbk_bytes.encode(value);
+    final normalized = charset.toLowerCase().replaceAll(RegExp(r'[-_]'), '');
+    if (normalized == 'gbk' ||
+        normalized == 'gb2312' ||
+        normalized == 'gb18030') {
+      return encodeChineseCharset(value, normalized);
     }
     return utf8.encode(value);
   }
@@ -30,11 +33,11 @@ class SourceResponseCodec {
     final normalizedHeader = headerCharset?.toLowerCase();
     final charset =
         normalizedHeader != null &&
-            (_supportedCharsets.contains(normalizedHeader) ||
-                normalizedHeader == 'gb18030')
+            _supportedCharsets.contains(normalizedHeader)
         ? normalizedHeader
-        : configured;
-    if (charset == 'gbk' || charset == 'gb2312' || charset == 'gb18030') {
+        : configured.trim().toLowerCase();
+    if (charset == 'gb18030') return decodeGb18030(bytes);
+    if (charset == 'gbk' || charset == 'gb2312') {
       final encoded = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
       return decodeGbkFast(
         encoded,

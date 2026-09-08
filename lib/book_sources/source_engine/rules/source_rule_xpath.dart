@@ -264,8 +264,105 @@ Iterable<Element> sourceFollowingSiblings(Element element) sync* {
   }
 }
 
-String sourceOwnText(Element element) =>
-    element.nodes.whereType<Text>().map((node) => node.data).join().trim();
+String normalizeSourceHtmlText(String value) =>
+    value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+String sourceOwnText(Element element) => sourceHtmlText(element, own: true);
+
+// Jsoup text predicates insert boundaries around blocks and at BR elements,
+// while inline nodes retain their original adjacency. Own-text shares the
+// traversal but visits only direct text and BR children.
+String sourceHtmlText(Element element, {bool own = false}) {
+  final buffer = StringBuffer();
+  final pending = <(Node, bool)>[(element, false)];
+  while (pending.isNotEmpty) {
+    final (node, leaving) = pending.removeLast();
+    if (node is Text) {
+      buffer.write(node.data);
+    } else if (node is Element) {
+      final tag = node.localName;
+      if (tag == 'script' || tag == 'style') continue;
+      final block = !own && _sourceTextBlockTags.contains(tag);
+      if (block || (!leaving && tag == 'br')) buffer.write(' ');
+      if (!leaving && (!own || identical(node, element))) {
+        if (block) pending.add((node, true));
+        for (final child in node.nodes.reversed) {
+          pending.add((child, false));
+        }
+      }
+    }
+  }
+  return normalizeSourceHtmlText(buffer.toString());
+}
+
+const _sourceTextBlockTags = {
+  'html',
+  'head',
+  'body',
+  'frameset',
+  'noscript',
+  'meta',
+  'link',
+  'title',
+  'frame',
+  'noframes',
+  'section',
+  'nav',
+  'aside',
+  'hgroup',
+  'header',
+  'footer',
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'pre',
+  'div',
+  'blockquote',
+  'hr',
+  'address',
+  'figure',
+  'figcaption',
+  'form',
+  'fieldset',
+  'ins',
+  'del',
+  'dl',
+  'dt',
+  'dd',
+  'li',
+  'table',
+  'caption',
+  'thead',
+  'tfoot',
+  'tbody',
+  'colgroup',
+  'col',
+  'tr',
+  'th',
+  'td',
+  'video',
+  'audio',
+  'canvas',
+  'details',
+  'menu',
+  'plaintext',
+  'template',
+  'article',
+  'main',
+  'svg',
+  'math',
+  'center',
+  'dir',
+  'applet',
+  'marquee',
+  'listing',
+};
 
 String sourceDirectTextNodes(Element element) => element.nodes
     .whereType<Text>()

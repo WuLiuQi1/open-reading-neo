@@ -139,6 +139,13 @@ String stripSourceRuleQuotes(String value) {
   return value;
 }
 
+// Interpolation can execute host APIs just like explicit JS and @put rules.
+// Consumers must not assume these expressions are pure or reorder their calls.
+bool sourceRuleHasDynamicExpression(String rule) =>
+    rule.contains('{{') ||
+    splitSourceScriptRule(rule) != null ||
+    splitSourcePutRule(rule) != null;
+
 SourceScriptRule? splitSourceScriptRule(String rule) {
   final lowered = rule.toLowerCase();
   final atIndex = lowered.indexOf('@js:');

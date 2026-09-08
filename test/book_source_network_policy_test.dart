@@ -105,6 +105,75 @@ void main() {
     expect(body, 'ok');
   });
 
+  test(
+    'pinned HTTPS verifies the original hostname after address fallback',
+    () async {
+      final serverContext = SecurityContext()
+        ..useCertificateChain('test/fixtures/tls/books.test.crt')
+        ..usePrivateKey('test/fixtures/tls/books.test.key');
+      final server = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        serverContext,
+      );
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.write('secure');
+        await request.response.close();
+      });
+      final clientContext = SecurityContext(withTrustedRoots: false)
+        ..setTrustedCertificates('test/fixtures/tls/books.test.crt');
+      final policy = BookSourceNetworkPolicy(
+        allowPrivateNetwork: true,
+        lookup: (_) async => [
+          InternetAddress('127.0.0.2'),
+          InternetAddress.loopbackIPv4,
+        ],
+      );
+      final client = policy.createPinnedHttpClient(
+        securityContext: clientContext,
+      );
+      addTearDown(() => client.close(force: true));
+
+      final request = await client.getUrl(
+        Uri.parse('https://books.test:${server.port}/'),
+      );
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(body, 'secure');
+    },
+  );
+
+  test('pinned HTTPS rejects a certificate for another hostname', () async {
+    final serverContext = SecurityContext()
+      ..useCertificateChain('test/fixtures/tls/books.test.crt')
+      ..usePrivateKey('test/fixtures/tls/books.test.key');
+    final server = await HttpServer.bindSecure(
+      InternetAddress.loopbackIPv4,
+      0,
+      serverContext,
+    );
+    addTearDown(() => server.close(force: true));
+    server.listen((request) => request.response.close(), onError: (_) {});
+    final clientContext = SecurityContext(withTrustedRoots: false)
+      ..setTrustedCertificates('test/fixtures/tls/books.test.crt');
+    final policy = BookSourceNetworkPolicy(
+      allowPrivateNetwork: true,
+      lookup: (_) async => [InternetAddress.loopbackIPv4],
+    );
+    final client = policy.createPinnedHttpClient(
+      securityContext: clientContext,
+    );
+    addTearDown(() => client.close(force: true));
+
+    await expectLater(
+      client.getUrl(Uri.parse('https://other.test:${server.port}/')),
+      throwsA(isA<TlsException>()),
+    );
+  });
+
   test('synthetic DNS range is separately opt-in', () {
     final address = InternetAddress('198.18.0.7');
 

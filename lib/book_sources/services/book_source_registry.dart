@@ -322,6 +322,20 @@ class BookSourceRegistry {
     return List.unmodifiable(groups);
   }
 
+  /// Loads group names for publishing, rejecting damaged local registry data.
+  ///
+  /// The regular UI loader remains tolerant so one damaged source does not
+  /// hide the rest. Sync must be stricter because treating decode failure as
+  /// an empty directory would publish a destructive false deletion.
+  Future<List<String>> loadGroupsForSync() async {
+    final raw = await _readRaw();
+    if (raw == null || raw.trim().isEmpty) return const [];
+    final groups = raw.length < _backgroundDecodeThreshold
+        ? _decodeStoredGroupNamesForSync(raw)
+        : await compute(_decodeStoredGroupNamesForSync, raw);
+    return List.unmodifiable(groups);
+  }
+
   Future<List<String>> createGroup(String name) async {
     final group = _requiredGroupName(name);
     return _mutate(() async {
@@ -535,6 +549,21 @@ class BookSourceRegistry {
     });
   }
 
+  /// Applies the ordered explicit group directory received from sync.
+  ///
+  /// Source records and memberships remain authoritative locally. Groups that
+  /// are still referenced by a source are appended after the synced directory
+  /// so restoring an older catalog cannot make an active membership disappear.
+  Future<List<String>> applySyncedGroups(Iterable<String> groups) async {
+    final normalized = _normalizeGroupNames(groups);
+    return _mutate(() async {
+      await loadGroupsForSync();
+      final sources = (await _load()).toList();
+      await _saveAndPublish(sources, groups: normalized);
+      return loadGroups();
+    });
+  }
+
   Future<T> _mutate<T>(Future<T> Function() action) {
     final completer = Completer<T>();
     Future<void> run(_) async {
@@ -583,12 +612,13 @@ class BookSourceRegistry {
     List<RegisteredBookSource> sources, {
     List<String>? groups,
   }) async {
-    sources.sort((a, b) => a.name.compareTo(b.name));
+    final sortedSources = sources.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
     final existingGroups = groups ?? await loadGroups();
-    final orderedGroups = _mergeGroupOrder(existingGroups, sources);
-    await _save(sources, orderedGroups);
+    final orderedGroups = _mergeGroupOrder(existingGroups, sortedSources);
+    await _save(sortedSources, orderedGroups);
     _changesController.add(null);
-    return List.unmodifiable(sources);
+    return List.unmodifiable(sortedSources);
   }
 
   Future<void> _prepareStorage() async {
@@ -696,6 +726,54 @@ List<String> _decodeStoredGroupNames(String raw) {
     return groups;
   } catch (_) {
     return const [];
+  }
+}
+
+List<String> _decodeStoredGroupNamesForSync(String raw) {
+  try {
+    final decoded = jsonDecode(raw);
+    final sourceItems = decoded is List
+        ? decoded
+        : decoded is Map && decoded['sources'] is List
+        ? decoded['sources']! as List
+        : throw const FormatException();
+    final groups = <String>[];
+    if (decoded is Map && decoded.containsKey('groups')) {
+      final storedGroups = decoded['groups'];
+      if (storedGroups is! List ||
+          storedGroups.any((group) => group is! String)) {
+        throw const FormatException();
+      }
+      groups.addAll(_normalizeGroupNames(storedGroups.cast<String>()));
+    }
+    final groupRecords = <({String name, List<String> groups})>[];
+    for (final item in sourceItems) {
+      if (item is! Map) throw const FormatException();
+      final sourceJson = item.map((key, value) => MapEntry('$key', value));
+      final source = RegisteredBookSource.fromJson(sourceJson);
+      late final List<String> sourceGroups;
+      if (sourceJson.containsKey('groups')) {
+        final storedGroups = sourceJson['groups'];
+        if (storedGroups is! List ||
+            storedGroups.any((group) => group is! String)) {
+          throw const FormatException();
+        }
+        sourceGroups = _normalizeGroupNames(storedGroups.cast<String>());
+      } else {
+        sourceGroups = _legacyStoredGroupList(sourceJson['sourceConfig']);
+      }
+      groupRecords.add((name: source.name, groups: sourceGroups));
+    }
+    groupRecords.sort((a, b) => a.name.compareTo(b.name));
+    final seen = groups.toSet();
+    for (final record in groupRecords) {
+      for (final group in record.groups) {
+        if (seen.add(group)) groups.add(group);
+      }
+    }
+    return groups;
+  } catch (_) {
+    throw const FormatException('The local book source registry is damaged.');
   }
 }
 

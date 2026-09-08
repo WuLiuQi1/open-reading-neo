@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:gbk_codec/gbk_codec.dart';
+import '../../../utils/chinese_charset_encoder.dart';
 import '../../../utils/fast_gbk_decoder.dart';
 
 /// Encoding overloads shared by java.* helpers and named Java class bridges.
@@ -55,7 +55,9 @@ String _charset(String value) {
   final name = value.trim().toLowerCase().replaceAll(RegExp('[-_]'), '');
   return switch (name) {
     '' || 'null' || 'utf8' => 'utf8',
-    'gbk' || 'gb2312' || 'cp936' || 'windows936' => 'gbk',
+    'gbk' || 'cp936' || 'windows936' => 'gbk',
+    'gb2312' => 'gb2312',
+    'gb18030' => 'gb18030',
     'latin1' || 'iso88591' => 'latin1',
     'ascii' || 'usascii' => 'ascii',
     'utf16' || 'utf16le' || 'utf16be' => name,
@@ -66,7 +68,9 @@ String _charset(String value) {
 List<int> _encode(String text, String charset) {
   final name = _charset(charset);
   if (name == 'utf8') return List<int>.from(utf8.encode(text));
-  if (name == 'gbk') return List<int>.from(gbk_bytes.encode(text));
+  if (name == 'gbk' || name == 'gb2312' || name == 'gb18030') {
+    return encodeChineseCharset(text, name);
+  }
   if (name == 'latin1' || name == 'ascii') {
     final max = name == 'ascii' ? 127 : 255;
     return text.runes.map((rune) => rune <= max ? rune : 63).toList();
@@ -82,7 +86,8 @@ List<int> _encode(String text, String charset) {
 String _decode(List<int> bytes, String charset) {
   final name = _charset(charset);
   if (name == 'utf8') return utf8.decode(bytes, allowMalformed: true);
-  if (name == 'gbk') {
+  if (name == 'gb18030') return decodeGb18030(bytes);
+  if (name == 'gbk' || name == 'gb2312') {
     return decodeGbkFast(Uint8List.fromList(bytes), lenient: true);
   }
   if (name == 'latin1') return latin1.decode(bytes);

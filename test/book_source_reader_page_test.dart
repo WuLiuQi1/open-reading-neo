@@ -19,6 +19,7 @@ import 'package:xxread/core/reader/reader_auto_page_turn_controller.dart';
 import 'package:xxread/core/reader/reader_margin_settings.dart';
 import 'package:xxread/core/reader/reader_settings.dart';
 import 'package:xxread/l10n/app_localizations.dart';
+import 'package:xxread/models/book.dart';
 import 'package:xxread/pages/reader/book_source/book_source_reader_page.dart';
 import 'package:xxread/pages/reader/image/paged_image_reader.dart';
 import 'package:xxread/services/reader/replace_rule_service.dart';
@@ -45,6 +46,67 @@ void main() {
     GlassEffectConfig.setDisableAllGlassEffects(false);
     await _replaceRules.close();
   });
+
+  for (final addToShelf in [true, false]) {
+    testWidgets('exit confirmation returns after addToShelf=$addToShelf', (
+      tester,
+    ) async {
+      final client = _FakeBookSourceClient();
+      final shelf = _ExitTestShelfService(client);
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: Text('source detail')),
+        ),
+      );
+      unawaited(
+        navigator.currentState!.push<void>(
+          MaterialPageRoute(
+            builder: (_) => BookSourceReaderPage(
+              source: _testSource(),
+              book: const BookSourceBook(
+                id: 'book-1',
+                title: 'Exit test',
+                author: 'Author',
+                description: '',
+                categories: [],
+              ),
+              client: client,
+              shelfService: shelf,
+              replaceRuleService: _replaceRules,
+              paginationCacheDao: _MemoryPaginationCacheDao(),
+              initialTheme: ReaderThemes.day,
+            ),
+          ),
+        ),
+      );
+      await _pumpUntilFound(tester, find.textContaining('第一章正文'));
+      await navigator.currentState!.maybePop();
+      await _pumpUntilFound(tester, find.byType(AlertDialog));
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(
+        find.widgetWithText(
+          addToShelf ? FilledButton : TextButton,
+          addToShelf ? '加入书架' : '暂不',
+        ),
+      );
+      for (var i = 0; i < 15; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(BookSourceReaderPage), findsNothing);
+      expect(find.text('source detail'), findsOneWidget);
+      expect(shelf.addCount, addToShelf ? 1 : 0);
+      if (addToShelf) expect(shelf.savedChapterIndex, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      shelf.close();
+      client.close();
+    });
+  }
 
   testWidgets(
     'reader closes owned resources to cancel pending initialization',
@@ -2443,5 +2505,42 @@ class _MemoryPaginationCacheDao extends PaginationCacheDao {
     )[layoutFingerprint] = Uint8List.fromList(
       payload,
     );
+  }
+}
+
+class _ExitTestShelfService extends BookSourceShelfService {
+  _ExitTestShelfService(BookSourceClient client) : super(client: client);
+  int addCount = 0;
+  int? savedChapterIndex;
+
+  @override
+  Future<Book?> findShelfBook({
+    required String sourceId,
+    required String sourceBookId,
+  }) async => null;
+
+  @override
+  Future<Book> addOnline({
+    required RegisteredBookSource source,
+    required BookSourceBook book,
+  }) async {
+    addCount++;
+    return Book(
+      id: 42,
+      title: book.title,
+      filePath: '',
+      format: 'source',
+      storageType: 'online',
+    );
+  }
+
+  @override
+  Future<void> updateShelfProgress({
+    required int shelfBookId,
+    required int chapterIndex,
+    required int chapterCount,
+    required double chapterProgress,
+  }) async {
+    savedChapterIndex = chapterIndex;
   }
 }

@@ -686,7 +686,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesDetectedAdditional.
   ///
   /// In en, this message translates to:
-  /// **'Detected: Other protocol'**
+  /// **'Detected: Legado'**
   String get bookSourcesDetectedAdditional;
 
   /// No description provided for @bookSourcesProtocolGroupOrsp.
@@ -1077,7 +1077,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesUrlHint.
   ///
   /// In en, this message translates to:
-  /// **'https://example.com or a discovery document URL'**
+  /// **'https://example.com or a source JSON URL'**
   String get bookSourcesUrlHint;
 
   /// No description provided for @bookSourcesNoOfficialSourcesNotice.
@@ -8864,6 +8864,12 @@ abstract class AppLocalizations {
   /// **'Book sources'**
   String get webDavScopeBookSources;
 
+  /// No description provided for @webDavScopeBookSourcesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync public ORSP sources and favorites, plus all group names, empty groups, and their order. Source credentials and private configurations stay on this device.'**
+  String get webDavScopeBookSourcesHint;
+
   /// Sync scope for book metadata
   ///
   /// In en, this message translates to:
@@ -8909,7 +8915,7 @@ abstract class AppLocalizations {
   /// Description for the reader settings sync scope
   ///
   /// In en, this message translates to:
-  /// **'Sync typography, themes, page turns, tap zones, and image-reader preferences.'**
+  /// **'Sync typography, themes, page turns, automatic paging preferences, tap zones, and image-reader preferences.'**
   String get webDavScopeReaderSettingsHint;
 
   /// Sync scope for user-authored replacement rules
@@ -9059,8 +9065,14 @@ abstract class AppLocalizations {
   /// Unsupported WebDAV error
   ///
   /// In en, this message translates to:
-  /// **'This WebDAV server does not support safe synchronization.'**
+  /// **'The server response is incompatible with the synchronization protocol.'**
   String get webDavErrorUnsupported;
+
+  /// WebDAV server error
+  ///
+  /// In en, this message translates to:
+  /// **'The WebDAV server could not complete the request.'**
+  String get webDavErrorServer;
 
   /// WebDAV network error
   ///
@@ -9097,6 +9109,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'WebDAV could not complete the operation.'**
   String get webDavErrorUnknown;
+
+  /// WebDAV error details heading
+  ///
+  /// In en, this message translates to:
+  /// **'Server response details'**
+  String get webDavErrorDetails;
+
+  /// No description provided for @webDavErrorMissingEtagDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not return a strong file version identifier (ETag). The ETag may be missing or too weak, so the app cannot tell whether another device changed the remote file.'**
+  String get webDavErrorMissingEtagDetail;
+
+  /// No description provided for @webDavErrorIfMatchIgnoredDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'The server ignored the condition that permits writing only when the file version matches (If-Match). Continuing could overwrite a newer change from another device.'**
+  String get webDavErrorIfMatchIgnoredDetail;
+
+  /// No description provided for @webDavErrorIfNoneMatchIgnoredDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'The server ignored the condition that permits creation only when the file does not exist (If-None-Match). Continuing could overwrite an existing file.'**
+  String get webDavErrorIfNoneMatchIgnoredDetail;
+
+  /// WebDAV detailed failure reason
+  ///
+  /// In en, this message translates to:
+  /// **'Reason: {reason}'**
+  String webDavErrorReason(String reason);
+
+  /// WebDAV HTTP status detail
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP status: {status}'**
+  String webDavErrorHttpStatus(int status);
+
+  /// WebDAV request method detail
+  ///
+  /// In en, this message translates to:
+  /// **'Request method: {method}'**
+  String webDavErrorRequestMethod(String method);
+
+  /// WebDAV resource path detail
+  ///
+  /// In en, this message translates to:
+  /// **'Resource path: {path}'**
+  String webDavErrorResourcePath(String path);
 
   /// WebDAV failure phase
   ///
@@ -10475,7 +10535,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesImportIntro.
   ///
   /// In en, this message translates to:
-  /// **'Choose a link or JSON file, then review before adding.'**
+  /// **'Automatically detects ORSP and Legado sources. Review before importing.'**
   String get bookSourcesImportIntro;
 
   /// No description provided for @bookSourcesImportInputStep.

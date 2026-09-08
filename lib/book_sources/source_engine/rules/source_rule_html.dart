@@ -111,21 +111,25 @@ List<Element> selectSourceHtml(
               ),
       );
     } else {
+      final compatible = selectSourceHtmlWithJsoupExtensions(
+        root,
+        parsed.css,
+        includeRoot: includeRoots,
+      );
+      if (compatible != null) {
+        selected.addAll(compatible);
+        continue;
+      }
       try {
         if (includeRoots && sourceHtmlMatches(root, parsed.css)) {
           selected.add(root);
         }
         selected.addAll(root.querySelectorAll(parsed.css));
       } on FormatException {
-        final compatible = selectSourceHtmlWithJsoupAttributeRegex(
-          root,
-          parsed.css,
-          includeRoot: includeRoots,
+        throw BookSourceProtocolException(
+          'Unsupported reading source CSS selector: ${parsed.css}.',
         );
-        if (compatible != null) {
-          selected.addAll(compatible);
-          continue;
-        }
+      } on UnimplementedError {
         throw BookSourceProtocolException(
           'Unsupported reading source CSS selector: ${parsed.css}.',
         );
@@ -155,37 +159,39 @@ List<Element> selectSourceHtml(
       .toList();
 }
 
-List<Element>? selectSourceHtmlWithJsoupAttributeRegex(
+List<Element>? selectSourceHtmlWithJsoupExtensions(
   Element root,
   String selector, {
   required bool includeRoot,
 }) {
-  final matches = sourceJsoupAttributeRegexSelector
-      .allMatches(selector)
-      .toList();
-  if (matches.isEmpty) return null;
+  final attributeMatches = _findJsoupAttributeRegexes(selector);
+  if (attributeMatches.isEmpty && _findInnermostJsoupPseudo(selector) == null) {
+    return null;
+  }
   final candidates = <Element>[root, ...root.querySelectorAll('*')];
   final markers = <String>[];
+  Map<Element, int>? siblingIndexes;
   var rewritten = selector;
   var markerSuffix = 0;
+  String nextMarker() {
+    late String marker;
+    do {
+      marker = 'data-open-reading-compat-${markerSuffix++}';
+    } while (markers.contains(marker) ||
+        candidates.any(
+          (candidate) => candidate.attributes.containsKey(marker),
+        ));
+    markers.add(marker);
+    return marker;
+  }
+
   try {
-    for (final match in matches.reversed) {
-      final attribute = match.group(1)!.toLowerCase();
-      var patternSource = match.group(2)!.trim();
-      if (patternSource.length >= 2 &&
-          ((patternSource.startsWith('"') && patternSource.endsWith('"')) ||
-              (patternSource.startsWith("'") && patternSource.endsWith("'")))) {
-        patternSource = patternSource.substring(1, patternSource.length - 1);
-      }
-      final pattern = sourceJsoupAttributeRegExp(patternSource);
-      late String marker;
-      do {
-        marker = 'data-open-reading-regex-${markerSuffix++}';
-      } while (markers.contains(marker) ||
-          candidates.any(
-            (candidate) => candidate.attributes.containsKey(marker),
-          ));
-      markers.add(marker);
+    for (final match in attributeMatches.reversed) {
+      final attribute = match.attribute.toLowerCase();
+      final pattern = sourceJsoupAttributeRegExp(
+        stripSourceRuleQuotes(match.pattern.trim()),
+      );
+      final marker = nextMarker();
       for (final candidate in candidates) {
         final value = candidate.attributes[attribute];
         if (value != null && pattern.hasMatch(value)) {
@@ -194,11 +200,37 @@ List<Element>? selectSourceHtmlWithJsoupAttributeRegex(
       }
       rewritten = rewritten.replaceRange(match.start, match.end, '[$marker]');
     }
+    while (true) {
+      final pseudo = _findInnermostJsoupPseudo(rewritten);
+      if (pseudo == null) break;
+      final marker = nextMarker();
+      if (_isJsoupPositionPseudo(pseudo.name)) {
+        siblingIndexes ??= _sourceSiblingIndexes(candidates);
+      }
+      final argument = stripSourceRuleQuotes(pseudo.argument.trim());
+      for (final candidate in candidates) {
+        if (_matchesJsoupPseudo(
+          candidate,
+          pseudo.name,
+          argument,
+          siblingIndexes: siblingIndexes,
+        )) {
+          candidate.attributes[marker] = '';
+        }
+      }
+      rewritten = rewritten.replaceRange(pseudo.start, pseudo.end, '[$marker]');
+    }
+    if (markers.isEmpty) return null;
+    if (rewritten.trimLeft().startsWith('>')) {
+      return _selectRelativeElements(root, rewritten);
+    }
     return <Element>[
       if (includeRoot && sourceHtmlMatches(root, rewritten)) root,
       ...root.querySelectorAll(rewritten),
     ];
   } on FormatException {
+    return null;
+  } on UnimplementedError {
     return null;
   } finally {
     for (final candidate in candidates) {
@@ -207,6 +239,295 @@ List<Element>? selectSourceHtmlWithJsoupAttributeRegex(
       }
     }
   }
+}
+
+bool _matchesJsoupPseudo(
+  Element element,
+  String name,
+  String argument, {
+  Map<Element, int>? siblingIndexes,
+}) {
+  switch (name.toLowerCase()) {
+    case 'contains':
+      return sourceHtmlText(
+        element,
+      ).toLowerCase().contains(normalizeSourceHtmlText(argument).toLowerCase());
+    case 'containsown':
+      return sourceOwnText(
+        element,
+      ).toLowerCase().contains(normalizeSourceHtmlText(argument).toLowerCase());
+    case 'matches':
+      return sourceJsoupAttributeRegExp(
+        argument,
+      ).hasMatch(sourceHtmlText(element));
+    case 'matchesown':
+      return sourceJsoupAttributeRegExp(
+        argument,
+      ).hasMatch(sourceOwnText(element));
+    case 'has':
+      return _matchesRelativeSelector(element, argument);
+    case 'eq':
+    case 'lt':
+    case 'gt':
+      final index = siblingIndexes?[element] ?? 0;
+      final expected = int.tryParse(argument);
+      if (expected == null) return false;
+      if (name.toLowerCase() == 'eq') return index == expected;
+      if (name.toLowerCase() == 'lt') return index < expected;
+      return index > expected;
+  }
+  return false;
+}
+
+bool _isJsoupPositionPseudo(String name) =>
+    const {'eq', 'lt', 'gt'}.contains(name.toLowerCase());
+
+Map<Element, int> _sourceSiblingIndexes(List<Element> candidates) {
+  final indexes = <Element, int>{};
+  final indexedParents = <Element>{};
+  for (final candidate in candidates) {
+    final parent = candidate.parent;
+    if (parent is! Element || !indexedParents.add(parent)) continue;
+    final siblings = parent.children.toList(growable: false);
+    for (var index = 0; index < siblings.length; index++) {
+      indexes[siblings[index]] = index;
+    }
+  }
+  return indexes;
+}
+
+bool _matchesRelativeSelector(Element element, String selector) {
+  final normalized = selector.trim();
+  if (normalized.startsWith('>')) {
+    return _selectRelativeElements(element, normalized).isNotEmpty;
+  }
+  return element.querySelector(normalized) != null;
+}
+
+List<Element> _selectRelativeElements(Element element, String selector) {
+  return _selectRelativeFrom(<Element>[element], selector);
+}
+
+List<Element> _selectRelativeFrom(List<Element> anchors, String selector) {
+  final trimmed = selector.trimLeft();
+  if (trimmed.isEmpty) return anchors;
+  final relation = const {'>', '+', '~'}.contains(trimmed[0])
+      ? trimmed[0]
+      : ' ';
+  final rule = relation == ' ' ? trimmed : trimmed.substring(1).trimLeft();
+  final boundary = _firstTopLevelCombinator(rule);
+  final compound = boundary < 0
+      ? rule
+      : rule.substring(0, boundary).trimRight();
+  final remainder = boundary < 0 ? '' : rule.substring(boundary);
+  final selected = <Element>[];
+  for (final anchor in anchors) {
+    final related = switch (relation) {
+      '>' => anchor.children,
+      '+' => _sourceAdjacentSibling(anchor),
+      '~' => sourceFollowingSiblings(anchor),
+      _ => anchor.querySelectorAll(compound),
+    };
+    if (relation == ' ') {
+      selected.addAll(related);
+    } else {
+      selected.addAll(
+        related.where((element) => sourceHtmlMatches(element, compound)),
+      );
+    }
+  }
+  if (remainder.isEmpty || selected.isEmpty) return selected;
+  return _selectRelativeFrom(selected, remainder);
+}
+
+Iterable<Element> _sourceAdjacentSibling(Element element) sync* {
+  final siblings = element.parent?.children;
+  if (siblings == null) return;
+  final index = siblings.indexOf(element);
+  if (index >= 0 && index + 1 < siblings.length) yield siblings[index + 1];
+}
+
+int _firstTopLevelCombinator(String selector) {
+  var squareDepth = 0;
+  var roundDepth = 0;
+  String? quote;
+  for (var index = 0; index < selector.length; index++) {
+    final char = selector[index];
+    if (quote != null) {
+      if (char == quote &&
+          (index == 0 || selector.codeUnitAt(index - 1) != 92)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char == '"' || char == "'") {
+      quote = char;
+    } else if (char == '[') {
+      squareDepth++;
+    } else if (char == ']') {
+      squareDepth--;
+    } else if (char == '(') {
+      roundDepth++;
+    } else if (char == ')') {
+      roundDepth--;
+    } else if (squareDepth == 0 &&
+        roundDepth == 0 &&
+        (char == '>' || char == '+' || char == '~' || char.trim().isEmpty)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+_SourceJsoupPseudo? _findInnermostJsoupPseudo(String selector) {
+  for (var index = 0; index < selector.length; index++) {
+    final char = selector[index];
+    if (char == '[') {
+      final end = _balancedSelectorEnd(selector, index, '[', ']');
+      if (end < 0) return null;
+      index = end;
+      continue;
+    }
+    if (char != ':') continue;
+    final nameMatch = RegExp(
+      r'^(containsOwn|contains|matchesOwn|matches|has|eq|lt|gt)\(',
+      caseSensitive: false,
+    ).firstMatch(selector.substring(index + 1));
+    if (nameMatch == null) continue;
+    final name = nameMatch.group(1)!;
+    final open = index + 1 + nameMatch.end - 1;
+    final end = _balancedSelectorEnd(selector, open, '(', ')');
+    if (end < 0) return null;
+    final argument = selector.substring(open + 1, end);
+    if (name.toLowerCase() == 'has') {
+      final nested = _findInnermostJsoupPseudo(argument);
+      if (nested != null) {
+        return _SourceJsoupPseudo(
+          start: open + 1 + nested.start,
+          end: open + 1 + nested.end,
+          name: nested.name,
+          argument: nested.argument,
+        );
+      }
+    }
+    return _SourceJsoupPseudo(
+      start: index,
+      end: end + 1,
+      name: name,
+      argument: argument,
+    );
+  }
+  return null;
+}
+
+int _balancedSelectorEnd(
+  String selector,
+  int start,
+  String open,
+  String close,
+) {
+  var depth = 1;
+  String? quote;
+  var escaped = false;
+  for (var index = start + 1; index < selector.length; index++) {
+    final char = selector[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char.codeUnitAt(0) == 92) {
+      escaped = true;
+      continue;
+    }
+    if (quote != null) {
+      if (char == quote) quote = null;
+      continue;
+    }
+    if (char == '"' || char == "'") {
+      quote = char;
+    } else if (char == open) {
+      depth++;
+    } else if (char == close && --depth == 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+class _SourceJsoupPseudo {
+  const _SourceJsoupPseudo({
+    required this.start,
+    required this.end,
+    required this.name,
+    required this.argument,
+  });
+
+  final int start;
+  final int end;
+  final String name;
+  final String argument;
+}
+
+List<_SourceJsoupAttributeRegex> _findJsoupAttributeRegexes(String selector) {
+  final matches = <_SourceJsoupAttributeRegex>[];
+  for (var start = 0; start < selector.length; start++) {
+    if (selector[start] != '[') continue;
+    var depth = 1;
+    String? quote;
+    var escaped = false;
+    for (var index = start + 1; index < selector.length; index++) {
+      final char = selector[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char.codeUnitAt(0) == 92) {
+        escaped = true;
+        continue;
+      }
+      if (quote != null) {
+        if (char == quote) quote = null;
+        continue;
+      }
+      if (char == '"' || char == "'") {
+        quote = char;
+      } else if (char == '[') {
+        depth++;
+      } else if (char == ']' && --depth == 0) {
+        final body = selector.substring(start + 1, index);
+        final parsed = RegExp(
+          r'^\s*([A-Za-z_][A-Za-z0-9_.:-]*)\s*~=\s*([\s\S]+?)\s*$',
+        ).firstMatch(body);
+        if (parsed != null) {
+          matches.add(
+            _SourceJsoupAttributeRegex(
+              start: start,
+              end: index + 1,
+              attribute: parsed.group(1)!,
+              pattern: parsed.group(2)!,
+            ),
+          );
+        }
+        start = index;
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+class _SourceJsoupAttributeRegex {
+  const _SourceJsoupAttributeRegex({
+    required this.start,
+    required this.end,
+    required this.attribute,
+    required this.pattern,
+  });
+
+  final int start;
+  final int end;
+  final String attribute;
+  final String pattern;
 }
 
 RegExp sourceJsoupAttributeRegExp(String source) {
@@ -229,10 +550,6 @@ RegExp sourceJsoupAttributeRegExp(String source) {
     dotAll: dotAll,
   );
 }
-
-final sourceJsoupAttributeRegexSelector = RegExp(
-  r'\[\s*([A-Za-z_][A-Za-z0-9_.:-]*)\s*~=\s*([^\]\r\n]+?)\s*\]',
-);
 
 bool sourceHtmlMatches(Element element, String selector) {
   final parent = element.parent;

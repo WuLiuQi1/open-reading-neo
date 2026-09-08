@@ -20,6 +20,9 @@ abstract interface class SourceRuntimeRequestPort {
     ReadingSourceConfig source,
     String template, {
     Map<String, String> variables,
+    Map<String, Object?> book,
+    Map<String, Object?> chapter,
+    String? defaultWebJs,
     BookDownloadCancellation? cancellation,
   });
   Future<SourceResponse> requestReusingBookInfo(
@@ -27,6 +30,8 @@ abstract interface class SourceRuntimeRequestPort {
     String bookId,
     String target, {
     required Map<String, String> variables,
+    Map<String, Object?> book,
+    Map<String, Object?> chapter,
   });
   SourceRuleDocument document(
     ReadingSourceConfig source,
@@ -40,8 +45,10 @@ abstract interface class SourceRuntimeRequestPort {
   Future<String> expandScriptTemplate(
     ReadingSourceConfig source,
     String template,
-    Map<String, String> variables,
-  );
+    Map<String, String> variables, {
+    Map<String, Object?> book,
+    Map<String, Object?> chapter,
+  });
   String cookieHeader(ReadingSourceConfig source, Uri uri);
 }
 
@@ -96,6 +103,9 @@ class SourceRuntimeRequests
     ReadingSourceConfig source,
     String template, {
     Map<String, String> variables = const {},
+    Map<String, Object?> book = const {},
+    Map<String, Object?> chapter = const {},
+    String? defaultWebJs,
     BookDownloadCancellation? cancellation,
   }) async {
     await _sessions.ensure(source);
@@ -103,6 +113,8 @@ class SourceRuntimeRequests
       source,
       template,
       variables,
+      book: book,
+      chapter: chapter,
     );
     final outgoing = SourceRequestTemplate.parse(
       expandedTemplate,
@@ -110,6 +122,7 @@ class SourceRuntimeRequests
       variables: variables,
       sourceHeaders: await sourceHeaders(source),
       cookieJarKey: source.enabledCookieJar ? source.stableId : null,
+      defaultWebJs: defaultWebJs,
     );
     await _limiter.acquire(
       source.stableId,
@@ -136,12 +149,20 @@ class SourceRuntimeRequests
     String bookId,
     String target, {
     required Map<String, String> variables,
+    Map<String, Object?> book = const {},
+    Map<String, Object?> chapter = const {},
   }) async {
     if (target == (decodeSourceDataTarget(bookId) ?? bookId)) {
       final cached = _state.takeBookInfoResponse(source, bookId);
       if (cached != null) return cached;
     }
-    return request(source, target, variables: variables);
+    return request(
+      source,
+      target,
+      variables: variables,
+      book: book,
+      chapter: chapter,
+    );
   }
 
   @override
@@ -186,6 +207,8 @@ class SourceRuntimeRequests
       variables: variables,
       book: book,
       chapter: chapter,
+      bookWriter: book.isEmpty ? null : (value) => book.addAll(value),
+      chapterWriter: chapter.isEmpty ? null : (value) => chapter.addAll(value),
       networkHandler: (request) => _sendScriptNetwork(
         source,
         request,
@@ -415,11 +438,18 @@ class SourceRuntimeRequests
   Future<String> expandScriptTemplate(
     ReadingSourceConfig source,
     String template,
-    Map<String, String> variables,
-  ) async {
+    Map<String, String> variables, {
+    Map<String, Object?> book = const {},
+    Map<String, Object?> chapter = const {},
+  }) async {
     await _sessions.ensure(source);
-    SourceScriptContext context() =>
-        scriptContext(source, baseUrl: source.baseUri, variables: variables);
+    SourceScriptContext context() => scriptContext(
+      source,
+      baseUrl: source.baseUri,
+      variables: variables,
+      book: book,
+      chapter: chapter,
+    );
     final trimmed = template.trimLeft();
     final directScript = sourceScriptBody(template);
     if (directScript != null &&

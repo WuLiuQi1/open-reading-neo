@@ -24,7 +24,32 @@ void main() {
       SyncDatasetCatalog.isEnabled(SyncDataset.bookSources, scope),
       isFalse,
     );
+    expect(
+      SyncDatasetCatalog.isEnabled(SyncDataset.bookSourceGroups, scope),
+      isFalse,
+    );
     expect(SyncDatasetCatalog.isEnabled(SyncDataset.bookmarks, scope), isFalse);
+  });
+
+  test('book source groups use the book source scope', () {
+    expect(SyncDataset.bookSourceGroups.remoteName, 'book_source_groups');
+    expect(
+      SyncDatasetCatalog.isEnabled(
+        SyncDataset.bookSourceGroups,
+        const WebDavSyncScope(),
+      ),
+      isTrue,
+    );
+    expect(
+      SyncDatasetCatalog.isRecordPublishable(
+        dataset: 'book_source_groups',
+        recordId: 'group_catalog',
+        entityKey: 'group_catalog',
+        payload: const {'sync_schema': 1, 'groups': <String>[]},
+        scope: const WebDavSyncScope(),
+      ),
+      isTrue,
+    );
   });
 
   test('book source scope is enabled by default and survives JSON storage', () {

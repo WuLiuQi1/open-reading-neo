@@ -26,6 +26,7 @@ enum WebDavSyncErrorCode {
   notFound,
   conflict,
   serverIncompatible,
+  serverError,
   storageFull,
   rateLimited,
   timeout,
@@ -56,14 +57,37 @@ enum WebDavNewBookUploadPolicy {
 }
 
 class WebDavSyncFailure implements Exception {
-  const WebDavSyncFailure(this.code, this.message, {this.statusCode});
+  const WebDavSyncFailure(
+    this.code,
+    this.message, {
+    this.statusCode,
+    this.requestMethod,
+    this.resourcePath,
+  });
 
   final WebDavSyncErrorCode code;
   final String message;
   final int? statusCode;
+  final String? requestMethod;
+
+  /// Only the URI path, never its user info, query, headers or response body.
+  final String? resourcePath;
+
+  WebDavSyncFailure withRequest(String method, Uri uri) => WebDavSyncFailure(
+    code,
+    message,
+    statusCode: statusCode,
+    requestMethod: requestMethod ?? method,
+    resourcePath: resourcePath ?? uri.path,
+  );
 
   @override
-  String toString() => 'WebDavSyncFailure($code, $message)';
+  String toString() => [
+    'WebDavSyncFailure(${code.name}): $message',
+    if (statusCode != null) 'HTTP $statusCode',
+    if (requestMethod != null) 'method=$requestMethod',
+    if (resourcePath != null) 'path=$resourcePath',
+  ].join('; ');
 }
 
 class WebDavSyncConfigDraft {
@@ -219,6 +243,7 @@ class ConnectionTestResult {
     this.serverDate,
     this.errorCode,
     this.message,
+    this.failure,
   });
 
   final bool success;
@@ -227,6 +252,7 @@ class ConnectionTestResult {
   final DateTime? serverDate;
   final WebDavSyncErrorCode? errorCode;
   final String? message;
+  final WebDavSyncFailure? failure;
 }
 
 class WebDavSyncRunResult {

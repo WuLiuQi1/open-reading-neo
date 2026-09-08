@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:xxread/book_sources/caching/source_cover_cache.dart';
 import 'package:xxread/book_sources/source_engine/source_config.dart';
+import 'package:xxread/book_sources/source_engine/source_http_transport.dart';
 import 'package:xxread/book_sources/source_engine/source_runtime.dart';
 
 enum _ExecutionKind { selector, script, xpath, backgroundWeb }
@@ -18,6 +21,19 @@ Future<void> main(List<String> arguments) async {
   final paths = arguments.where((value) => !value.startsWith('--')).toList();
   final perKind = _integerOption(arguments, '--per-kind=', fallback: 3);
   final staticOnly = arguments.contains('--static-only');
+  final contentKind =
+      arguments
+          .where((value) => value.startsWith('--content-kind='))
+          .map((value) => value.substring('--content-kind='.length))
+          .firstOrNull ??
+      'all';
+  if (!const {'all', 'text', 'comic'}.contains(contentKind)) {
+    throw ArgumentError.value(
+      contentKind,
+      'content-kind',
+      'all, text or comic',
+    );
+  }
   final stageSeconds = _integerOption(
     arguments,
     '--stage-seconds=',
@@ -26,7 +42,8 @@ Future<void> main(List<String> arguments) async {
   if (paths.isEmpty) {
     stderr.writeln(
       'Usage: dart run tool/diagnose_source_samples.dart '
-      '[--per-kind=3] [--stage-seconds=15] <source.json> ...',
+      '[--per-kind=3] [--stage-seconds=15] [--content-kind=all|text|comic] '
+      '<source.json> ...',
     );
     exitCode = 64;
     return;
@@ -54,6 +71,10 @@ Future<void> main(List<String> arguments) async {
       }
       if (report.canRun) runnableUrls.add(source.url);
       if (!seen.add(source.url) || !report.canRun) {
+        continue;
+      }
+      if ((contentKind == 'comic' && !source.isImageSource) ||
+          (contentKind == 'text' && source.isImageSource)) {
         continue;
       }
       candidates.add(_Candidate(source, _executionKind(source), path));
@@ -121,7 +142,8 @@ Future<void> main(List<String> arguments) async {
       'START $label file=${File(candidate.fileName).uri.pathSegments.last} '
       'query=$query',
     );
-    final runtime = SourceRuntime();
+    final transport = SourceHttpTransport();
+    final runtime = SourceRuntime(transport: transport);
     try {
       try {
         final search = await _withBudget(
@@ -162,15 +184,43 @@ Future<void> main(List<String> arguments) async {
                 stageSeconds,
                 'content',
               );
-              if (content.content.trim().isEmpty) {
+              if (source.isImageSource
+                  ? content.images.isEmpty
+                  : content.content.trim().isEmpty) {
                 _record(counts, 'content-empty');
                 stdout.writeln('FAIL $label stage=content-empty');
                 continue;
               }
+              if (source.isImageSource) {
+                try {
+                  final firstImage = content.images.first;
+                  final bytes = await _withBudget(
+                    SourceCoverCache.imagePageInstance.load(
+                      firstImage.url,
+                      headers: firstImage.headers,
+                    ),
+                    stageSeconds,
+                    'image',
+                  );
+                  final codec = await ui.instantiateImageCodec(
+                    bytes,
+                    targetWidth: 64,
+                  );
+                  try {
+                    final frame = await codec.getNextFrame();
+                    frame.image.dispose();
+                  } finally {
+                    codec.dispose();
+                  }
+                } catch (error) {
+                  _failure(counts, label, 'image', error, source.url);
+                  continue;
+                }
+              }
               _record(counts, 'pass');
               stdout.writeln(
                 'PASS $label chapters=${chapters.length} '
-                'content=${content.content.length}',
+                'content=${content.content.length} images=${content.images.length}',
               );
             } catch (error) {
               _failure(counts, label, 'content', error, source.url);

@@ -330,7 +330,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesDetectedOrsp => '识别为：ORSP 书源';
 
   @override
-  String get bookSourcesDetectedAdditional => '识别为：其他协议书源';
+  String get bookSourcesDetectedAdditional => '识别为：Legado 书源';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP 书源';
@@ -564,7 +564,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesUrlLabel => '书源地址';
 
   @override
-  String get bookSourcesUrlHint => 'https://example.com 或发现文档 URL';
+  String get bookSourcesUrlHint => 'https://example.com 或书源 JSON 链接';
 
   @override
   String get bookSourcesNoOfficialSourcesNotice =>
@@ -4816,6 +4816,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webDavScopeBookSources => '书源';
 
   @override
+  String get webDavScopeBookSourcesHint =>
+      '同步公开 ORSP 书源与收藏，以及全部分组名称、空分组和排序。书源账号与私密配置保留在本机。';
+
+  @override
   String get webDavScopeBooks => '书架与在线书籍';
 
   @override
@@ -4837,7 +4841,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webDavScopeReaderSettings => '阅读器设置';
 
   @override
-  String get webDavScopeReaderSettingsHint => '同步排版、主题、翻页、点击区域与图片阅读偏好。';
+  String get webDavScopeReaderSettingsHint => '同步排版、主题、翻页、自动翻页偏好、点击区域与图片阅读偏好。';
 
   @override
   String get webDavScopeReplaceRules => '替换规则';
@@ -4916,7 +4920,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webDavErrorTimeout => '服务器没有及时响应。';
 
   @override
-  String get webDavErrorUnsupported => '这个 WebDAV 服务不支持安全同步所需的能力。';
+  String get webDavErrorUnsupported => '服务器返回的响应与同步协议不兼容。';
+
+  @override
+  String get webDavErrorServer => 'WebDAV 服务器暂时无法完成请求。';
 
   @override
   String get webDavErrorNetwork => '当前网络不可用，变更仍已保存在本机。';
@@ -4935,6 +4942,41 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webDavErrorUnknown => 'WebDAV 无法完成本次操作。';
+
+  @override
+  String get webDavErrorDetails => '服务器返回详情';
+
+  @override
+  String get webDavErrorMissingEtagDetail =>
+      '服务器没有返回可用于并发保护的强文件版本标识（ETag）；ETag 可能缺失或过弱，应用无法判断远端文件是否已被其他设备修改。';
+
+  @override
+  String get webDavErrorIfMatchIgnoredDetail =>
+      '服务器忽略了仅在版本一致时才写入（If-Match）的条件，继续同步可能覆盖其他设备的新修改。';
+
+  @override
+  String get webDavErrorIfNoneMatchIgnoredDetail =>
+      '服务器忽略了仅在文件不存在时才创建（If-None-Match）的条件，继续同步可能覆盖已有文件。';
+
+  @override
+  String webDavErrorReason(String reason) {
+    return '具体原因：$reason';
+  }
+
+  @override
+  String webDavErrorHttpStatus(int status) {
+    return 'HTTP 状态码：$status';
+  }
+
+  @override
+  String webDavErrorRequestMethod(String method) {
+    return '请求方法：$method';
+  }
+
+  @override
+  String webDavErrorResourcePath(String path) {
+    return '资源路径：$path';
+  }
 
   @override
   String webDavErrorPhase(String phase) {
@@ -5666,7 +5708,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '正文修改会更新下方位置的 TXT。升级前的上传副本会保留，但不再跟随正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '从链接或 JSON 文件读取，预览后再导入。';
+  String get bookSourcesImportIntro => '自动识别 ORSP 和 Legado 书源，预览后再导入。';
 
   @override
   String get bookSourcesImportInputStep => '选择书源';
@@ -6181,7 +6223,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesDetectedOrsp => '識別為：ORSP 書源';
 
   @override
-  String get bookSourcesDetectedAdditional => '識別為：其他協議書源';
+  String get bookSourcesDetectedAdditional => '識別為：Legado 書源';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP 書源';
@@ -6415,7 +6457,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesUrlLabel => '書源位址';
 
   @override
-  String get bookSourcesUrlHint => 'https://example.com 或探索文件 URL';
+  String get bookSourcesUrlHint => 'https://example.com 或書源 JSON 連結';
 
   @override
   String get bookSourcesNoOfficialSourcesNotice =>
@@ -10627,6 +10669,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get webDavScopeBookSources => '書源';
 
   @override
+  String get webDavScopeBookSourcesHint =>
+      '同步公開 ORSP 書源與收藏，以及全部分組名稱、空分組和排序。書源帳號與私密設定保留在本機。';
+
+  @override
   String get webDavScopeBooks => '書庫與線上書籍';
 
   @override
@@ -10648,7 +10694,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get webDavScopeReaderSettings => '閱讀器設定';
 
   @override
-  String get webDavScopeReaderSettingsHint => '同步排版、主題、翻頁、點按區域與圖片閱讀偏好。';
+  String get webDavScopeReaderSettingsHint => '同步排版、主題、翻頁、自動翻頁偏好、點按區域與圖片閱讀偏好。';
 
   @override
   String get webDavScopeReplaceRules => '取代規則';
@@ -10727,7 +10773,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get webDavErrorTimeout => '伺服器未及時回應。';
 
   @override
-  String get webDavErrorUnsupported => '此 WebDAV 服務不支援安全同步所需的能力。';
+  String get webDavErrorUnsupported => '伺服器回傳的回應與同步協定不相容。';
+
+  @override
+  String get webDavErrorServer => 'WebDAV 伺服器暫時無法完成請求。';
 
   @override
   String get webDavErrorNetwork => '目前無法使用網路，變更仍已儲存在本機。';
@@ -10746,6 +10795,41 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get webDavErrorUnknown => 'WebDAV 無法完成這次操作。';
+
+  @override
+  String get webDavErrorDetails => '伺服器回傳詳情';
+
+  @override
+  String get webDavErrorMissingEtagDetail =>
+      '伺服器沒有回傳可用於並行保護的強檔案版本識別（ETag）；ETag 可能缺失或過弱，應用程式無法判斷遠端檔案是否已被其他裝置修改。';
+
+  @override
+  String get webDavErrorIfMatchIgnoredDetail =>
+      '伺服器忽略了僅在版本一致時才寫入（If-Match）的條件，繼續同步可能覆蓋其他裝置的新修改。';
+
+  @override
+  String get webDavErrorIfNoneMatchIgnoredDetail =>
+      '伺服器忽略了僅在檔案不存在時才建立（If-None-Match）的條件，繼續同步可能覆蓋已有檔案。';
+
+  @override
+  String webDavErrorReason(String reason) {
+    return '具體原因：$reason';
+  }
+
+  @override
+  String webDavErrorHttpStatus(int status) {
+    return 'HTTP 狀態碼：$status';
+  }
+
+  @override
+  String webDavErrorRequestMethod(String method) {
+    return '請求方法：$method';
+  }
+
+  @override
+  String webDavErrorResourcePath(String path) {
+    return '資源路徑：$path';
+  }
 
   @override
   String webDavErrorPhase(String phase) {
@@ -11397,7 +11481,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '正文修改會更新下方位置的 TXT。升級前的上傳副本會保留，但不再跟隨正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '從連結或 JSON 檔案讀取，預覽後再匯入。';
+  String get bookSourcesImportIntro => '自動識別 ORSP 和 Legado 書源，預覽後再匯入。';
 
   @override
   String get bookSourcesImportInputStep => '選擇書源';

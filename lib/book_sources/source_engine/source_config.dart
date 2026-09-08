@@ -351,12 +351,19 @@ SourceImportResult parseReadingSourcePayload(
     } else if (decoded.containsKey('bookSourceUrl')) {
       candidates.add(decoded);
     } else {
+      var recognized = false;
       for (final key in const ['bookSourceList', 'sources', 'data']) {
         final value = decoded[key];
         if (value is List) {
+          recognized = true;
           candidates.addAll(value);
           break;
         }
+      }
+      // A service landing page can itself be JSON. It is not an empty
+      // Legado collection; let URL import try ORSP discovery instead.
+      if (!recognized) {
+        throw const FormatException('No recognized book source format.');
       }
     }
   } else {

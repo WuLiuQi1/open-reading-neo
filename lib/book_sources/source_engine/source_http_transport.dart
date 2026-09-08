@@ -231,11 +231,9 @@ class SourceHttpTransport
       for (var redirects = 0; redirects <= maxRedirects; redirects++) {
         cancellation?.throwIfCancelled();
         final resolvedAddresses = await _networkPolicy.resolve(current);
-        // Virtual-DNS clients route the reserved 198.18.0.0/15 range through
-        // a local tunnel. Dart's custom connection factory bypasses part of
-        // that system path and can turn valid responses into HTTP 400. Keep
-        // pinned sockets for ordinary public DNS, but use the system client
-        // for this explicitly allowed synthetic range after validation.
+        // Virtual-DNS clients reserve 198.18.0.0/15 for addresses owned by the
+        // platform tunnel. Let the system client keep ownership of that route
+        // after the target has passed the explicit synthetic-DNS policy.
         final requestClient =
             systemFallbacks.contains(current) ||
                 resolvedAddresses.any(
@@ -381,14 +379,6 @@ class SourceHttpTransport
             );
           }
           final retries = connectionRetries[current] ?? 0;
-          if (error.response?.statusCode == HttpStatus.badRequest &&
-              identical(requestClient, _dio) &&
-              method != SourceRequestMethod.post &&
-              systemFallbacks.add(current)) {
-            if (redirectState != null) redirectStates.remove(redirectState);
-            redirects--;
-            continue;
-          }
           // A validated pinned address can still be unreachable on a mobile
           // route while Android's system resolver/client can reach another
           // CDN address. Fall back once for idempotent requests when the

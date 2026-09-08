@@ -333,7 +333,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bookSourcesDetectedOrsp => '検出: ORSP ソース';
 
   @override
-  String get bookSourcesDetectedAdditional => '検出: その他のプロトコル';
+  String get bookSourcesDetectedAdditional => '検出: Legado';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP ソース';
@@ -574,7 +574,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bookSourcesUrlLabel => 'ソースのアドレス';
 
   @override
-  String get bookSourcesUrlHint => 'https://example.com またはディスカバリードキュメントの URL';
+  String get bookSourcesUrlHint => 'https://example.com またはソース JSON の URL';
 
   @override
   String get bookSourcesNoOfficialSourcesNotice =>
@@ -4875,6 +4875,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get webDavScopeBookSources => 'ブックソース';
 
   @override
+  String get webDavScopeBookSourcesHint =>
+      '公開 ORSP ソースとお気に入りに加え、すべてのグループ名、空のグループ、並び順を同期します。ソースの認証情報と非公開設定はこの端末に保持されます。';
+
+  @override
   String get webDavScopeBooks => 'ライブラリとオンライン書籍';
 
   @override
@@ -4898,7 +4902,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get webDavScopeReaderSettingsHint =>
-      '文字組み、テーマ、ページめくり、タップ領域、画像リーダー設定を同期します。';
+      '文字組み、テーマ、ページめくり、自動ページめくり設定、タップ領域、画像リーダー設定を同期します。';
 
   @override
   String get webDavScopeReplaceRules => '置換ルール';
@@ -4978,7 +4982,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get webDavErrorTimeout => 'サーバーが時間内に応答しませんでした。';
 
   @override
-  String get webDavErrorUnsupported => 'この WebDAV サーバーは安全な同期に必要な機能をサポートしていません。';
+  String get webDavErrorUnsupported => 'サーバーの応答は同期プロトコルと互換性がありません。';
+
+  @override
+  String get webDavErrorServer => 'WebDAV サーバーはリクエストを完了できませんでした。';
 
   @override
   String get webDavErrorNetwork => 'ネットワークを利用できません。変更はこの端末に保存されています。';
@@ -4999,6 +5006,41 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get webDavErrorUnknown => 'WebDAV の処理を完了できませんでした。';
+
+  @override
+  String get webDavErrorDetails => 'サーバー応答の詳細';
+
+  @override
+  String get webDavErrorMissingEtagDetail =>
+      'サーバーが同時更新の保護に使える強いファイルバージョン識別子（ETag）を返しませんでした。ETag がないか弱すぎるため、別の端末による変更を判定できません。';
+
+  @override
+  String get webDavErrorIfMatchIgnoredDetail =>
+      'サーバーがファイルのバージョン一致時だけ書き込む条件（If-Match）を無視しました。続行すると別の端末の新しい変更を上書きする可能性があります。';
+
+  @override
+  String get webDavErrorIfNoneMatchIgnoredDetail =>
+      'サーバーがファイルが存在しない場合だけ作成する条件（If-None-Match）を無視しました。続行すると既存のファイルを上書きする可能性があります。';
+
+  @override
+  String webDavErrorReason(String reason) {
+    return '理由: $reason';
+  }
+
+  @override
+  String webDavErrorHttpStatus(int status) {
+    return 'HTTP ステータス: $status';
+  }
+
+  @override
+  String webDavErrorRequestMethod(String method) {
+    return 'リクエストメソッド: $method';
+  }
+
+  @override
+  String webDavErrorResourcePath(String path) {
+    return 'リソースパス: $path';
+  }
 
   @override
   String webDavErrorPhase(String phase) {
@@ -5755,7 +5797,8 @@ class AppLocalizationsJa extends AppLocalizations {
       '本文の編集は以下の場所のTXTに反映されます。アップグレード前のコピーは保持されますが、その後の編集は反映されません。';
 
   @override
-  String get bookSourcesImportIntro => 'リンクか JSON ファイルを読み込み、確認してから追加します。';
+  String get bookSourcesImportIntro =>
+      'ORSP と Legado のソースを自動判別します。確認してからインポートしてください。';
 
   @override
   String get bookSourcesImportInputStep => '書源を選択';

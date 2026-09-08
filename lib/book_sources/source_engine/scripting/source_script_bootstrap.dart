@@ -56,6 +56,8 @@ class SourceScriptBootstrap {
       'baseUrl':
           context.baseUrl?.toString() ?? context.source.baseUri.toString(),
       'variables': context.variables,
+      'hasBook': context.book.isNotEmpty,
+      'hasChapter': context.chapter.isNotEmpty,
       'book': context.book,
       'chapter': context.chapter,
     };
@@ -80,6 +82,7 @@ class SourceScriptBootstrap {
   const __payload = $encoded;
   const __state = Object.assign({}, __payload.state || {});
   const __sourceValues = Object.assign({}, __payload.sourceValues || {});
+  const __ruleValues = Object.assign({}, __payload.variables || {});
   let __loginInfo = Object.assign({}, __payload.loginInfo || {});
   let __loginHeaders = Object.assign({}, __payload.loginHeaders || {});
   let __sourceVariable = __payload.sourceVariable || '';
@@ -255,10 +258,25 @@ class SourceScriptBootstrap {
     const values = __host('getElements', [String(rule), content === undefined ? result : content]) || [];
     return __javaList(Array.from(values).map(__wrapElement), onRemove);
   };
-  const __entity = (prefix, seed) => {
+  const __entity = (prefix, seed, active) => {
     const entity = Object.assign({}, seed || {});
+    let variableMap = {};
+    if (active && entity.variable != null) {
+      if (typeof entity.variable === 'string') {
+        try { variableMap = Object.assign({}, JSON.parse(entity.variable) || {}); }
+        catch (_) { variableMap = {}; }
+      } else {
+        variableMap = Object.assign({}, entity.variable || {});
+      }
+    }
     entity.putVariable = (name, value) => {
-      __state[prefix + String(name)] = value;
+      const key = String(name);
+      if (active) {
+        if (value == null || String(value) === '') delete variableMap[key];
+        else variableMap[key] = String(value);
+      } else {
+        __state[prefix + key] = value;
+      }
       return value;
     };
     // The compatible RuleDataInterface.getVariable() contract returns a
@@ -269,28 +287,52 @@ class SourceScriptBootstrap {
     // guard only against the literal "null" a real null would stringify to
     // — never against "undefined", since the compatible contract never
     // produces that. Preserve that behavior so those guards keep working.
-    entity.getVariable = (name) => __state[prefix + String(name)] ?? '';
+    entity.getVariable = (name) => {
+      const value = active
+        ? variableMap[String(name)]
+        : __state[prefix + String(name)];
+      return value == null ? '' : String(value);
+    };
     entity.setReverseToc = (value) => {
-      __state[prefix + 'reverseToc'] = value;
+      if (active) entity.reverseToc = value;
+      else __state[prefix + 'reverseToc'] = value;
       return value;
     };
     entity.putCustomVariable = (value) => {
-      __state[prefix + 'customVariable'] = value;
+      if (active) entity.customVariable = value;
+      else __state[prefix + 'customVariable'] = value;
       return value;
     };
-    entity.getCustomVariable = () => __state[prefix + 'customVariable'] ?? '';
+    entity.getCustomVariable = () => active
+      ? entity.customVariable ?? ''
+      : __state[prefix + 'customVariable'] ?? '';
     entity.setUseReplaceRule = (value) => {
-      __state[prefix + 'useReplaceRule'] = value;
+      if (active) entity.useReplaceRule = value;
+      else __state[prefix + 'useReplaceRule'] = value;
       return value;
     };
     Object.defineProperty(entity, 'variable', {
-      get: () => __state[prefix + 'variable'],
-      set: (value) => { __state[prefix + 'variable'] = value; }
+      get: () => active
+        ? JSON.stringify(variableMap)
+        : __state[prefix + 'variable'],
+      set: (value) => {
+        if (!active) {
+          __state[prefix + 'variable'] = value;
+          return;
+        }
+        if (typeof value === 'string') {
+          try { variableMap = Object.assign({}, JSON.parse(value) || {}); }
+          catch (_) { variableMap = {}; }
+        } else {
+          variableMap = Object.assign({}, value || {});
+        }
+      },
+      enumerable: active
     });
     return entity;
   };
-  globalThis.book = __entity('book:', __payload.book || {});
-  globalThis.chapter = __entity('chapter:', __payload.chapter || {});
+  globalThis.book = __entity('book:', __payload.book || {}, __payload.hasBook);
+  globalThis.chapter = __entity('chapter:', __payload.chapter || {}, __payload.hasChapter);
   globalThis.title = globalThis.chapter.title || '';
   globalThis.src = typeof result === 'string' ? result : '';
   globalThis.cookie = {
@@ -336,19 +378,42 @@ class SourceScriptBootstrap {
     };
   };
   globalThis.java = {
-    log: () => null,
+    log: (value) => value,
     toast: () => null,
     longToast: () => null,
-    put: (name, value) => { __state[String(name)] = value; return value; },
+    put: (name, value) => {
+      const key = String(name);
+      if (__payload.hasChapter) globalThis.chapter.putVariable(key, value);
+      else if (__payload.hasBook) globalThis.book.putVariable(key, value);
+      else {
+        __ruleValues[key] = value == null ? '' : String(value);
+        __state['rule:' + key] = value;
+      }
+      return value;
+    },
     get: function(name, headers) {
       if (arguments.length > 1) {
         return __responseObject(
           __sourceNetwork('GET', name, null, headers), name
         );
       }
-      // AnalyzeRule.get(key) is a non-null String, falling back through
-      // chapter/book/ruleData/source variables to "" (see AnalyzeRule.kt).
-      return __state[String(name)] ?? '';
+      const key = String(name);
+      if (key === 'bookName' && __payload.hasBook) {
+        return globalThis.book.name == null ? '' : String(globalThis.book.name);
+      }
+      if (key === 'title' && __payload.hasChapter) {
+        return globalThis.chapter.title == null ? '' : String(globalThis.chapter.title);
+      }
+      const chapterValue = globalThis.chapter.getVariable(key);
+      if (chapterValue !== '') return chapterValue;
+      const bookValue = globalThis.book.getVariable(key);
+      if (bookValue !== '') return bookValue;
+      const ruleValue = Object.prototype.hasOwnProperty.call(__ruleValues, key)
+        ? __ruleValues[key]
+        : __state['rule:' + key];
+      if (ruleValue != null && String(ruleValue) !== '') return String(ruleValue);
+      const sourceValue = __sourceValues[key];
+      return sourceValue == null ? '' : String(sourceValue);
     },
     getString: (rule, content) => __host('getString', [String(rule), content === undefined ? globalThis.result : content, globalThis.baseUrl]),
     getStringList: (rule, content) => __javaList(__host('getStringList', [String(rule), content === undefined ? globalThis.result : content, globalThis.baseUrl])),
@@ -369,6 +434,12 @@ class SourceScriptBootstrap {
       'aesBase64DecodeToString',
       [String(data), String(key), String(transformation), iv == null ? '' : String(iv)]
     ),
+    aesBase64DecodeToByteArray: (data, keyValue, transformation, ivValue) =>
+      __symmetricCrypto(String(transformation), keyValue, ivValue)
+        .decrypt(data),
+    aesEncodeToBase64String: (data, keyValue, transformation, ivValue) =>
+      __symmetricCrypto(String(transformation), keyValue, ivValue)
+        .encryptBase64(String(data)),
     HMacBase64: (data, algorithm, key) => __host(
       'hmacBase64', [String(data), String(algorithm), String(key)]
     ),
@@ -422,7 +493,10 @@ class SourceScriptBootstrap {
     },
     encodeURI: __urlEncoder.encode,
     decodeURI: __urlDecoder.decode,
-    ajax: (url) => (__sourceNetwork('GET', url, null, null).body || ''),
+    ajax: (url) => {
+      const target = Array.isArray(url) ? url[0] : url;
+      return __sourceNetwork('GET', target == null ? '' : target, null, null).body || '';
+    },
     ajaxAll: (urls) => Array.from(urls || []).map(
       (url) => __responseObject(__sourceNetwork('GET', url, null, null), url)
     ),

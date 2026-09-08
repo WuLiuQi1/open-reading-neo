@@ -8,6 +8,7 @@ import 'source_response.dart';
 import 'source_runtime_catalog.dart';
 import 'source_request_template.dart';
 import 'rules/source_rule_engine.dart' show SourceRuleDocument;
+import 'rules/source_rule_parser.dart' show sourceRuleHasDynamicExpression;
 import 'source_runtime_login.dart';
 import 'source_runtime_requests.dart';
 import 'source_runtime_rules.dart';
@@ -59,24 +60,37 @@ class SourceRuntimeReading {
     );
     final tocUrl = await _tocUrl(source, bookId, ruleState, bookContext);
     final rule = source.rule('ruleToc');
-    // Keyed by chapter URL; re-inserting a duplicate moves it to the end of
-    // iteration order, so the *last* occurrence of a URL wins and takes its
-    // natural position. Some sources render a small "latest chapters" widget
-    // above the full catalog on the same TOC page — both match the same
-    // `chapterList` rule, so without this the widget's entries (e.g. the
-    // final chapters, newest-first) would win and land at the front.
-    final chapterTitles = <String, String>{};
-    final chapterFallbackUrls = <String, String>{};
+    var chapterListRule = _rules.requiredRule(rule, 'chapterList');
+    final reverseChapters = chapterListRule.startsWith('-');
+    if (reverseChapters || chapterListRule.startsWith('+')) {
+      chapterListRule = chapterListRule.substring(1).trimLeft();
+    }
+    if (chapterListRule.isEmpty) {
+      throw const BookSourceProtocolException(
+        'Compatible source is missing the chapterList rule.',
+      );
+    }
+    final candidates = <_ChapterCandidate>[];
+    final pendingUrls = <String>[tocUrl];
     final seenPages = <String>{};
-    var nextUrl = tocUrl;
-    for (var hop = 0; hop < _maxPageHops && nextUrl.isNotEmpty; hop++) {
-      if (!seenPages.add(nextUrl)) break;
+    var fixedPageList = false;
+    var fetchedPages = 0;
+    while (fetchedPages < _maxPageHops && pendingUrls.isNotEmpty) {
+      final pageUrl = pendingUrls.removeAt(0);
+      final requestedTarget = _networkTarget(pageUrl);
+      if (requestedTarget.isEmpty || !seenPages.add(requestedTarget)) continue;
       final response = await _requests.requestReusingBookInfo(
         source,
         bookId,
-        decodeSourceDataTarget(nextUrl) ?? nextUrl,
+        decodeSourceDataTarget(pageUrl) ?? pageUrl,
         variables: requestVariables(ruleState, {'bookUrl': bookId}),
+        book: bookContext,
       );
+      fetchedPages++;
+      final redirectTarget = response.finalUri.toString();
+      if (redirectTarget != requestedTarget && !seenPages.add(redirectTarget)) {
+        continue;
+      }
       final document = _requests.document(
         source,
         response,
@@ -94,7 +108,7 @@ class SourceRuntimeReading {
       var contexts = await _rules.list(
         contextualDocument,
         null,
-        _rules.requiredRule(rule, 'chapterList'),
+        chapterListRule,
       );
       if (contexts.isEmpty && source.isImageSource) {
         contexts = _fallbackChapterAnchors(contextualDocument.value);
@@ -102,7 +116,7 @@ class SourceRuntimeReading {
       for (final context in contexts) {
         chapterContext
           ..clear()
-          ..addAll({'index': chapterTitles.length, 'url': nextUrl});
+          ..addAll({'index': candidates.length, 'url': pageUrl});
         var title = await _rules.value(
           contextualDocument,
           context,
@@ -115,72 +129,108 @@ class SourceRuntimeReading {
           title = context.text.trim();
         }
         chapterContext['title'] = title;
-        String originalUrl = '';
-        if (context is dom.Element) {
-          final anchor = context.localName == 'a'
-              ? context
-              : context.querySelector('a[href]');
-          final href = anchor?.attributes['href']?.trim() ?? '';
-          if (href.isNotEmpty) {
-            originalUrl = resolveSourceRequestUrl(
-              contextualDocument.baseUri,
-              href,
-            );
-          }
-        }
-        var url = await _optionalResolvedUrl(
+        final originalUrl = _chapterAnchorUrl(contextualDocument, context);
+        final resolvedChapterUrl = await _resolvedChapterUrl(
           contextualDocument,
           context,
           rule,
-          'chapterUrl',
         );
-        if (url.isEmpty) url = originalUrl;
-        if (title.isEmpty || url.isEmpty) continue;
-        if (originalUrl.isNotEmpty && originalUrl != url) {
-          chapterFallbackUrls[url] = originalUrl;
-        }
-        if (!chapterTitles.containsKey(url) &&
-            chapterTitles.length >= _maxChapters) {
+        final isVolume = _legadoTrue(
+          await _rules.value(contextualDocument, context, rule, 'isVolume'),
+        );
+        if (title.isEmpty || isVolume) continue;
+        if (resolvedChapterUrl.invalid && originalUrl.isEmpty) continue;
+        final url = resolvedChapterUrl.invalid
+            ? originalUrl
+            : resolvedChapterUrl.url.isEmpty
+            ? response.finalUri.toString()
+            : resolvedChapterUrl.url;
+        if (url.isEmpty) continue;
+        if (candidates.length >= _maxChapters) {
           throw const BookSourceProtocolException(
             'Compatible source chapter catalog exceeds the supported limit.',
           );
         }
-        chapterTitles
-          ..remove(url)
-          ..[url] = title;
+        candidates.add(
+          _ChapterCandidate(
+            title: title,
+            url: url,
+            fallbackUrl: originalUrl.isNotEmpty && originalUrl != url
+                ? originalUrl
+                : '',
+            context: Map.unmodifiable(chapterContext),
+          ),
+        );
       }
-      nextUrl = await _optionalResolvedUrl(
-        contextualDocument,
-        null,
-        rule,
-        'nextTocUrl',
-      );
+      if (!fixedPageList) {
+        final nextUrls = await _optionalResolvedUrls(
+          contextualDocument,
+          null,
+          rule,
+          'nextTocUrl',
+        );
+        final unseenNextUrls = <String>[];
+        final pageCandidates = <String>{};
+        for (final candidate in nextUrls) {
+          final target = _networkTarget(candidate);
+          if (target.isEmpty ||
+              seenPages.contains(target) ||
+              !pageCandidates.add(target)) {
+            continue;
+          }
+          unseenNextUrls.add(candidate);
+        }
+        if (fetchedPages == 1 && nextUrls.length > 1) {
+          fixedPageList = true;
+        }
+        final additions = fixedPageList
+            ? unseenNextUrls
+            : unseenNextUrls.take(1);
+        for (final candidate in additions) {
+          if (!pendingUrls.any(
+            (queued) => _networkTarget(queued) == _networkTarget(candidate),
+          )) {
+            pendingUrls.add(candidate);
+          }
+        }
+      }
     }
-    if (chapterTitles.isEmpty && source.isImageSource) {
-      chapterTitles[bookId] = '全本';
+    var chapterEntries = _deduplicateChapters(
+      candidates,
+      reverse: reverseChapters,
+    );
+    if (chapterEntries.isEmpty && source.isImageSource) {
+      chapterEntries = [
+        _ChapterCandidate(
+          title: '全本',
+          url: bookId,
+          fallbackUrl: '',
+          context: const {},
+        ),
+      ];
     }
-    if (chapterTitles.isEmpty) {
+    if (chapterEntries.isEmpty) {
       throw const BookSourceProtocolException(
         'Compatible source did not return any chapters.',
       );
     }
     final chapters = <BookSourceChapter>[];
     var order = 0;
-    final chapterEntries = chapterTitles.entries.toList(growable: false);
     for (final entry in chapterEntries) {
       final nextChapterUrl = order + 1 < chapterEntries.length
-          ? chapterEntries[order + 1].key
+          ? chapterEntries[order + 1].url
           : '';
       chapters.add(
-        BookSourceChapter(id: entry.key, title: entry.value, order: order),
+        BookSourceChapter(id: entry.url, title: entry.title, order: order),
       );
-      _state.rememberChapterContext(source, bookId, entry.key, {
+      _state.rememberChapterContext(source, bookId, entry.url, {
+        ...entry.context,
         'index': order,
-        'title': entry.value,
-        'url': entry.key,
-        'chapterUrl': entry.key,
+        'title': entry.title,
+        'url': entry.url,
+        'chapterUrl': entry.url,
         'nextChapterUrl': nextChapterUrl,
-        'fallbackUrl': ?chapterFallbackUrls[entry.key],
+        if (entry.fallbackUrl.isNotEmpty) 'fallbackUrl': entry.fallbackUrl,
       });
       order++;
     }
@@ -219,6 +269,13 @@ class SourceRuntimeReading {
     final seenPages = <String>{};
     var replaceRemovedImages = false;
     final replaceRule = _rules.optionalRule(rule, 'replaceRegex');
+    final contentWebJs = _rules.optionalRule(rule, 'webJs');
+    final evaluateReplaceRule = sourceRuleHasDynamicExpression(replaceRule);
+    var requiresSequentialPageState =
+        sourceRuleHasDynamicExpression(_rules.optionalRule(rule, 'content')) ||
+        sourceRuleHasDynamicExpression(
+          _rules.optionalRule(rule, 'nextContentUrl'),
+        );
     final rememberedChapter = _state.chapterContext(source, bookId, chapterId);
     var chapterTitle =
         sourceVariables['chapterTitle'] ??
@@ -231,20 +288,37 @@ class SourceRuntimeReading {
     final prefetched = <String, Future<_PrefetchedPage>>{};
     var fixedUrlsToSchedule = <String>[];
     var fixedScheduleIndex = 0;
-    Future<SourceResponse> requestPage(String pageUrl) => _requests.request(
-      source,
-      decodeSourceDataTarget(pageUrl) ?? pageUrl,
-      variables: requestVariables(ruleState, {
-        'bookUrl': bookId,
-        'chapterUrl': chapterId,
-      }),
-    );
+    Future<_RequestedPage> requestPage(
+      String pageUrl, {
+      bool isolateChapter = false,
+    }) async {
+      final requestChapter = isolateChapter
+          ? <String, Object?>{...rememberedChapter}
+          : rememberedChapter;
+      requestChapter
+        ..['url'] = pageUrl
+        ..['chapterUrl'] = chapterId;
+      final response = await _requests.request(
+        source,
+        decodeSourceDataTarget(pageUrl) ?? pageUrl,
+        variables: requestVariables(ruleState, {
+          'bookUrl': bookId,
+          'chapterUrl': chapterId,
+        }),
+        book: bookContext,
+        chapter: requestChapter,
+        defaultWebJs: contentWebJs.isEmpty ? null : contentWebJs,
+      );
+      return _RequestedPage(response: response, chapter: requestChapter);
+    }
+
     void scheduleFixedPages() {
+      if (requiresSequentialPageState) return;
       while (prefetched.length < 4 &&
           fixedScheduleIndex < fixedUrlsToSchedule.length) {
         final url = fixedUrlsToSchedule[fixedScheduleIndex++];
-        prefetched[url] = requestPage(url).then(
-          (response) => _PrefetchedPage(response: response),
+        prefetched[url] = requestPage(url, isolateChapter: true).then(
+          (page) => _PrefetchedPage(page: page),
           onError: (Object error, StackTrace stackTrace) =>
               _PrefetchedPage(error: error, stackTrace: stackTrace),
         );
@@ -258,10 +332,11 @@ class SourceRuntimeReading {
       final requestedUrl = _networkTarget(pageUrl);
       if (!seenPages.add(requestedUrl)) continue;
       final prefetchedResult = await prefetched.remove(pageUrl);
-      final response = prefetchedResult == null
+      final requestedPage = prefetchedResult == null
           ? await requestPage(pageUrl)
           : prefetchedResult.unwrap();
       scheduleFixedPages();
+      final response = requestedPage.response;
       _ensureChapterRequestSucceeded(response);
       if (!seenPages.add(response.finalUri.toString()) &&
           response.finalUri.toString() != requestedUrl) {
@@ -274,16 +349,14 @@ class SourceRuntimeReading {
         book: bookContext,
         ruleState: ruleState,
       );
-      final chapterContext = <String, Object?>{
-        ...rememberedChapter,
-        'url': pageUrl,
-        'chapterUrl': chapterId,
-        'index':
+      final chapterContext = requestedPage.chapter
+        ..['url'] = pageUrl
+        ..['chapterUrl'] = chapterId
+        ..['index'] =
             int.tryParse(sourceVariables['chapterIndex'] ?? '') ??
             rememberedChapter['index'] ??
-            hop,
-        'title': chapterTitle,
-      };
+            hop
+        ..['title'] = chapterTitle;
       final contextualDocument = document.withScriptEntities(
         book: bookContext,
         chapter: chapterContext,
@@ -300,19 +373,17 @@ class SourceRuntimeReading {
         joinSeparator: '\n',
         regexDotAll: false,
       );
-      final content = source.isImageSource
+      final content = source.isImageSource && !evaluateReplaceRule
           ? _rules.replace(rawContent, replaceRule)
           : rawContent;
       var pageHasSelectedImages = false;
       if (content.trim().isNotEmpty) {
         final trimmed = content.trim();
         parts.add(trimmed);
-        if (!source.isImageSource) {
-          textImagePages.add((
-            content: rawContent.trim(),
-            baseUri: contextualDocument.baseUri,
-          ));
-        }
+        textImagePages.add((
+          content: rawContent.trim(),
+          baseUri: contextualDocument.baseUri,
+        ));
         final pageImages = _imageExtractor.extract([
           (content: trimmed, baseUri: contextualDocument.baseUri),
         ], allowPlainValues: source.isImageSource);
@@ -358,6 +429,9 @@ class SourceRuntimeReading {
           fixedUrlsToSchedule = pendingUrls
               .take(_maxPageHops - 1)
               .toList(growable: false);
+          requiresSequentialPageState =
+              requiresSequentialPageState ||
+              fixedUrlsToSchedule.any(sourceRuleHasDynamicExpression);
           scheduleFixedPages();
         }
       }
@@ -367,6 +441,11 @@ class SourceRuntimeReading {
         !replaceRemovedImages &&
         fallbackUrl.isNotEmpty &&
         !seenPages.contains(fallbackUrl)) {
+      final fallbackChapter = <String, Object?>{
+        ...rememberedChapter,
+        'url': fallbackUrl,
+        'chapterUrl': fallbackUrl,
+      };
       final response = await _requests.request(
         source,
         decodeSourceDataTarget(fallbackUrl) ?? fallbackUrl,
@@ -374,7 +453,11 @@ class SourceRuntimeReading {
           'bookUrl': bookId,
           'chapterUrl': fallbackUrl,
         }),
+        book: bookContext,
+        chapter: fallbackChapter,
+        defaultWebJs: contentWebJs.isEmpty ? null : contentWebJs,
       );
+      rememberedChapter.addAll(fallbackChapter);
       _ensureChapterRequestSucceeded(response);
       final document = _requests.document(
         source,
@@ -393,19 +476,17 @@ class SourceRuntimeReading {
         joinSeparator: '\n',
         regexDotAll: false,
       );
-      final fallbackContent = source.isImageSource
+      final fallbackContent = source.isImageSource && !evaluateReplaceRule
           ? _rules.replace(rawFallbackContent, replaceRule)
           : rawFallbackContent;
       var fallbackHasSelectedImages = false;
       if (fallbackContent.trim().isNotEmpty) {
         final trimmed = fallbackContent.trim();
         parts.add(trimmed);
-        if (!source.isImageSource) {
-          textImagePages.add((
-            content: rawFallbackContent.trim(),
-            baseUri: document.baseUri,
-          ));
-        }
+        textImagePages.add((
+          content: rawFallbackContent.trim(),
+          baseUri: document.baseUri,
+        ));
         final fallbackPageImages = _imageExtractor.extract([
           (content: trimmed, baseUri: document.baseUri),
         ], allowPlainValues: source.isImageSource);
@@ -445,6 +526,11 @@ class SourceRuntimeReading {
         var subContent = rawSubContent.trim();
         var subContentBaseUri = firstDocument.baseUri;
         if (subContent.toLowerCase().startsWith('http')) {
+          final subContentChapter = <String, Object?>{
+            ...rememberedChapter,
+            'url': subContent,
+            'chapterUrl': chapterId,
+          };
           final response = await _requests.request(
             source,
             subContent,
@@ -452,7 +538,11 @@ class SourceRuntimeReading {
               'bookUrl': bookId,
               'chapterUrl': chapterId,
             }),
+            book: bookContext,
+            chapter: subContentChapter,
+            defaultWebJs: contentWebJs.isEmpty ? null : contentWebJs,
           );
+          rememberedChapter.addAll(subContentChapter);
           _ensureChapterRequestSucceeded(response);
           subContent = response.body.trim();
           subContentBaseUri = response.finalUri;
@@ -493,7 +583,33 @@ class SourceRuntimeReading {
       }
     }
     joinedContent = parts.join('\n\n');
-    if (!source.isImageSource) {
+    if (evaluateReplaceRule && firstDocument != null) {
+      final rawJoinedContent = joinedContent;
+      joinedContent = await _rules.value(
+        firstDocument,
+        rawJoinedContent,
+        {'replaceRegex': replaceRule},
+        'replaceRegex',
+        regexDotAll: false,
+      );
+      final rawImages = _imageExtractor.extract(
+        textImagePages,
+        allowPlainValues: source.isImageSource,
+      );
+      final replacementBase =
+          textImagePages.firstOrNull?.baseUri ?? firstDocument.baseUri;
+      final replacementImages = evaluatedReplacementImages(
+        textImagePages,
+        joinedContent,
+        fallbackBaseUri: replacementBase,
+        allowPlainValues: source.isImageSource,
+      );
+      selectedImages = SourceContentImageAccumulator();
+      selectedImages.addAll(replacementImages);
+      if (rawImages.isNotEmpty && selectedImages.isEmpty) {
+        replaceRemovedImages = true;
+      }
+    } else if (!source.isImageSource) {
       final replacement = replaceTextPages(textImagePages, replaceRule);
       joinedContent = replacement.content;
       selectedImages = SourceContentImageAccumulator();
@@ -582,6 +698,7 @@ class SourceRuntimeReading {
       bookId,
       decodeSourceDataTarget(bookId) ?? bookId,
       variables: requestVariables(ruleState, {'bookUrl': bookId}),
+      book: bookContext,
     );
     final document = _requests.document(
       source,
@@ -623,20 +740,63 @@ class SourceRuntimeReading {
     );
   }
 
-  Future<String> _optionalResolvedUrl(
+  Future<({String url, bool invalid})> _resolvedChapterUrl(
     SourceRuleDocument document,
     Object? context,
     Map<String, dynamic> rules,
-    String key,
   ) async {
     try {
-      return await _rules.url(document, context, rules, key);
+      return (
+        url: await _rules.url(document, context, rules, 'chapterUrl'),
+        invalid: false,
+      );
+    } on FormatException {
+      return (url: '', invalid: true);
+    } on BookSourceProtocolException catch (error) {
+      if (_isNonNetworkUrlError(error)) return (url: '', invalid: true);
+      rethrow;
+    }
+  }
+
+  String _chapterAnchorUrl(SourceRuleDocument document, Object? context) {
+    if (context is! dom.Element) return '';
+    final anchor = context.localName == 'a'
+        ? context
+        : context.querySelector('a[href]');
+    final href = anchor?.attributes['href']?.trim() ?? '';
+    if (href.isEmpty) return '';
+    try {
+      return resolveSourceRequestUrl(document.baseUri, href);
     } on FormatException {
       return '';
     } on BookSourceProtocolException catch (error) {
       if (_isNonNetworkUrlError(error)) return '';
       rethrow;
     }
+  }
+
+  List<_ChapterCandidate> _deduplicateChapters(
+    List<_ChapterCandidate> chapters, {
+    required bool reverse,
+  }) {
+    final byUrl = <String, _ChapterCandidate>{};
+    if (reverse) {
+      for (final chapter in chapters) {
+        byUrl.putIfAbsent(chapter.url, () => chapter);
+      }
+      return byUrl.values
+          .toList(growable: false)
+          .reversed
+          .toList(growable: false);
+    }
+    // Reference semantics keep the last duplicate in normal catalog order.
+    // This avoids a newest-chapters widget shadowing the full list below it.
+    for (final chapter in chapters) {
+      byUrl
+        ..remove(chapter.url)
+        ..[chapter.url] = chapter;
+    }
+    return byUrl.values.toList(growable: false);
   }
 
   Future<List<String>> _optionalResolvedUrls(
@@ -675,16 +835,37 @@ class SourceRuntimeReading {
 }
 
 class _PrefetchedPage {
-  const _PrefetchedPage({this.response, this.error, this.stackTrace});
+  const _PrefetchedPage({this.page, this.error, this.stackTrace});
 
-  final SourceResponse? response;
+  final _RequestedPage? page;
   final Object? error;
   final StackTrace? stackTrace;
 
-  SourceResponse unwrap() {
+  _RequestedPage unwrap() {
     if (error != null) Error.throwWithStackTrace(error!, stackTrace!);
-    return response!;
+    return page!;
   }
+}
+
+class _RequestedPage {
+  const _RequestedPage({required this.response, required this.chapter});
+
+  final SourceResponse response;
+  final Map<String, Object?> chapter;
+}
+
+class _ChapterCandidate {
+  const _ChapterCandidate({
+    required this.title,
+    required this.url,
+    required this.fallbackUrl,
+    required this.context,
+  });
+
+  final String title;
+  final String url;
+  final String fallbackUrl;
+  final Map<String, Object?> context;
 }
 
 bool _isNonNetworkUrlError(BookSourceProtocolException error) {
@@ -692,6 +873,15 @@ bool _isNonNetworkUrlError(BookSourceProtocolException error) {
   return message.contains('non-http url') ||
       message.contains('must use http or https') ||
       message.contains('targets must use http or https');
+}
+
+bool _legadoTrue(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty || normalized == 'null') return false;
+  return !RegExp(
+    r'^(?:false|no|not|0|0\.0)$',
+    caseSensitive: false,
+  ).hasMatch(normalized);
 }
 
 String _networkTarget(String value) {

@@ -66,8 +66,9 @@ class WebDavSyncController extends ChangeNotifier {
   WebDavSyncPhase _lastFailedPhase = WebDavSyncPhase.none;
   DateTime? _lastSuccessfulSync;
   int _pendingChanges = 0;
-  WebDavSyncErrorCode? _lastError;
-  String? _lastErrorMessage;
+  WebDavSyncFailure? _metadataFailure;
+  WebDavSyncFailure? _fileFailure;
+  WebDavSyncFailure? _visibleFailure;
   WebDavSyncRunResult? _lastResult;
   List<RemoteBookDescriptor> _remoteBooks = const [];
   WebDavNewBookUploadPolicy _newBookUploadPolicy =
@@ -86,6 +87,8 @@ class WebDavSyncController extends ChangeNotifier {
 
   Future<void> refreshTextStates() async {
     _textStates = await _mutableTxt.listStates();
+    _restorePersistedFileFailure();
+    _restoreSettledStatus();
     notifyListeners();
   }
 
@@ -128,14 +131,18 @@ class WebDavSyncController extends ChangeNotifier {
 
   Future<void> synchronizeTextFiles({bool automatic = false}) {
     if (!isConfigured || !scope.bookFiles) return Future<void>.value();
-    return _fileRun ??= _runTextFiles(automatic: automatic).whenComplete(() {
+    final running = _fileRun;
+    if (running != null) return running;
+    final future = _runTextFiles(automatic: automatic).whenComplete(() {
       _fileRun = null;
       notifyListeners();
     });
+    _fileRun = future;
+    notifyListeners();
+    return future;
   }
 
   Future<void> _runTextFiles({required bool automatic}) async {
-    notifyListeners();
     final connection = '$serverUrl|$username|$rootPath';
     try {
       // Follow a storage upgrade on the file lane. Waiting for another file
@@ -171,14 +178,30 @@ class WebDavSyncController extends ChangeNotifier {
             (!automatic || autoSync),
       );
       _textStates = await _mutableTxt.listStates();
-      if (result.failed > 0 ||
-          result.conflicts > 0 ||
-          _textStates.any(
-            (s) =>
-                s.status == MutableTxtSyncStatus.failed ||
-                s.status == MutableTxtSyncStatus.conflict,
-          )) {
-        _status = WebDavSyncStatus.partialFailure;
+      final hasFailedState = _textStates.any(
+        (state) => state.status == MutableTxtSyncStatus.failed,
+      );
+      final hasConflictState = _textStates.any(
+        (state) => state.status == MutableTxtSyncStatus.conflict,
+      );
+      if (result.failed > 0 || hasFailedState) {
+        _setFileFailure(
+          WebDavSyncFailure(
+            WebDavSyncErrorCode.unknown,
+            result.failed == 1
+                ? 'One book file could not be synchronized. Check its file sync status for details.'
+                : 'Some book files could not be synchronized. Check their file sync status for details.',
+          ),
+        );
+      } else if (result.conflicts > 0 || hasConflictState) {
+        _setFileFailure(
+          const WebDavSyncFailure(
+            WebDavSyncErrorCode.conflict,
+            'A book file has conflicting changes that require attention.',
+          ),
+        );
+      } else {
+        _clearFileFailure();
       }
       if (result.downloaded > 0) LibraryEventBus().notifyLibraryChanged();
       if (result.uploaded > 0 || result.downloaded > 0) {
@@ -187,9 +210,23 @@ class WebDavSyncController extends ChangeNotifier {
         await _syncMetadataNow();
       }
       await _refreshRemoteBooks();
-    } catch (_) {
-      _status = WebDavSyncStatus.partialFailure;
+      _restoreSettledStatus();
+    } on WebDavSyncFailure catch (error) {
+      if (!identical(_metadataFailure, error)) {
+        _setFileFailure(error);
+      }
+      _restoreSettledStatus();
       rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('WebDAV book-file sync failed: ${error.runtimeType}');
+      debugPrintStack(stackTrace: stackTrace);
+      const failure = WebDavSyncFailure(
+        WebDavSyncErrorCode.unknown,
+        'Book-file sync could not be completed.',
+      );
+      _setFileFailure(failure);
+      _restoreSettledStatus();
+      throw failure;
     } finally {
       notifyListeners();
     }
@@ -220,8 +257,11 @@ class WebDavSyncController extends ChangeNotifier {
   WebDavSyncPhase get lastFailedPhase => _lastFailedPhase;
   DateTime? get lastSuccessfulSync => _lastSuccessfulSync;
   int get pendingChanges => _pendingChanges;
-  WebDavSyncErrorCode? get lastError => _lastError;
-  String? get lastErrorMessage => _lastErrorMessage;
+  WebDavSyncFailure? get lastFailure => _visibleFailure;
+  bool get lastFailureIsFile =>
+      _fileFailure != null && identical(_visibleFailure, _fileFailure);
+  WebDavSyncErrorCode? get lastError => lastFailure?.code;
+  String? get lastErrorMessage => lastFailure?.message;
   bool get autoSync => _configuration?.autoSync ?? false;
   WebDavSyncScope get scope => _scope;
   String? get serverUrl => _configuration?.serverUrl;
@@ -282,6 +322,8 @@ class WebDavSyncController extends ChangeNotifier {
       (event) => unawaited(_onTextChanged(event)),
     );
     _textStates = await _mutableTxt.listStates();
+    _restorePersistedFileFailure();
+    _restoreSettledStatus(successStatus: WebDavSyncStatus.idle);
     _scheduler.start();
     notifyListeners();
   }
@@ -291,7 +333,7 @@ class WebDavSyncController extends ChangeNotifier {
   ) async {
     _status = WebDavSyncStatus.testing;
     _phase = WebDavSyncPhase.connecting;
-    _clearError();
+    _clearMetadataFailure();
     notifyListeners();
     try {
       final password = await _resolvePassword(draft.password);
@@ -303,26 +345,28 @@ class WebDavSyncController extends ChangeNotifier {
         StoredSyncCredentials(configuration, password),
       ).testConnection();
       if (!result.success) {
-        _lastError = result.errorCode;
-        _lastErrorMessage = result.message;
+        _setMetadataFailure(
+          result.failure ??
+              WebDavSyncFailure(
+                result.errorCode ?? WebDavSyncErrorCode.unknown,
+                result.message ?? 'The WebDAV connection test failed.',
+              ),
+        );
       }
-      _status = isConfigured
-          ? WebDavSyncStatus.idle
-          : WebDavSyncStatus.unconfigured;
+      _restoreSettledStatus(successStatus: WebDavSyncStatus.idle);
       _phase = WebDavSyncPhase.none;
       notifyListeners();
       return result;
     } on WebDavSyncFailure catch (error) {
-      _setFailure(error);
-      _status = isConfigured
-          ? WebDavSyncStatus.idle
-          : WebDavSyncStatus.unconfigured;
+      _setMetadataFailure(error);
+      _restoreSettledStatus(successStatus: WebDavSyncStatus.idle);
       _phase = WebDavSyncPhase.none;
       notifyListeners();
       return ConnectionTestResult(
         success: false,
         errorCode: error.code,
         message: error.message,
+        failure: error,
       );
     }
   }
@@ -355,7 +399,7 @@ class WebDavSyncController extends ChangeNotifier {
     await _configStore.save(configuration, password);
     _configuration = configuration;
     _status = WebDavSyncStatus.idle;
-    _clearError();
+    _clearFailures();
     notifyListeners();
     requestAutomaticSync(immediate: true);
   }
@@ -384,13 +428,13 @@ class WebDavSyncController extends ChangeNotifier {
         WebDavSyncErrorCode.invalidConfiguration,
         'Configure WebDAV before starting sync.',
       );
-      _setFailure(failure);
+      _setMetadataFailure(failure);
       notifyListeners();
       throw failure;
     }
     _status = WebDavSyncStatus.syncing;
     _phase = WebDavSyncPhase.connecting;
-    _clearError();
+    _clearMetadataFailure();
     notifyListeners();
     try {
       final engine = _engine ??= SyncEngine(
@@ -425,15 +469,7 @@ class WebDavSyncController extends ChangeNotifier {
       if (result.downloaded > 0) {
         LibraryEventBus().notifyLibraryChanged();
       }
-      _status =
-          scope.bookFiles &&
-              _textStates.any(
-                (state) =>
-                    state.status == MutableTxtSyncStatus.failed ||
-                    state.status == MutableTxtSyncStatus.conflict,
-              )
-          ? WebDavSyncStatus.partialFailure
-          : WebDavSyncStatus.success;
+      _restoreSettledStatus(successStatus: WebDavSyncStatus.success);
       _phase = WebDavSyncPhase.none;
       notifyListeners();
       return result;
@@ -443,7 +479,7 @@ class WebDavSyncController extends ChangeNotifier {
         'WebDAV sync failed at ${_phase.name}: ${error.code.name}'
         '${error.statusCode == null ? '' : ' (HTTP ${error.statusCode})'}',
       );
-      _setFailure(error);
+      _setMetadataFailure(error);
       _pendingChanges = await _enabledPendingCount();
       _phase = WebDavSyncPhase.none;
       notifyListeners();
@@ -456,7 +492,7 @@ class WebDavSyncController extends ChangeNotifier {
         WebDavSyncErrorCode.unknown,
         'Metadata sync could not be completed.',
       );
-      _setFailure(failure);
+      _setMetadataFailure(failure);
       _phase = WebDavSyncPhase.none;
       notifyListeners();
       throw failure;
@@ -494,6 +530,10 @@ class WebDavSyncController extends ChangeNotifier {
     final normalized = SyncDatasetCatalog.normalizeScope(scope);
     await _configStore.saveScope(normalized);
     _scope = normalized;
+    if (!normalized.bookFiles) {
+      _clearFileFailure();
+      _restoreSettledStatus();
+    }
     _pendingChanges = await _enabledPendingCount();
     notifyListeners();
   }
@@ -527,7 +567,7 @@ class WebDavSyncController extends ChangeNotifier {
     _phase = WebDavSyncPhase.none;
     _lastFailedPhase = WebDavSyncPhase.none;
     _newBookUploadPolicy = WebDavNewBookUploadPolicy.askEveryTime;
-    _clearError();
+    _clearFailures();
     notifyListeners();
     await _changeStore.resetRemoteMirrorForNewSpace();
   }
@@ -637,15 +677,80 @@ class WebDavSyncController extends ChangeNotifier {
     }
   }
 
-  void _setFailure(WebDavSyncFailure failure) {
+  void _setMetadataFailure(WebDavSyncFailure failure) {
+    _metadataFailure = failure;
+    _visibleFailure = failure;
     _status = WebDavSyncStatus.failed;
-    _lastError = failure.code;
-    _lastErrorMessage = failure.message;
   }
 
-  void _clearError() {
-    _lastError = null;
-    _lastErrorMessage = null;
+  void _clearMetadataFailure() {
+    final failure = _metadataFailure;
+    _metadataFailure = null;
+    if (identical(_visibleFailure, failure)) _visibleFailure = _fileFailure;
+  }
+
+  void _setFileFailure(WebDavSyncFailure failure) {
+    _fileFailure = failure;
+    _visibleFailure = failure;
+  }
+
+  void _clearFileFailure() {
+    final failure = _fileFailure;
+    _fileFailure = null;
+    if (identical(_visibleFailure, failure)) _visibleFailure = _metadataFailure;
+  }
+
+  void _clearFailures() {
+    _metadataFailure = null;
+    _fileFailure = null;
+    _visibleFailure = null;
+  }
+
+  void _restorePersistedFileFailure() {
+    if (!scope.bookFiles || _fileFailure != null) return;
+    final failed = _textStates.where(
+      (state) => state.status == MutableTxtSyncStatus.failed,
+    );
+    if (failed.isNotEmpty) {
+      final detail = failed.first.error?.trim();
+      _setFileFailure(
+        WebDavSyncFailure(
+          WebDavSyncErrorCode.unknown,
+          detail == null || detail.isEmpty
+              ? 'A book file could not be synchronized.'
+              : detail,
+        ),
+      );
+      return;
+    }
+    if (_textStates.any(
+      (state) => state.status == MutableTxtSyncStatus.conflict,
+    )) {
+      _setFileFailure(
+        const WebDavSyncFailure(
+          WebDavSyncErrorCode.conflict,
+          'A book file has conflicting changes that require attention.',
+        ),
+      );
+    }
+  }
+
+  void _restoreSettledStatus({WebDavSyncStatus? successStatus}) {
+    if (!isConfigured) {
+      _status = WebDavSyncStatus.unconfigured;
+    } else if (_running != null && successStatus == null) {
+      _status = WebDavSyncStatus.syncing;
+    } else if (_metadataFailure != null) {
+      _status = WebDavSyncStatus.failed;
+    } else if (_fileFailure != null) {
+      _status = WebDavSyncStatus.partialFailure;
+    } else if (successStatus != null) {
+      _status = successStatus;
+    } else if (_lastResult != null) {
+      _status = WebDavSyncStatus.success;
+    } else {
+      _status = WebDavSyncStatus.idle;
+    }
   }
 
   @override

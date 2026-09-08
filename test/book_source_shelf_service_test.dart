@@ -33,8 +33,9 @@ void main() {
 
       expect(added.isOnline, isTrue);
       expect(added.filePath, isEmpty);
-      expect(added.coverImagePath, isNotNull);
-      expect(await File(added.coverImagePath!).exists(), isTrue);
+      await dao.coverSaved.future.timeout(const Duration(seconds: 5));
+      expect(dao.stored?.coverImagePath, isNotNull);
+      expect(await File(dao.stored!.coverImagePath!).exists(), isTrue);
       expect(added.sourceId, _source.id);
       expect(service.sourceFrom(added).apiBaseUrl, _source.apiBaseUrl);
       expect(service.sourceBookFrom(added).title, _sourceBook.title);
@@ -324,12 +325,80 @@ void main() {
       book: _sourceBookWithCover,
     );
 
-    expect(added.coverImagePath, isNotNull);
-    expect(await File(added.coverImagePath!).readAsBytes(), [1, 2, 3, 4]);
+    await dao.coverSaved.future.timeout(const Duration(seconds: 5));
+    expect(await File(dao.stored!.coverImagePath!).readAsBytes(), [1, 2, 3, 4]);
     expect(
       service.sourceBookFrom(added).coverUrl,
       _sourceBookWithCover.coverUrl,
     );
+  });
+
+  test('returns before a slow online cover finishes', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'source-slow-cover-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final coverStarted = Completer<void>();
+    final releaseCover = Completer<void>();
+    final sourceCoverCache = SourceCoverCache(
+      cacheDirectory: Directory('${directory.path}/cache'),
+      loader: (_) async {
+        coverStarted.complete();
+        await releaseCover.future;
+        return Uint8List.fromList([1, 2, 3]);
+      },
+    );
+    final dao = _MemoryBookDao();
+    final service = BookSourceShelfService(
+      bookDao: dao,
+      downloadDirectory: directory,
+      sourceCoverCache: sourceCoverCache,
+    );
+
+    final adding = service.addOnline(
+      source: _source,
+      book: _sourceBookWithCover,
+    );
+    await coverStarted.future;
+    await expectLater(adding.timeout(const Duration(seconds: 1)), completes);
+    expect(dao.stored?.id, 7);
+    await service.updateShelfProgress(
+      shelfBookId: 7,
+      chapterIndex: 2,
+      chapterCount: 10,
+      chapterProgress: .5,
+    );
+    service.close();
+    releaseCover.complete();
+    await dao.coverSaved.future.timeout(const Duration(seconds: 5));
+    expect(dao.stored?.currentPage, 2500);
+    expect(dao.stored?.coverImagePath, isNotNull);
+  });
+
+  test('keeps the shelf record when cover persistence fails', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'source-cover-fail-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final dao = _MemoryBookDao();
+    final sourceCoverCache = SourceCoverCache(
+      cacheDirectory: Directory('${directory.path}/cache'),
+      loader: (_) async => throw StateError('cover unavailable'),
+    );
+    final service = BookSourceShelfService(
+      bookDao: dao,
+      downloadDirectory: directory,
+      sourceCoverCache: sourceCoverCache,
+    );
+
+    final added = await service.addOnline(
+      source: _source,
+      book: _sourceBookWithCover,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(added.id, 7);
+    expect(dao.stored?.id, 7);
+    expect(dao.stored?.coverImagePath, isNull);
   });
 }
 
@@ -364,6 +433,7 @@ final _sourceBookWithCover = BookSourceBook(
 );
 
 class _MemoryBookDao extends BookDao {
+  final coverSaved = Completer<void>();
   Book? stored;
   int insertCount = 0;
 
@@ -383,6 +453,30 @@ class _MemoryBookDao extends BookDao {
   @override
   Future<void> updateBook(Book book) async {
     stored = book;
+  }
+
+  @override
+  Future<void> updateBookProgress(
+    int bookId,
+    int currentPage, {
+    double? readingProgress,
+    bool emitSyncEvent = true,
+  }) async {
+    stored = stored?.copyWith(
+      currentPage: currentPage,
+      readingProgress: readingProgress,
+    );
+  }
+
+  @override
+  Future<void> updateBookTotalPages(int bookId, int totalPages) async {
+    stored = stored?.copyWith(totalPages: totalPages);
+  }
+
+  @override
+  Future<void> updateBookCoverPath(int bookId, String? coverImagePath) async {
+    stored = stored?.copyWith(coverImagePath: coverImagePath);
+    if (!coverSaved.isCompleted) coverSaved.complete();
   }
 }
 

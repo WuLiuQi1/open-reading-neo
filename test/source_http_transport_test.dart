@@ -79,7 +79,7 @@ void main() {
     });
 
     test(
-      'retries safe HTTP 400 responses through the system network',
+      'does not retry a real HTTP 400 through another network client',
       () async {
         final pinned = Dio()..httpClientAdapter = _SequenceAdapter([400]);
         final system = Dio()
@@ -93,16 +93,24 @@ void main() {
         );
         addTearDown(transport.close);
 
-        final response = await transport.send(
-          SourceRequestTemplate.parse(
-            'https://books.test/channel',
-            baseUri: Uri.parse('https://books.test'),
+        await expectLater(
+          transport.send(
+            SourceRequestTemplate.parse(
+              'https://books.test/channel',
+              baseUri: Uri.parse('https://books.test'),
+            ),
+          ),
+          throwsA(
+            isA<BookSourceProtocolException>().having(
+              (error) => error.message,
+              'message',
+              contains('HTTP 400'),
+            ),
           ),
         );
 
-        expect(response.body, 'books');
         expect((pinned.httpClientAdapter as _SequenceAdapter).requests, 1);
-        expect((system.httpClientAdapter as _SequenceAdapter).requests, 1);
+        expect((system.httpClientAdapter as _SequenceAdapter).requests, 0);
       },
     );
 
@@ -407,7 +415,10 @@ void main() {
       );
 
       expect(response.body, '结果');
-      expect(await received.future, gbk_bytes.encode('关键词=剑来'));
+      expect(
+        await received.future,
+        ascii.encode('%B9%D8%BC%FC%B4%CA=%BD%A3%C0%B4'),
+      );
     });
 
     test('keeps source cookies across same-URL redirects', () async {

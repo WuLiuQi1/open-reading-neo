@@ -66,9 +66,9 @@ class UpdatePromptController {
         return false;
       }
 
-      final latestVersion = result.latestRelease.version;
+      final latestReleaseId = result.latestRelease.releaseId;
       final prefs = await SharedPreferences.getInstance();
-      if (!manual && prefs.getString(_skippedVersionKey) == latestVersion) {
+      if (!manual && prefs.getString(_skippedVersionKey) == latestReleaseId) {
         return true;
       }
       if (!context.mounted) return true;
@@ -82,7 +82,7 @@ class UpdatePromptController {
       if (!context.mounted) return true;
 
       if (action == _UpdateAction.skip) {
-        await prefs.setString(_skippedVersionKey, latestVersion);
+        await prefs.setString(_skippedVersionKey, latestReleaseId);
       }
       if (!context.mounted) return true;
 
@@ -266,14 +266,15 @@ class _UpdateDialog extends StatelessWidget {
                           const SizedBox(height: 11),
                           Semantics(
                             label: l10n.updateVersionSummary(
-                              result.currentVersion,
-                              release.version,
+                              result.currentDisplayVersion,
+                              release.displayVersion,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              runSpacing: 8,
                               children: [
                                 _VersionBadge(
-                                  version: result.currentVersion,
+                                  version: result.currentDisplayVersion,
                                   foreground: scheme.onSurfaceVariant,
                                   background: scheme.surface.withValues(
                                     alpha: 0.62,
@@ -290,7 +291,7 @@ class _UpdateDialog extends StatelessWidget {
                                   ),
                                 ),
                                 _VersionBadge(
-                                  version: release.version,
+                                  version: release.displayVersion,
                                   foreground: scheme.onPrimaryContainer,
                                   background: scheme.primaryContainer,
                                   emphasized: true,

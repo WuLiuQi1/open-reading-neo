@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app_update_download_policy.dart';
+import 'app_build_info.dart';
 
 class WebsiteReleaseAsset {
   const WebsiteReleaseAsset({
@@ -37,6 +38,7 @@ class AppRelease {
     required this.releaseUrl,
     required this.publishedAt,
     this.websiteAsset,
+    this.buildNumber,
   });
 
   final String version;
@@ -45,6 +47,18 @@ class AppRelease {
   final Uri releaseUrl;
   final DateTime? publishedAt;
   final WebsiteReleaseAsset? websiteAsset;
+  final String? buildNumber;
+
+  String? get effectiveBuildNumber =>
+      releaseBuildNumber ?? websiteAsset?.buildNumber;
+
+  /// Unlike an APK versionCode, this identifies the shared cross-platform build.
+  String? get releaseBuildNumber => buildNumber ?? versionBuildNumber(version);
+  String get releaseId => effectiveBuildNumber == null
+      ? version
+      : "${version.split('+').first}+$effectiveBuildNumber";
+  String get displayVersion =>
+      formatReleaseVersion(version, effectiveBuildNumber);
 
   factory AppRelease.fromGithubJson(Map<String, dynamic> json) {
     final tagName = (json['tag_name'] as String? ?? '').trim();
@@ -55,7 +69,8 @@ class AppRelease {
     }
 
     return AppRelease(
-      version: normalizeVersion(tagName),
+      version: normalizeVersion(tagName).split('+').first,
+      buildNumber: versionBuildNumber(tagName),
       name: (json['name'] as String? ?? tagName).trim(),
       notes: (json['body'] as String? ?? '').trim(),
       releaseUrl: Uri.parse(htmlUrl),
@@ -118,6 +133,11 @@ class AppRelease {
     final packageType = _string(payload, 'package_type');
     final buildNumber = _string(payload, 'build_number');
     final parsedBuildNumber = int.tryParse(buildNumber) ?? 0;
+    final githubTag = Uri.tryParse(githubUrl)?.pathSegments.lastOrNull ?? '';
+    final taggedBuildNumber =
+        versionBuildNumber(githubTag) ?? versionBuildNumber(version);
+    final canonicalBuild =
+        taggedBuildNumber ?? (platform == 'android' ? null : buildNumber);
     if (!_isValidVersion(version) ||
         !_isAllowedGithubReleaseUrl(githubUrl) ||
         !_isAllowedOfficialUrl(downloadUrl) ||
@@ -127,6 +147,16 @@ class AppRelease {
         platform.isEmpty ||
         packageType.isEmpty ||
         parsedBuildNumber <= 0 ||
+        (_isValidVersion(normalizeVersion(githubTag)) &&
+            compareVersions(githubTag, version) != 0) ||
+        (versionBuildNumber(version) != null &&
+            versionBuildNumber(githubTag) != null &&
+            versionBuildNumber(version) != versionBuildNumber(githubTag)) ||
+        (canonicalBuild != null &&
+            int.parse(canonicalBuild) > parsedBuildNumber) ||
+        (platform != 'android' &&
+            canonicalBuild != null &&
+            int.tryParse(canonicalBuild) != parsedBuildNumber) ||
         (targetPlatform != null && platform != targetPlatform) ||
         (targetPlatform == 'android' &&
             (targetArchitecture == null ||
@@ -136,7 +166,8 @@ class AppRelease {
     }
 
     return AppRelease(
-      version: version,
+      version: version.split('+').first,
+      buildNumber: canonicalBuild,
       name: 'Open Reading v$version',
       notes: _firstString(payload, ['release_notes', 'notes', 'body']),
       releaseUrl: Uri.parse(githubUrl),
@@ -162,6 +193,7 @@ class AppRelease {
     releaseUrl: releaseUrl,
     publishedAt: publishedAt,
     websiteAsset: asset,
+    buildNumber: releaseBuildNumber,
   );
 }
 
@@ -169,13 +201,35 @@ class UpdateCheckResult {
   const UpdateCheckResult({
     required this.currentVersion,
     required this.latestRelease,
+    this.currentBuildNumber,
+    this.currentPackageBuildNumber,
   });
 
   final String currentVersion;
+  final String? currentBuildNumber;
+  final String? currentPackageBuildNumber;
+  String get currentDisplayVersion =>
+      formatReleaseVersion(currentVersion, currentBuildNumber);
   final AppRelease latestRelease;
 
-  bool get hasUpdate =>
-      compareVersions(latestRelease.version, currentVersion) > 0;
+  bool get hasUpdate {
+    // Older website metadata identifies only the platform package build.
+    final comparePackageBuilds =
+        latestRelease.releaseBuildNumber == null &&
+        currentPackageBuildNumber != null &&
+        latestRelease.websiteAsset != null;
+    return compareReleaseVersions(
+          latestRelease.version,
+          currentVersion,
+          leftBuild: comparePackageBuilds
+              ? latestRelease.websiteAsset!.buildNumber
+              : latestRelease.releaseBuildNumber,
+          rightBuild: comparePackageBuilds
+              ? currentPackageBuildNumber
+              : currentBuildNumber,
+        ) >
+        0;
+  }
 }
 
 typedef UpdateTargetResolver = Future<UpdateTarget> Function();
@@ -234,9 +288,15 @@ class UpdateCheckService {
   final UpdateTargetResolver _targetResolver;
 
   Future<UpdateCheckResult> check({String? currentVersion}) async {
+    final package = currentVersion == null
+        ? await PackageInfo.fromPlatform()
+        : null;
     final installedVersion = normalizeVersion(
-      currentVersion ?? (await PackageInfo.fromPlatform()).version,
+      currentVersion ?? package!.version,
     );
+    final installedBuild = package == null
+        ? versionBuildNumber(installedVersion)
+        : await readAppReleaseBuildNumber(package);
     UpdateTarget? target;
     try {
       target = await _targetResolver();
@@ -255,6 +315,8 @@ class UpdateCheckService {
 
     return UpdateCheckResult(
       currentVersion: installedVersion,
+      currentBuildNumber: installedBuild,
+      currentPackageBuildNumber: package?.buildNumber,
       latestRelease: latest,
     );
   }
@@ -312,9 +374,17 @@ AppRelease selectLatestRelease({AppRelease? website, AppRelease? github}) {
   if (website == null) return github!;
   if (github == null) return website;
 
-  final comparison = compareVersions(website.version, github.version);
+  final comparison = compareReleaseVersions(
+    website.version,
+    github.version,
+    leftBuild: website.releaseBuildNumber,
+    rightBuild: github.releaseBuildNumber,
+  );
   if (comparison > 0) return website;
   if (comparison < 0) return github;
+  if (website.releaseBuildNumber != github.releaseBuildNumber) {
+    return website.releaseBuildNumber != null ? website : github;
+  }
   if (website.websiteAsset == null) return github;
 
   var latest = github.withWebsiteAsset(website.websiteAsset!);
@@ -326,6 +396,7 @@ AppRelease selectLatestRelease({AppRelease? website, AppRelease? github}) {
       releaseUrl: latest.releaseUrl,
       publishedAt: latest.publishedAt ?? website.publishedAt,
       websiteAsset: latest.websiteAsset,
+      buildNumber: latest.releaseBuildNumber,
     );
   }
   return latest;
@@ -454,4 +525,43 @@ class _ParsedVersion {
       preRelease?.isEmpty == true ? null : preRelease,
     );
   }
+}
+
+/// Build metadata is compared only within the same semantic version, and only
+/// when both sides supply a numeric build. Legacy releases remain supported.
+int compareReleaseVersions(
+  String left,
+  String right, {
+  String? leftBuild,
+  String? rightBuild,
+}) {
+  final versionComparison = compareVersions(left, right);
+  if (versionComparison != 0) return versionComparison;
+  final leftNumber = int.tryParse(leftBuild ?? versionBuildNumber(left) ?? '');
+  final rightNumber = int.tryParse(
+    rightBuild ?? versionBuildNumber(right) ?? '',
+  );
+  if (leftNumber == null ||
+      rightNumber == null ||
+      leftNumber <= 0 ||
+      rightNumber <= 0) {
+    return 0;
+  }
+  return leftNumber.compareTo(rightNumber);
+}
+
+String? versionBuildNumber(String version) {
+  final parts = version.split('+');
+  if (parts.length != 2 || !RegExp(r'^[0-9]+$').hasMatch(parts.last)) {
+    return null;
+  }
+  final number = int.tryParse(parts.last);
+  return number != null && number > 0 ? number.toString() : null;
+}
+
+String formatReleaseVersion(String version, String? buildNumber) {
+  final build = buildNumber ?? versionBuildNumber(version);
+  return build == null || build.isEmpty
+      ? version
+      : "${version.split('+').first} ($build)";
 }

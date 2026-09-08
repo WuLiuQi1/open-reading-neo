@@ -26,6 +26,7 @@ import 'package:xxread/pages/settings/library_layout_settings_page.dart';
 import 'package:xxread/pages/settings/replace_rules_page.dart';
 import 'package:xxread/pages/settings/sync/webdav_sync_page.dart';
 import 'package:xxread/reader_core/ai/ai_service.dart';
+import 'package:xxread/services/core/app_build_info.dart';
 import 'package:xxread/services/core/core_services.dart';
 import 'package:xxread/services/reader/replace_rule_service.dart';
 import 'package:xxread/services/sync/sync_models.dart';
@@ -219,11 +220,11 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final info = await PackageInfo.fromPlatform();
       final version = info.version.trim();
+      final buildNumber = await readAppReleaseBuildNumber(info);
       if (!mounted) {
         return;
       }
       setState(() {
-        final buildNumber = info.buildNumber.trim();
         _appVersion = version.isNotEmpty
             ? (buildNumber.isNotEmpty ? '$version ($buildNumber)' : version)
             : '0.9.1';

@@ -4,10 +4,18 @@ import 'dart:ui';
 import 'package:flutter/services.dart';
 
 class ChangelogEntry {
-  const ChangelogEntry({required this.version, required this.items});
+  const ChangelogEntry({
+    required this.version,
+    required this.items,
+    this.buildNumber,
+  });
 
   final String version;
+  final String? buildNumber;
   final List<String> items;
+
+  String get identity =>
+      buildNumber == null ? version : '$version+$buildNumber';
 }
 
 class ChangelogService {
@@ -33,7 +41,7 @@ class ChangelogService {
       throw const FormatException('Changelog entries are missing.');
     }
 
-    final versions = <String>{};
+    final identities = <String>{};
     return List<ChangelogEntry>.unmodifiable(
       rawEntries.indexed.map((indexedEntry) {
         final (index, rawEntry) = indexedEntry;
@@ -46,10 +54,12 @@ class ChangelogService {
           throw FormatException('Invalid changelog version at index $index.');
         }
         final normalizedVersion = version.trim();
-        if (!versions.add(normalizedVersion)) {
-          throw FormatException(
-            'Duplicate changelog version: $normalizedVersion.',
-          );
+        final buildNumber = _buildNumber(rawEntry['buildNumber'], index);
+        final identity = buildNumber == null
+            ? normalizedVersion
+            : '$normalizedVersion+$buildNumber';
+        if (!identities.add(identity)) {
+          throw FormatException('Duplicate changelog entry: $identity.');
         }
 
         final notes = rawEntry['notes'];
@@ -61,10 +71,25 @@ class ChangelogService {
 
         return ChangelogEntry(
           version: normalizedVersion,
+          buildNumber: buildNumber,
           items: _localizedItems(notes, locale, normalizedVersion),
         );
       }),
     );
+  }
+
+  static String? _buildNumber(Object? value, int index) {
+    if (value == null) return null;
+    final normalized = switch (value) {
+      int number => number.toString(),
+      String text => text.trim(),
+      _ => '',
+    };
+    final number = int.tryParse(normalized);
+    if (number == null || number <= 0) {
+      throw FormatException('Invalid changelog build number at index $index.');
+    }
+    return number.toString();
   }
 
   static List<String> _localizedItems(

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing version tag to build and release (for example v0.9.1)"
+        description: "Existing version tag to build and release (for example v0.9.1 or v0.9.1+123)"
         required: true
         type: string
       deployment_only:
@@ -44,16 +44,25 @@ jobs:
       - name: Verify tag matches pubspec version
         shell: bash
         run: |
-          release_version="${RELEASE_TAG#v}"
-          pubspec_version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          release_identity="${RELEASE_TAG#v}"
+          release_version="${release_identity%%+*}"
+          release_build=""
+          [[ "$release_identity" == *+* ]] && release_build="${release_identity#*+}"
+          pubspec_identity="$(sed -n 's/^version:[[:space:]]*\([^[:space:]]*\).*/\1/p' pubspec.yaml)"
+          pubspec_version="${pubspec_identity%%+*}"
+          pubspec_build="${pubspec_identity#*+}"
 
-          if [[ "$RELEASE_TAG" != v* || -z "$pubspec_version" ]]; then
-            echo "::error::Release tags must use v<version> and pubspec.yaml must declare a version."
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\+[1-9][0-9]*)?$ ]] || [[ -z "$pubspec_version" ]]; then
+            echo "::error::Release tags must use v<version> or v<version>+<build>, and pubspec.yaml must declare a version."
             exit 1
           fi
 
           if [[ "$release_version" != "$pubspec_version" ]]; then
             echo "::error::Tag ${RELEASE_TAG} does not match pubspec version ${pubspec_version}."
+            exit 1
+          fi
+          if [[ -n "$release_build" && "$release_build" != "$pubspec_build" ]]; then
+            echo "::error::Tag ${RELEASE_TAG} build does not match pubspec build ${pubspec_build}."
             exit 1
           fi
 
@@ -123,7 +132,7 @@ jobs:
             echo "::error::build/web/sqlite3.wasm is not a WebAssembly module."
             exit 1
           fi
-          RELEASE_VERSION="${RELEASE_TAG#v}" python3 <<'PY'
+          RELEASE_TAG="$RELEASE_TAG" python3 <<'PY'
           import json
           import os
           from pathlib import Path
@@ -135,12 +144,16 @@ jobs:
           required = {"app_name", "version", "build_number", "package_name"}
           if set(payload) != required:
               raise SystemExit("version.json has an unexpected field set")
-          if payload["version"] != os.environ["RELEASE_VERSION"]:
+          tag_identity = os.environ["RELEASE_TAG"].removeprefix("v")
+          expected_version, separator, expected_build = tag_identity.partition("+")
+          if payload["version"] != expected_version:
               raise SystemExit("version.json does not match the release tag")
           if not all(isinstance(payload[field], str) and payload[field] for field in required):
               raise SystemExit("version.json fields must be non-empty strings")
           if not payload["build_number"].isdigit():
               raise SystemExit("version.json build_number must be numeric")
+          if separator and payload["build_number"] != expected_build:
+              raise SystemExit("version.json build_number does not match the release tag")
           PY
 
           mkdir -p web-release
@@ -262,6 +275,7 @@ jobs:
         shell: bash
         run: |
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           mkdir -p release-assets
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             "release-assets/OpenReading-Android-arm64-v8a-${version}.apk"
@@ -324,7 +338,7 @@ jobs:
       - name: Package Windows bundle
         shell: pwsh
         run: |
-          $version = $env:RELEASE_TAG.TrimStart('v')
+          $version = $env:RELEASE_TAG.TrimStart('v').Split('+')[0]
           New-Item -ItemType Directory -Path release-assets -Force | Out-Null
           Compress-Archive `
             -Path 'build/windows/x64/runner/Release/*' `
@@ -378,6 +392,7 @@ jobs:
         shell: bash
         run: |
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           mkdir -p release-assets
           tar -C build/linux/x64/release -czf \
             "release-assets/OpenReading-Linux-x64-${version}.tar.gz" bundle
@@ -604,6 +619,7 @@ jobs:
           test -s "$app_path/Contents/embedded.provisionprofile"
 
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           build_number="$(
             sed -n 's/^version:[[:space:]]*[^+[:space:]]*+\([0-9][0-9]*\).*/\1/p' \
               pubspec.yaml
@@ -678,6 +694,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           mkdir -p release-assets
           ditto -c -k --sequesterRsrc --keepParent \
             "$MACOS_APP_PATH" \
@@ -738,6 +755,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           build_number="$(
             sed -n 's/^version:[[:space:]]*[^+[:space:]]*+\([0-9][0-9]*\).*/\1/p' \
               pubspec.yaml
@@ -852,6 +870,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           expected_files=(
             "OpenReading-Android-arm64-v8a-${version}.apk"
             "OpenReading-Android-armeabi-v7a-${version}.apk"
@@ -1007,15 +1026,15 @@ jobs:
               r"(0|[1-9][0-9]*)\."
               r"(0|[1-9][0-9]*)"
               r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
-              r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+              r"(?:\+([0-9]+))?$"
           )
 
 
-          def parse_semver(tag: str) -> tuple[tuple[int, int, int], tuple[str, ...] | None]:
+          def parse_semver(tag: str) -> tuple[tuple[int, int, int], tuple[str, ...] | None, int]:
               match = SEMVER.fullmatch(tag)
               if match is None:
                   raise SystemExit(f"release tag is not valid SemVer: {tag!r}")
-              major, minor, patch, prerelease = match.groups()
+              major, minor, patch, prerelease, build = match.groups()
               identifiers = tuple(prerelease.split(".")) if prerelease else None
               if identifiers is not None:
                   for identifier in identifiers:
@@ -1023,7 +1042,9 @@ jobs:
                           raise SystemExit(
                               f"release tag has a numeric prerelease identifier with a leading zero: {tag!r}"
                           )
-              return (int(major), int(minor), int(patch)), identifiers
+              if build is not None and (not build.isdigit() or int(build) <= 0):
+                  raise SystemExit(f"release tag build must be a positive integer: {tag!r}")
+              return (int(major), int(minor), int(patch)), identifiers, int(build or 0)
 
 
           def compare_prerelease(
@@ -1050,11 +1071,16 @@ jobs:
 
 
           def compare_semver(left_tag: str, right_tag: str) -> int:
-              left_core, left_prerelease = parse_semver(left_tag)
-              right_core, right_prerelease = parse_semver(right_tag)
+              left_core, left_prerelease, left_build = parse_semver(left_tag)
+              right_core, right_prerelease, right_build = parse_semver(right_tag)
               if left_core != right_core:
                   return -1 if left_core < right_core else 1
-              return compare_prerelease(left_prerelease, right_prerelease)
+              prerelease_comparison = compare_prerelease(left_prerelease, right_prerelease)
+              if prerelease_comparison != 0:
+                  return prerelease_comparison
+              if left_build != right_build:
+                  return -1 if left_build < right_build else 1
+              return 0
 
 
           metadata = json.loads(
@@ -1085,6 +1111,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           release_url="https://github.com/${GH_REPO}/releases/download/${RELEASE_TAG}"
           notes_file="${RUNNER_TEMP}/release-notes.md"
           custom_notes_file=".github/release-notes/${RELEASE_TAG}.md"
@@ -1206,7 +1233,7 @@ jobs:
             echo "::error::Web deployment requires the restricted open-reading-release account."
             exit 1
           fi
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,63}$ ]] \
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\+[1-9][0-9]*)?$ ]] \
             || [[ ! "$PUBLIC_RELEASE_REPOSITORY" =~ ^[0-9A-Za-z_.-]+/[0-9A-Za-z_.-]+$ ]] \
             || [[ ! "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] \
             || [[ ! "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]; then
@@ -1298,8 +1325,13 @@ jobs:
           from pathlib import Path
 
           payload = json.loads(Path(os.environ["VERSION_PATH"]).read_text(encoding="utf-8"))
-          if payload.get("version") != os.environ["RELEASE_TAG"].removeprefix("v"):
+          expected_version = os.environ["RELEASE_TAG"].removeprefix("v").split("+", 1)[0]
+          if payload.get("version") != expected_version:
               raise SystemExit("deployed version.json does not match the release tag")
+          if "+" in os.environ["RELEASE_TAG"]:
+              expected_build = os.environ["RELEASE_TAG"].split("+", 1)[1]
+              if str(payload.get("build_number")) != expected_build:
+                  raise SystemExit("deployed version.json build_number does not match the release tag")
           PY
             then
               exit 0
@@ -1338,6 +1370,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          version="${version%%+*}"
           bundle_dir="${GITHUB_WORKSPACE}/official-site-bundle"
           mkdir -p "$bundle_dir"
 
@@ -1413,7 +1446,7 @@ jobs:
 
           repository = os.environ["PUBLIC_RELEASE_REPOSITORY"]
           tag = os.environ["RELEASE_TAG"]
-          if not re.fullmatch(r"v[0-9A-Za-z][0-9A-Za-z._-]{0,63}", tag):
+          if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:\+[1-9][0-9]*)?", tag):
               raise SystemExit(f"invalid release tag: {tag!r}")
           if not re.fullmatch(r"[0-9A-Za-z_.-]+/[0-9A-Za-z_.-]+", repository):
               raise SystemExit(f"invalid repository name: {repository!r}")
@@ -1427,8 +1460,11 @@ jobs:
           if match is None:
               raise SystemExit("pubspec.yaml must declare version <name>+<build>")
           version, build_number = match.groups()
-          if tag != f"v{version}":
+          tag_version = tag.removeprefix("v").split("+", 1)[0]
+          if tag_version != version:
               raise SystemExit(f"tag {tag!r} does not match pubspec version {version!r}")
+          if "+" in tag and tag.split("+", 1)[1] != build_number:
+              raise SystemExit(f"tag {tag!r} does not match pubspec build {build_number!r}")
 
           bundle_dir = Path("official-site-bundle")
           asset_specs = [
@@ -1588,7 +1624,7 @@ jobs:
             echo "::error::Official-site SSH user has an invalid format."
             exit 1
           fi
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,63}$ ]] \
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\+[1-9][0-9]*)?$ ]] \
             || [[ ! "$PUBLIC_RELEASE_REPOSITORY" =~ ^[0-9A-Za-z_.-]+/[0-9A-Za-z_.-]+$ ]]; then
             echo "::error::Release identifiers have an invalid format."
             exit 1

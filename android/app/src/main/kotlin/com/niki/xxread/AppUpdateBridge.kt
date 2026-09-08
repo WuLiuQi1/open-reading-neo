@@ -31,6 +31,8 @@ class AppUpdateBridge(
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "getSupportedAbis" -> result.success(Build.SUPPORTED_ABIS.toList())
+            "getReleaseBuildNumber" ->
+                result.success(activity.getString(R.string.app_release_build_number))
             "installApk" -> installApk(call, result)
             else -> result.notImplemented()
         }

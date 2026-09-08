@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,52 +33,81 @@ class _FakePreferencesStore implements SettingsPagePreferencesStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('com.niki.xxread/app_update');
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    PackageInfo.setMockInitialValues(
+      appName: 'Open Reading',
+      packageName: 'com.niki.xxread',
+      version: '2.6.7',
+      buildNumber: '260908001',
+      buildSignature: '',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => '260907001');
   });
 
-  testWidgets('complete settings page mounts with its provider graph', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 1200);
-    addTearDown(tester.view.reset);
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 
-    final theme = ThemeNotifier();
-    final appSettings = AppSettingsNotifier();
-    final webDav = WebDavSyncController();
-    final account = MemberAccountController();
-    addTearDown(theme.dispose);
-    addTearDown(appSettings.dispose);
-    addTearDown(webDav.dispose);
-    addTearDown(account.dispose);
+  testWidgets(
+    'complete settings page mounts with its provider graph',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 1200);
+      addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: theme),
-          ChangeNotifierProvider.value(value: appSettings),
-          ChangeNotifierProvider.value(value: webDav),
-          ChangeNotifierProvider.value(value: account),
-        ],
-        child: MaterialApp(
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: SettingsPage(
-            cacheManager: _FakeCacheManager(),
-            preferencesStore: _FakePreferencesStore(),
-            aiService: MockAIService(),
+      final theme = ThemeNotifier();
+      final appSettings = AppSettingsNotifier();
+      final webDav = WebDavSyncController();
+      final account = MemberAccountController();
+      addTearDown(theme.dispose);
+      addTearDown(appSettings.dispose);
+      addTearDown(webDav.dispose);
+      addTearDown(account.dispose);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: theme),
+            ChangeNotifierProvider.value(value: appSettings),
+            ChangeNotifierProvider.value(value: webDav),
+            ChangeNotifierProvider.value(value: account),
+          ],
+          child: MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: SettingsPage(
+              cacheManager: _FakeCacheManager(),
+              preferencesStore: _FakePreferencesStore(),
+              aiService: MockAIService(),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byType(SettingsPage), findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-account-card')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.byType(SettingsPage), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-account-card')),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-changelog-link')),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      expect(find.text('2.6.7 (260907001)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 }

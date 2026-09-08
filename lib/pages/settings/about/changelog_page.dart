@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:xxread/services/core/app_build_info.dart';
 import 'package:xxread/services/core/changelog_service.dart';
 import 'package:xxread/utils/localization_extension.dart';
 import 'package:xxread/utils/page_style_helper.dart';
@@ -17,7 +19,7 @@ class ChangelogPage extends StatefulWidget {
 class _ChangelogPageState extends State<ChangelogPage> {
   late final ChangelogService _service = widget.service ?? ChangelogService();
   Locale? _locale;
-  Future<List<ChangelogEntry>>? _entries;
+  Future<_ChangelogPageData>? _data;
 
   @override
   void didChangeDependencies() {
@@ -25,13 +27,24 @@ class _ChangelogPageState extends State<ChangelogPage> {
     final locale = Localizations.localeOf(context);
     if (_locale == locale) return;
     _locale = locale;
-    _entries = _service.load(locale);
+    _data = _load(locale);
+  }
+
+  Future<_ChangelogPageData> _load(Locale locale) async {
+    final entries = await _service.load(locale);
+    final packageInfo = await PackageInfo.fromPlatform();
+    final buildNumber = await readAppReleaseBuildNumber(packageInfo);
+    return _ChangelogPageData(
+      entries: entries,
+      version: packageInfo.version,
+      buildNumber: buildNumber,
+    );
   }
 
   void _retry() {
     final locale = _locale;
     if (locale == null) return;
-    setState(() => _entries = _service.load(locale));
+    setState(() => _data = _load(locale));
   }
 
   @override
@@ -39,16 +52,16 @@ class _ChangelogPageState extends State<ChangelogPage> {
     final l10n = context.l10n;
     return FloatingSubpageScaffold(
       title: l10n.changelogPageTitle,
-      body: FutureBuilder<List<ChangelogEntry>>(
-        future: _entries,
+      body: FutureBuilder<_ChangelogPageData>(
+        future: _data,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return Center(
               child: CircularProgressIndicator(semanticsLabel: l10n.loading),
             );
           }
-          final entries = snapshot.data;
-          if (snapshot.hasError || entries == null || entries.isEmpty) {
+          final data = snapshot.data;
+          if (snapshot.hasError || data == null || data.entries.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -66,19 +79,43 @@ class _ChangelogPageState extends State<ChangelogPage> {
               ),
             );
           }
+          final entries = data.entries;
           return ListView.separated(
             padding: floatingSubpagePadding(context),
             itemCount: entries.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) => _VersionCard(
-              key: ValueKey('changelog-entry-${entries[index].version}'),
+              key: ValueKey('changelog-entry-${entries[index].identity}'),
               entry: entries[index],
-              current: index == 0,
+              current: data.isCurrent(entries[index]),
               currentLabel: l10n.changelogCurrentVersion,
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _ChangelogPageData {
+  const _ChangelogPageData({
+    required this.entries,
+    required this.version,
+    required this.buildNumber,
+  });
+
+  final List<ChangelogEntry> entries;
+  final String version;
+  final String buildNumber;
+
+  bool isCurrent(ChangelogEntry entry) {
+    if (entry.version != version.trim()) return false;
+    if (entry.buildNumber case final buildNumber?) {
+      return buildNumber == this.buildNumber;
+    }
+    return !entries.any(
+      (candidate) =>
+          candidate.version == entry.version && candidate.buildNumber != null,
     );
   }
 }
@@ -112,7 +149,9 @@ class _VersionCard extends StatelessWidget {
           Row(
             children: [
               Text(
-                'v${entry.version}',
+                entry.buildNumber == null
+                    ? 'v${entry.version}'
+                    : 'v${entry.version} (${entry.buildNumber})',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),

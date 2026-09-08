@@ -20,7 +20,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: open-reading-deploy-web \
   --source /tmp/open-reading-web-RUN_ID-RUN_ATTEMPT \
-  --tag vX.Y.Z \
+  --tag vX.Y.Z[+BUILD] \
   --repository OWNER/REPOSITORY \
   --run-id RUN_ID \
   --run-attempt RUN_ATTEMPT
@@ -70,7 +70,7 @@ while (("$#" > 0)); do
   esac
 done
 
-[[ "$tag" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,63}$ ]] \
+[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\+[1-9][0-9]*)?$ ]] \
   || die "invalid release tag"
 [[ "$repository" =~ ^[0-9A-Za-z_.-]+/[0-9A-Za-z_.-]+$ ]] \
   || die "invalid repository"
@@ -213,9 +213,12 @@ import os
 from pathlib import Path
 
 payload = json.loads(Path(os.environ["VERSION_PATH"]).read_text(encoding="utf-8"))
-expected = os.environ["RELEASE_TAG"].removeprefix("v")
-if payload.get("version") != expected:
+identity = os.environ["RELEASE_TAG"].removeprefix("v")
+expected_version, separator, expected_build = identity.partition("+")
+if payload.get("version") != expected_version:
     raise SystemExit("version.json does not match the release tag")
+if separator and str(payload.get("build_number")) != expected_build:
+    raise SystemExit("version.json build_number does not match the release tag")
 PY
 
   chown -R root:root -- "$incoming_dir"
@@ -233,8 +236,12 @@ import os
 from pathlib import Path
 
 payload = json.loads(Path(os.environ["VERSION_PATH"]).read_text(encoding="utf-8"))
-if payload.get("version") != os.environ["RELEASE_TAG"].removeprefix("v"):
+identity = os.environ["RELEASE_TAG"].removeprefix("v")
+expected_version, separator, expected_build = identity.partition("+")
+if payload.get("version") != expected_version:
     raise SystemExit("release directory version does not match the release tag")
+if separator and str(payload.get("build_number")) != expected_build:
+    raise SystemExit("release directory build number does not match the release tag")
 PY
 
 temporary_link="${DEPLOY_ROOT}/.current-${run_id}-${run_attempt}-$$"

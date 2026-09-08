@@ -91,4 +91,63 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('allows the same version with distinct build numbers', () {
+    final source = jsonEncode({
+      'schemaVersion': 1,
+      'entries': [
+        {
+          'version': '9.1.0',
+          'buildNumber': '102',
+          'notes': {
+            'en': ['Newer build'],
+          },
+        },
+        {
+          'version': '9.1.0',
+          'buildNumber': '101',
+          'notes': {
+            'en': ['Older build'],
+          },
+        },
+        {
+          'version': '9.0.0',
+          'notes': {
+            'en': ['Historical release'],
+          },
+        },
+      ],
+    });
+
+    final entries = ChangelogService.parse(source, const Locale('en'));
+
+    expect(entries.map((entry) => entry.buildNumber), ['102', '101', null]);
+  });
+
+  test('rejects duplicate version and build number pairs', () {
+    final source = jsonEncode({
+      'schemaVersion': 1,
+      'entries': [
+        {
+          'version': '9.1.0',
+          'buildNumber': 102,
+          'notes': {
+            'en': ['First'],
+          },
+        },
+        {
+          'version': '9.1.0',
+          'buildNumber': '102',
+          'notes': {
+            'en': ['Duplicate'],
+          },
+        },
+      ],
+    });
+
+    expect(
+      () => ChangelogService.parse(source, const Locale('en')),
+      throwsFormatException,
+    );
+  });
 }

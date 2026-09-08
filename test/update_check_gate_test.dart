@@ -9,6 +9,47 @@ import 'package:xxread/widgets/update_check_gate.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets('same-version builds display fully and skip only one build', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({
+      'skipped_update_version': '2.6.7+260908001',
+    });
+    final service = _FakeUpdateCheckService(
+      UpdateCheckResult(
+        currentVersion: '2.6.7',
+        currentBuildNumber: '260907001',
+        latestRelease: AppRelease(
+          version: '2.6.7',
+          buildNumber: '260908002',
+          name: 'Update',
+          notes: 'Small fixes',
+          publishedAt: null,
+          releaseUrl: Uri.parse(
+            'https://github.com/miloquinn/open-reading/releases',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(_UpdateCheckTestApp(service: service));
+    await tester.tap(find.text('Check updates'));
+    await tester.pumpAndSettle();
+    expect(find.text('v2.6.7 (260907001)'), findsOneWidget);
+    expect(find.text('v2.6.7 (260908002)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Skip this version'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('skipped_update_version'), '2.6.7+260908002');
+    await tester.tap(find.text('Check updates'));
+    await tester.pumpAndSettle();
+    expect(find.text('A new version is available'), findsNothing);
+  });
+
   testWidgets('manual update check shows release notes and update action', (
     tester,
   ) async {

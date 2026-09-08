@@ -3,7 +3,7 @@
 The Flutter version in `pubspec.yaml` is the source of truth:
 
 ```yaml
-version: 2.6.7+260907001
+version: 2.6.7+260908001
 ```
 
 The part before `+` is the marketing version shown to users. The numeric part
@@ -39,10 +39,12 @@ do not reset the build to `1` after changing the marketing version, because
 Android version codes must remain newer than already installed packages.
 
 The repository workflow validates and passes the tag to the official-site
-deployment wrapper. The production wrapper installed on the server must also
-be updated to accept and validate `vX.Y.Z+BUILD` before a build-tagged release
-can be deployed. This repository change does not modify that separately
-installed production program.
+deployment wrapper. The installed wrapper and website release importer must
+both accept `vX.Y.Z+BUILD`, keep marketing version separate from build, and
+preserve older assets. The matching production changes were deployed before
+publishing build `260908001`; future server deployments must preserve this
+contract. The website release identity includes the package build number so
+same-version builds can coexist without replacing immutable downloads.
 
 Android split-per-ABI APKs have a package `versionCode` offset added by Flutter.
 The Android bridge exposes the unmodified release build separately: update
@@ -51,11 +53,11 @@ installation validation continues using the actual package versionCode. Old
 website metadata without a build-bearing tag is compared using its package
 build only, against the installed package build.
 
-The current website release importer also validates `version` against the
-whole tag suffix. Its manifest parser must be updated to separate version and
-build before using these tags in production; updating only the shell wrapper
-is insufficient. Neither the website repository nor production was changed
-by this client-side implementation.
+If the Android native release-build method is unavailable, the release build
+remains unknown instead of borrowing the ABI-offset package number. Update
+checks can still compare installed and remote package numbers when the
+website supplies an exact platform asset. GitHub-only metadata cannot prove
+a same-version upgrade without an installed release-build identity.
 
 Apple describes subsequent builds of the same version as potentially not
 requiring a full review, not as guaranteed review-free:

@@ -255,7 +255,7 @@ mapfile -t releases_by_age < <(
 for ((index = RETAIN_RELEASES; index < ${#releases_by_age[@]}; index++)); do
   old_release="${releases_by_age[$index]}"
   [[ "$old_release" == "$release_id" ]] && continue
-  [[ "$old_release" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,63}-[0-9]+-[0-9]+-[0-9a-f]{12}$ ]] \
+  [[ "$old_release" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]{0,63}-[0-9]+-[0-9]+-[0-9a-f]{12}$ ]] \
     || die "refusing to remove an unexpected release directory"
   rm -rf -- "${RELEASES_ROOT:?}/${old_release}"
 done

@@ -213,9 +213,10 @@ class UpdateCheckResult {
   final AppRelease latestRelease;
 
   bool get hasUpdate {
-    // Older website metadata identifies only the platform package build.
+    // Compare actual package builds when either release identity is unavailable.
     final comparePackageBuilds =
-        latestRelease.releaseBuildNumber == null &&
+        (latestRelease.releaseBuildNumber == null ||
+            (int.tryParse(currentBuildNumber ?? '') ?? 0) <= 0) &&
         currentPackageBuildNumber != null &&
         latestRelease.websiteAsset != null;
     return compareReleaseVersions(

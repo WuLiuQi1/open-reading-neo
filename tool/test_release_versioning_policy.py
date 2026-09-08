@@ -40,6 +40,18 @@ class ReleaseVersioningPolicyTest(unittest.TestCase):
         source = workflow_fragment('          repository = os.environ["PUBLIC_RELEASE_REPOSITORY"]', '          bundle_dir = Path("official-site-bundle")')
         self.run_guard(['python3', '-c', 'import os, re\nfrom pathlib import Path\n' + source])
 
+    def test_web_retention_recognizes_build_release_directories(self):
+        wrapper = (ROOT / 'tool/web/deploy_web_release.sh').read_text()
+        pattern = re.search(r'\[\[ "\$old_release" =~ (.+) \]\]', wrapper).group(1)
+        for name, accepted in [
+            ('v2.6.7-123-1-abcdef012345', True),
+            ('v2.6.7+260908001-123-1-abcdef012345', True),
+            ('../current', False), ('shared', False),
+        ]:
+            result = subprocess.run(['bash', '-c', '[[ "$DIRECTORY" =~ $PATTERN ]]'],
+                env={**os.environ, 'DIRECTORY': name, 'PATTERN': pattern})
+            self.assertEqual(result.returncode == 0, accepted, name)
+
     def run_guard(self, command):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, 'pubspec.yaml').write_text('version: 2.6.7+260907001\n')

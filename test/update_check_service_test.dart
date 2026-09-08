@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,11 @@ void main() {
         buildNumber: '14118',
         buildSignature: '',
       );
+      const channel = MethodChannel('com.niki.xxread/app_update');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (_) async => '14118');
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
       final dio = Dio();
       dio.interceptors.add(
         InterceptorsWrapper(
@@ -255,6 +261,33 @@ void main() {
         isTrue,
       );
       expect(website.displayVersion, '2.6.7 (260908001)');
+      expect(
+        UpdateCheckResult(
+          currentVersion: '2.6.7',
+          currentBuildNumber: '',
+          currentPackageBuildNumber: '260909001',
+          latestRelease: website,
+        ).hasUpdate,
+        isTrue,
+      );
+      expect(
+        UpdateCheckResult(
+          currentVersion: '2.6.7',
+          currentBuildNumber: '',
+          currentPackageBuildNumber: '260910001',
+          latestRelease: website,
+        ).hasUpdate,
+        isFalse,
+      );
+      expect(
+        UpdateCheckResult(
+          currentVersion: '2.6.7',
+          currentBuildNumber: '',
+          currentPackageBuildNumber: '260909001',
+          latestRelease: github,
+        ).hasUpdate,
+        isFalse,
+      );
     },
   );
 

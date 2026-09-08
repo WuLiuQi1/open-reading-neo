@@ -21,8 +21,10 @@ void main() {
       final catalogs = await Future.wait(locales.map(service.load));
       final versions = catalogs.first.map((entry) => entry.version).toList();
 
-      expect(versions, hasLength(54));
+      expect(versions, hasLength(55));
       expect(versions.first, '2.6.7');
+      expect(catalogs.first.first.identity, '2.6.7+260908001');
+      expect(catalogs.first[1].identity, '2.6.7+260907001');
       expect(
         versions,
         containsAll([
@@ -38,6 +40,10 @@ void main() {
       );
       for (final catalog in catalogs) {
         expect(catalog.map((entry) => entry.version), versions);
+        expect(
+          catalog.map((entry) => entry.identity),
+          catalogs.first.map((entry) => entry.identity),
+        );
         expect(catalog.every((entry) => entry.items.isNotEmpty), isTrue);
       }
     },

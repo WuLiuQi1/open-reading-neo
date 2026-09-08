@@ -40,11 +40,27 @@ void main() {
   );
 
   test(
-    'Android falls back to PackageInfo when the native method is absent',
+    'Android keeps the release build unknown when the native method is absent',
     () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
 
-      expect(await readAppReleaseBuildNumber(info), '260910001');
+      expect(await readAppReleaseBuildNumber(info), '');
+    },
+  );
+
+  test(
+    'Android keeps invalid or failed native release reads unknown',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      for (final value in ['0', '-1', 'not-a-build', null]) {
+        messenger.setMockMethodCallHandler(channel, (_) async => value);
+        expect(await readAppReleaseBuildNumber(info), '');
+      }
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => throw PlatformException(code: 'unavailable'),
+      );
+      expect(await readAppReleaseBuildNumber(info), '');
     },
   );
 

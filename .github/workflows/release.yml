@@ -1564,8 +1564,17 @@ jobs:
           metadata = json.loads(
               Path(os.environ["RELEASE_METADATA_PATH"]).read_text(encoding="utf-8")
           )
+          from urllib.parse import unquote, urlsplit
+
           expected_url = f"https://github.com/{repository}/releases/tag/{tag}"
-          if metadata.get("url") != expected_url:
+          actual_url = urlsplit(str(metadata.get("url") or ""))
+          if (
+              actual_url.scheme != "https"
+              or actual_url.netloc != "github.com"
+              or unquote(actual_url.path) != f"/{repository}/releases/tag/{tag}"
+              or actual_url.query
+              or actual_url.fragment
+          ):
               raise SystemExit("GitHub release URL does not match the release source")
           published_at = metadata.get("publishedAt")
           if not isinstance(published_at, str) or not published_at:

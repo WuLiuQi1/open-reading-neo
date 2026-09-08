@@ -52,6 +52,22 @@ class ReleaseVersioningPolicyTest(unittest.TestCase):
                 env={**os.environ, 'DIRECTORY': name, 'PATTERN': pattern})
             self.assertEqual(result.returncode == 0, accepted, name)
 
+    def test_github_release_url_accepts_encoded_build_separator(self):
+        source = workflow_fragment('          from urllib.parse import unquote, urlsplit', '          published_at = metadata.get("publishedAt")')
+        for suffix, accepted in [
+            ('v2.6.7+260908001', True), ('v2.6.7%2B260908001', True),
+            ('v2.6.7%2B260908002', False), ('v2.6.7+260908001?other=1', False),
+        ]:
+            namespace = {'repository': 'miloquinn/open-reading', 'tag': 'v2.6.7+260908001',
+                'metadata': {'url': 'https://github.com/miloquinn/open-reading/releases/tag/' + suffix}}
+            with self.subTest(suffix=suffix):
+                if accepted:
+                    exec(source, namespace)
+                    self.assertEqual(namespace['expected_url'], 'https://github.com/miloquinn/open-reading/releases/tag/v2.6.7+260908001')
+                else:
+                    with self.assertRaises(SystemExit):
+                        exec(source, namespace)
+
     def run_guard(self, command):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, 'pubspec.yaml').write_text('version: 2.6.7+260907001\n')

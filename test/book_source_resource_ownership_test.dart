@@ -1,7 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xxread/book_sources/services/book_download_cancellation.dart';
 import 'package:xxread/book_sources/services/book_source_change_service.dart';
 import 'package:xxread/book_sources/services/book_source_client.dart';
 import 'package:xxread/book_sources/services/book_source_shelf_service.dart';
+import 'package:xxread/book_sources/source_engine/scripting/source_script_contract.dart';
+import 'package:xxread/book_sources/source_engine/source_config.dart';
+import 'package:xxread/book_sources/source_engine/source_request.dart';
+import 'package:xxread/book_sources/source_engine/source_runtime.dart';
 
 void main() {
   group('BookSourceShelfService ownership', () {
@@ -99,6 +104,41 @@ void main() {
       expect(client.closeCount, 0);
     });
   });
+
+  test(
+    'a closed source runtime cannot lazily recreate its script engine',
+    () async {
+      final evaluator = _CloseTrackingEvaluator();
+      final runtime = SourceRuntime(
+        transport: _StaticSourceTransport(),
+        scriptEvaluator: evaluator,
+      );
+      final source = ReadingSourceConfig.fromJson({
+        'bookSourceName': 'Closed runtime',
+        'bookSourceUrl': 'https://closed.test',
+        'searchUrl': '<js>"/search"</js>',
+        'ruleSearch': {
+          'bookList': 'class.book',
+          'name': 'class.name@text',
+          'bookUrl': 'tag.a@href',
+        },
+      }).toRegisteredSource(enabled: true);
+
+      runtime.close();
+
+      await expectLater(
+        runtime.search(source, 'query'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('closed'),
+          ),
+        ),
+      );
+      expect(evaluator.disposeCount, 1);
+    },
+  );
 }
 
 class _CloseTrackingClient extends BookSourceClient {
@@ -126,4 +166,34 @@ class _CloseTrackingShelfService extends BookSourceShelfService {
     closeCount++;
     events?.add('shelf');
   }
+}
+
+class _CloseTrackingEvaluator implements SourceScriptEvaluator {
+  int disposeCount = 0;
+
+  @override
+  Object? evaluate(String script, SourceScriptContext context) => '/search';
+
+  @override
+  Future<Object?> evaluateAsync(
+    String script,
+    SourceScriptContext context,
+  ) async => evaluate(script, context);
+
+  @override
+  void dispose() {
+    disposeCount++;
+  }
+}
+
+class _StaticSourceTransport implements SourceTransport {
+  @override
+  Future<SourceResponse> send(
+    SourceRequestTemplate request, {
+    BookDownloadCancellation? cancellation,
+  }) async => SourceResponse(
+    body:
+        '<div class="book"><a href="/book/1"><span class="name">Book</span></a></div>',
+    finalUri: request.url,
+  );
 }

@@ -67,11 +67,18 @@ class SourceRuntimeScriptOwner {
     : _evaluator = evaluator;
 
   SourceScriptEvaluator? _evaluator;
+  bool _closed = false;
 
-  SourceScriptEvaluator get evaluator =>
-      _evaluator ??= QuickJsSourceScriptEvaluator();
+  SourceScriptEvaluator get evaluator {
+    if (_closed) {
+      throw StateError('The source runtime is closed.');
+    }
+    return _evaluator ??= QuickJsSourceScriptEvaluator();
+  }
 
   void close() {
+    if (_closed) return;
+    _closed = true;
     _evaluator?.dispose();
     _evaluator = null;
   }

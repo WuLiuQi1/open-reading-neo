@@ -14,23 +14,25 @@ void main() {
   setUp(() {
     evaluator = QuickJsSourceScriptEvaluator();
     source = ReadingSourceConfig.fromJson({
-      'bookSourceName': 'Legado contract fixture',
+      'bookSourceName': 'Reading Source contract fixture',
       'bookSourceUrl': 'https://books.test',
     });
   });
 
   tearDown(() => evaluator.dispose());
 
-  test('java get follows Legado chapter book rule and source precedence', () {
-    final context = SourceScriptContext(
-      source: source,
-      variables: const {'shared': 'rule', 'ruleOnly': 'rule-value'},
-      book: const {'name': 'Fixture book'},
-      chapter: const {'title': 'Fixture chapter'},
-    );
+  test(
+    'java get follows Reading Source chapter book rule and source precedence',
+    () {
+      final context = SourceScriptContext(
+        source: source,
+        variables: const {'shared': 'rule', 'ruleOnly': 'rule-value'},
+        book: const {'name': 'Fixture book'},
+        chapter: const {'title': 'Fixture chapter'},
+      );
 
-    expect(
-      evaluator.evaluate('''
+      expect(
+        evaluator.evaluate('''
         source.put('sourceOnly', 'source-value');
         source.put('shared', 'source');
         book.putVariable('bookOnly', 'book-value');
@@ -43,18 +45,19 @@ void main() {
           java.get('ruleOnly'), java.get('sourceOnly'), java.get('missing')
         ];
       ''', context),
-      [
-        'Fixture book',
-        'Fixture chapter',
-        'chapter',
-        'chapter-value',
-        'book-value',
-        'rule-value',
-        'source-value',
-        '',
-      ],
-    );
-  });
+        [
+          'Fixture book',
+          'Fixture chapter',
+          'chapter',
+          'chapter-value',
+          'book-value',
+          'rule-value',
+          'source-value',
+          '',
+        ],
+      );
+    },
+  );
 
   test('java put stores in the active entity and remains source scoped', () {
     final firstBook = <String, Object?>{
@@ -140,15 +143,18 @@ void main() {
     );
   });
 
-  test('java log returns the original value like Legado JsExtensions', () {
-    expect(
-      evaluator.evaluate(
-        "var payload = {name: 'comic', pages: [1, 2]}; java.log(payload) === payload && java.log('chapter')",
-        SourceScriptContext(source: source),
-      ),
-      'chapter',
-    );
-  });
+  test(
+    'java log returns the original value like Reading Source JsExtensions',
+    () {
+      expect(
+        evaluator.evaluate(
+          "var payload = {name: 'comic', pages: [1, 2]}; java.log(payload) === payload && java.log('chapter')",
+          SourceScriptContext(source: source),
+        ),
+        'chapter',
+      );
+    },
+  );
 
   test('rule data overrides older script state without losing other puts', () {
     evaluator.evaluate(
@@ -169,7 +175,7 @@ void main() {
   });
 
   test(
-    'java ajax accepts a Legado URL list and requests its first entry',
+    'java ajax accepts a Reading Source URL list and requests its first entry',
     () async {
       SourceScriptNetworkRequest? captured;
       final value = await evaluator.evaluateAsync(
@@ -191,9 +197,11 @@ void main() {
     },
   );
 
-  test('deprecated Legado AES helpers share the symmetric crypto engine', () {
-    expect(
-      evaluator.evaluate('''
+  test(
+    'deprecated Reading Source AES helpers share the symmetric crypto engine',
+    () {
+      expect(
+        evaluator.evaluate('''
         var key = '1234567890abcdef';
         var iv = 'abcdef1234567890';
         var encrypted = java.aesEncodeToBase64String(
@@ -203,9 +211,10 @@ void main() {
           encrypted, key, 'AES/CBC/PKCS5Padding', iv
         ));
       ''', SourceScriptContext(source: source)),
-      'comic-page',
-    );
-  });
+        'comic-page',
+      );
+    },
+  );
 
   test(
     'runtime chapter templates retain variables written to the book',

@@ -17,6 +17,7 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class SourceWebViewBridge(
     private val context: Context,
@@ -28,12 +29,32 @@ class SourceWebViewBridge(
 
     private val handler = Handler(Looper.getMainLooper())
     private val channel = MethodChannel(messenger, CHANNEL)
-    private val activeViews = mutableSetOf<WebView>()
+    private val activeRequests = mutableMapOf<String, () -> Unit>()
 
     init {
         channel.setMethodCallHandler { call, result ->
+            if (call.method == "cancel") {
+                val requestId = call.argument<String>("requestId")
+                val cancel = requestId?.let(activeRequests::get)
+                if (cancel == null) {
+                    result.success(false)
+                } else {
+                    cancel()
+                    result.success(true)
+                }
+                return@setMethodCallHandler
+            }
             if (call.method != "load" && call.method != "loadBytes") {
                 result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val requestId = call.argument<String>("requestId")
+            if (requestId.isNullOrBlank()) {
+                result.error("invalid_request", "Background browser request ID is empty.", null)
+                return@setMethodCallHandler
+            }
+            if (activeRequests.containsKey(requestId)) {
+                result.error("duplicate_request", "Background browser request ID is already active.", null)
                 return@setMethodCallHandler
             }
             val url = call.argument<String>("url")
@@ -50,36 +71,49 @@ class SourceWebViewBridge(
             if (call.method == "loadBytes") {
                 val maxBytes = (call.argument<Number>("maxBytes")?.toInt() ?: 8 * 1024 * 1024)
                     .coerceIn(1, 24 * 1024 * 1024)
-                loadBytes(url, headers, timeoutMs.toInt(), maxBytes, result)
+                loadBytes(requestId, url, headers, timeoutMs.toInt(), maxBytes, result)
                 return@setMethodCallHandler
             }
             val body = call.argument<String>("body") ?: ""
             val webJs = call.argument<String>("webJs")
             val html = call.argument<String>("html")
-            load(url, method, headers, body, webJs, html, timeoutMs, result)
+            load(requestId, url, method, headers, body, webJs, html, timeoutMs, result)
         }
     }
 
     private fun loadBytes(
+        requestId: String,
         url: String,
         headers: Map<String, String>,
         timeoutMs: Int,
         maxBytes: Int,
         result: MethodChannel.Result,
     ) {
+        val completed = AtomicBoolean(false)
+        val connection = AtomicReference<HttpURLConnection?>()
+
+        fun cancel() {
+            if (!completed.compareAndSet(false, true)) return
+            connection.get()?.disconnect()
+            activeRequests.remove(requestId)
+            result.error("cancelled", "Platform byte request was cancelled.", null)
+        }
+
+        activeRequests[requestId] = ::cancel
         Thread {
-            var connection: HttpURLConnection? = null
             try {
-                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                val openedConnection = (URL(url).openConnection() as HttpURLConnection).apply {
                     instanceFollowRedirects = false
                     connectTimeout = timeoutMs
                     readTimeout = timeoutMs
                     requestMethod = "GET"
                     headers.forEach { (name, value) -> setRequestProperty(name, value) }
                 }
-                val status = connection.responseCode
-                val location = connection.getHeaderField("Location")
-                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                connection.set(openedConnection)
+                if (completed.get()) return@Thread
+                val status = openedConnection.responseCode
+                val location = openedConnection.getHeaderField("Location")
+                val stream = if (status in 200..299) openedConnection.inputStream else openedConnection.errorStream
                 val output = ByteArrayOutputStream()
                 if (stream != null) {
                     stream.use { input ->
@@ -99,19 +133,26 @@ class SourceWebViewBridge(
                     "bytes" to output.toByteArray(),
                     "location" to location,
                 )
-                handler.post { result.success(payload) }
+                handler.post {
+                    if (!completed.compareAndSet(false, true)) return@post
+                    activeRequests.remove(requestId)
+                    result.success(payload)
+                }
             } catch (error: Exception) {
                 handler.post {
+                    if (!completed.compareAndSet(false, true)) return@post
+                    activeRequests.remove(requestId)
                     result.error("byte_load_failed", error.message ?: "Platform byte request failed.", null)
                 }
             } finally {
-                connection?.disconnect()
+                connection.getAndSet(null)?.disconnect()
             }
         }.start()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun load(
+        requestId: String,
         url: String,
         method: String,
         headers: Map<String, String>,
@@ -125,7 +166,9 @@ class SourceWebViewBridge(
         val webView = WebView(context)
         var navigationGeneration = 0
         var pendingCapture: Runnable? = null
-        activeViews.add(webView)
+        var pendingScriptCapture: Runnable? = null
+        var timeoutCallback: Runnable? = null
+        var destroyed = false
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -141,17 +184,21 @@ class SourceWebViewBridge(
         }
 
         fun cleanup() {
-            handler.post {
-                pendingCapture?.let(handler::removeCallbacks)
-                pendingCapture = null
-                activeViews.remove(webView)
-                webView.stopLoading()
-                webView.webViewClient = WebViewClient()
-                webView.loadUrl("about:blank")
-                webView.clearHistory()
-                webView.removeAllViews()
-                webView.destroy()
-            }
+            if (destroyed) return
+            destroyed = true
+            pendingCapture?.let(handler::removeCallbacks)
+            pendingCapture = null
+            pendingScriptCapture?.let(handler::removeCallbacks)
+            pendingScriptCapture = null
+            timeoutCallback?.let(handler::removeCallbacks)
+            timeoutCallback = null
+            activeRequests.remove(requestId)
+            webView.stopLoading()
+            webView.webViewClient = WebViewClient()
+            webView.loadUrl("about:blank")
+            webView.clearHistory()
+            webView.removeAllViews()
+            webView.destroy()
         }
 
         fun fail(code: String, message: String) {
@@ -187,11 +234,17 @@ class SourceWebViewBridge(
             }
         }
 
+        activeRequests[requestId] = {
+            fail("cancelled", "Background browser request was cancelled.")
+        }
+
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, startedUrl: String, favicon: android.graphics.Bitmap?) {
                 navigationGeneration++
                 pendingCapture?.let(handler::removeCallbacks)
                 pendingCapture = null
+                pendingScriptCapture?.let(handler::removeCallbacks)
+                pendingScriptCapture = null
             }
 
             override fun onPageFinished(view: WebView, finishedUrl: String) {
@@ -199,6 +252,7 @@ class SourceWebViewBridge(
                 val finishedGeneration = navigationGeneration
                 pendingCapture?.let(handler::removeCallbacks)
                 pendingCapture = Runnable {
+                    pendingCapture = null
                     if (completed.get()) return@Runnable
                     if (finishedGeneration != navigationGeneration || view.progress < 100) {
                         return@Runnable
@@ -207,7 +261,12 @@ class SourceWebViewBridge(
                         capture()
                     } else {
                         view.evaluateJavascript(webJs) {
-                            handler.postDelayed({ capture() }, 250L)
+                            if (completed.get()) return@evaluateJavascript
+                            pendingScriptCapture = Runnable {
+                                pendingScriptCapture = null
+                                capture()
+                            }
+                            handler.postDelayed(pendingScriptCapture!!, 250L)
                         }
                     }
                 }
@@ -225,9 +284,10 @@ class SourceWebViewBridge(
             }
         }
 
-        handler.postDelayed({
+        timeoutCallback = Runnable {
             fail("timeout", "Background browser timed out while loading this source.")
-        }, timeoutMs)
+        }
+        handler.postDelayed(timeoutCallback!!, timeoutMs)
 
         val cookie = headers.entries.firstOrNull { it.key.equals("cookie", true) }?.value
         if (!cookie.isNullOrBlank()) {
@@ -248,11 +308,7 @@ class SourceWebViewBridge(
 
     fun dispose() {
         channel.setMethodCallHandler(null)
-        val views = activeViews.toList()
-        activeViews.clear()
-        for (view in views) {
-            view.stopLoading()
-            view.destroy()
-        }
+        activeRequests.values.toList().forEach { it() }
+        activeRequests.clear()
     }
 }

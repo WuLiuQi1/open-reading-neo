@@ -111,6 +111,74 @@ void main() {
     await first;
   });
 
+  test('disposal cancels work and ignores late results and progress', () async {
+    final service = _HealthService();
+    final coordinator = BookSourceMaintenanceCoordinator(service: service);
+    var notifications = 0;
+    coordinator.addListener(() => notifications++);
+    final source = _source('late');
+    final run = coordinator.start([source]);
+    final request = service.requests.single;
+    final stateBeforeDisposal = coordinator.state;
+    coordinator.dispose();
+
+    expect(request.isCancelled?.call(), isTrue);
+    request.completeItem(_checked(source));
+    request.onProgress?.call(1, 1);
+    request.completer.complete([_checked(source)]);
+    await run;
+
+    expect(notifications, 1);
+    expect(coordinator.state, same(stateBeforeDisposal));
+  });
+
+  for (final retry in [false, true]) {
+    test(
+      '${retry ? 'retry' : 'resume'} reports a registry read failure without losing results',
+      () async {
+        final service = _HealthService();
+        final registry = _DelayedRegistry();
+        final coordinator = BookSourceMaintenanceCoordinator(
+          service: service,
+          registry: registry,
+        );
+        addTearDown(coordinator.dispose);
+        final source = _source('source');
+        final first = coordinator.start([source]);
+        final request = service.requests.single;
+        final checked = _checked(
+          source,
+          failed: {SourceHealthCapability.content},
+        );
+        if (retry) {
+          request.completeItem(checked);
+        } else {
+          coordinator.cancel();
+        }
+        request.completer.complete(retry ? [checked] : const []);
+        await first;
+
+        final continuation = retry
+            ? coordinator.retryIssues()
+            : coordinator.resume();
+        final expectation = expectLater(continuation, completes);
+        final error = StateError('Registry is unavailable');
+        registry.loadCompleter.completeError(error);
+        await expectation;
+
+        expect(coordinator.state.status, BookSourceMaintenanceStatus.failed);
+        expect(coordinator.state.failure, same(error));
+        expect(service.requests, hasLength(1));
+        if (retry) {
+          expect(coordinator.state.result!.needsAttention.single.id, source.id);
+        } else {
+          expect(coordinator.state.remainingSources.single.id, source.id);
+          expect(coordinator.state.canResume, isTrue);
+        }
+      },
+    );
+  }
+
   test(
     'failure preserves completed items and leaves the rest resumable',
     () async {

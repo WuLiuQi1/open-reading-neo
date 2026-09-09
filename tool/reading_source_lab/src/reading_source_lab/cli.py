@@ -9,7 +9,7 @@ from .audit import audit_files, render_json, render_markdown
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit reading-source JSON offline.")
-    parser.add_argument("paths", nargs="+", help="JSON files to parse")
+    parser.add_argument("paths", nargs="+", help="JSON files or directories to inventory recursively")
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--output", help="write the report to a file instead of stdout")
     args = parser.parse_args(argv)

@@ -137,10 +137,17 @@ class BookSourceManagementSourceCard extends StatelessWidget {
         decoration: _cardDecoration(palette.card, palette.border, 16),
         child: Row(
           children: [
-            if (selectionMode)
-              Checkbox(value: selected, onChanged: (_) => onToggleSelection())
-            else
-              _SourceIcon(source: source, size: 40),
+            SizedBox.square(
+              dimension: 40,
+              child: selectionMode
+                  ? Center(
+                      child: Checkbox(
+                        value: selected,
+                        onChanged: (_) => onToggleSelection(),
+                      ),
+                    )
+                  : _SourceIcon(source: source, size: 40),
+            ),
             const SizedBox(width: 12),
             Expanded(child: _SourceSummary(source: source)),
             const SizedBox(width: 4),

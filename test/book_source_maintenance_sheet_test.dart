@@ -227,6 +227,21 @@ void main() {
       await tester.tap(find.byKey(const Key('bookSourcesToolButton')));
       await tester.pumpAndSettle();
       expect(find.text('Source maintenance 0/1'), findsOneWidget);
+      final addAction = find.byKey(const Key('bookSourcesAddButton'));
+      expect(
+        tester.getTopLeft(find.byIcon(Icons.monitor_heart_rounded)).dx,
+        tester.getTopLeft(find.byIcon(Icons.add_link_rounded)).dx,
+        reason: 'Maintenance uses the same icon column as the other actions.',
+      );
+      expect(
+        tester.getTopLeft(find.text('Source maintenance 0/1')).dx,
+        tester
+            .getTopLeft(
+              find.descendant(of: addAction, matching: find.byType(Text)),
+            )
+            .dx,
+        reason: 'Live progress must not introduce a nested menu row.',
+      );
       service.completer.complete(const []);
       await tester.pump();
       await tester.pumpWidget(const SizedBox.shrink());

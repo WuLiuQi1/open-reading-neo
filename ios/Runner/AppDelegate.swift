@@ -57,7 +57,11 @@ final class AuthCallbackBridge {
   }
 
   override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge {
-    readerImmersiveEnabled ? .all : []
+    // Keep the Home Indicator visually hidden in reader modes, but let iOS
+    // claim edge gestures immediately. Deferring every edge can deliver the
+    // beginning of a bottom app-switcher swipe to Flutter's page-turn views,
+    // which may settle on an adjacent page when the system takes over.
+    []
   }
 
   @objc func setReaderImmersiveEnabled(_ enabled: Bool) {

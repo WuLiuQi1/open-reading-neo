@@ -6,6 +6,7 @@ import 'package:xxread/book_sources/source_engine/source_health_checker.dart';
 import 'package:xxread/book_sources/source_engine/source_request.dart';
 import 'package:xxread/book_sources/source_engine/source_runtime.dart';
 import 'package:xxread/book_sources/services/book_download_cancellation.dart';
+import 'package:xxread/book_sources/source_engine/scripting/source_script_contract.dart';
 
 void main() {
   group('SourceHealthChecker', () {
@@ -137,6 +138,161 @@ void main() {
       expect(result.timedOut, isTrue);
       expect(result.healthy, isFalse);
       expect(result.respondTimeMs, isNull);
+    });
+
+    test(
+      'timeout cancels the active request and blocks late continuation',
+      () async {
+        final transport = _LateResponseTransport();
+        final source = _fixtureSource().toRegisteredSource(enabled: true);
+        final checker = SourceHealthChecker(
+          timeout: const Duration(milliseconds: 20),
+          transport: transport,
+        );
+
+        final result = await checker.check(source);
+        transport.firstResponse.complete(
+          SourceResponse(
+            body: '''
+            <div class="book">
+              <a href="/book/1"><span class="name">剑来</span></a>
+            </div>
+          ''',
+            finalUri: transport.requests.single.url,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(result.timedOut, isTrue);
+        expect(transport.cancellation, isNotNull);
+        expect(transport.cancellation!.isCancelled, isTrue);
+        expect(
+          transport.requests,
+          hasLength(1),
+          reason:
+              'a late search response must not start discovery or detail work',
+        );
+      },
+    );
+
+    test('health check samples content without walking later TOC pages', () async {
+      final config = ReadingSourceConfig.fromJson({
+        ..._fixtureSource().raw,
+        'ruleToc': {
+          ..._fixtureSource().rule('ruleToc'),
+          'nextTocUrl': 'a.next@href',
+        },
+        'ruleContent': {'content': '@js:chapter.nextChapterUrl'},
+      });
+      final transport = _FakeTransport({
+        'https://books.test/search?q=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9&page=1':
+            '<div class="book"><a href="/book/1"><span class="name">剑来</span></a></div>',
+        'https://books.test/explore?page=1':
+            '<div class="book"><a href="/book/2"><span class="name">另一本书</span></a></div>',
+        'https://books.test/book/1':
+            '<h1>剑来</h1><a class="toc" href="/book/1/toc">目录</a>',
+        'https://books.test/book/1/toc':
+            '<ul id="chapters">'
+            '<li><a href="/chapter/1">第一章</a></li>'
+            '<li><a href="/chapter/1">第一章（置顶重复）</a></li>'
+            '<li><a href="/chapter/2">第二章</a></li>'
+            '</ul>'
+            '<a class="next" href="/book/1/toc?page=2">下一页</a>',
+        'https://books.test/chapter/1':
+            '<article id="content"><p>正文</p></article>',
+      });
+
+      final evaluator = _NextChapterEvaluator();
+      final sampledRuntime = SourceRuntime(
+        transport: transport,
+        scriptEvaluator: evaluator,
+      );
+      addTearDown(sampledRuntime.close);
+      final result = await const SourceHealthChecker().check(
+        config.toRegisteredSource(enabled: true),
+        runtime: sampledRuntime,
+      );
+
+      expect(result.failed, isEmpty);
+      expect(evaluator.nextChapterUrl, 'https://books.test/chapter/2');
+      expect(
+        transport.requests.map((request) => request.url.toString()),
+        isNot(contains('https://books.test/book/1/toc?page=2')),
+      );
+      expect(
+        transport.requests.map((request) => request.url.toString()),
+        isNot(contains('https://books.test/chapter/2')),
+      );
+
+      final fullTransport = _FakeTransport({
+        'https://books.test/book/1':
+            '<h1>剑来</h1><a class="toc" href="/book/1/toc">目录</a>',
+        'https://books.test/book/1/toc':
+            '<ul id="chapters">'
+            '<li><a href="/chapter/1">第一章</a></li>'
+            '<li><a href="/chapter/1">第一章（置顶重复）</a></li>'
+            '<li><a href="/chapter/2">第二章</a></li>'
+            '</ul>'
+            '<a class="next" href="/book/1/toc?page=2">下一页</a>',
+        'https://books.test/book/1/toc?page=2':
+            '<ul id="chapters"><li><a href="/chapter/3">第三章</a></li></ul>',
+      });
+      final fullRuntime = SourceRuntime(transport: fullTransport);
+      addTearDown(fullRuntime.close);
+      final chapters = await fullRuntime.getChapters(
+        config.toRegisteredSource(enabled: true),
+        'https://books.test/book/1',
+      );
+      expect(chapters, hasLength(3));
+      expect(
+        fullTransport.requests.map((request) => request.url.toString()),
+        contains('https://books.test/book/1/toc?page=2'),
+      );
+    });
+
+    test('catalog sample preserves reverse-order source semantics', () async {
+      final config = ReadingSourceConfig.fromJson({
+        ..._fixtureSource().raw,
+        'ruleToc': {
+          ..._fixtureSource().rule('ruleToc'),
+          'chapterList': '-#chapters li',
+          'nextTocUrl': 'a.next@href',
+        },
+      });
+      final transport = _FakeTransport({
+        'https://books.test/book/1':
+            '<h1>剑来</h1><a class="toc" href="/book/1/toc">目录</a>',
+        'https://books.test/book/1/toc':
+            '<ul id="chapters">'
+            '<li><a href="/chapter/4">第四章</a></li>'
+            '<li><a href="/chapter/3">第三章</a></li>'
+            '</ul>'
+            '<a class="next" href="/book/1/toc?page=2">下一页</a>',
+        'https://books.test/book/1/toc?page=2':
+            '<ul id="chapters">'
+            '<li><a href="/chapter/2">第二章</a></li>'
+            '<li><a href="/chapter/1">第一章</a></li>'
+            '</ul>',
+      });
+      final runtime = SourceRuntime(transport: transport);
+      addTearDown(runtime.close);
+
+      final chapters = await runtime.getChapters(
+        config.toRegisteredSource(enabled: true),
+        'https://books.test/book/1',
+        maxChapters: 2,
+      );
+
+      expect(chapters.map((chapter) => chapter.title), [
+        '第一章',
+        '第二章',
+        '第三章',
+        '第四章',
+      ]);
+      expect(
+        transport.requests.map((request) => request.url.toString()),
+        contains('https://books.test/book/1/toc?page=2'),
+      );
     });
   });
 
@@ -282,17 +438,53 @@ class _FakeTransport implements SourceTransport {
   _FakeTransport(this.responses);
 
   final Map<String, String> responses;
+  final requests = <SourceRequestTemplate>[];
 
   @override
   Future<SourceResponse> send(
     SourceRequestTemplate request, {
     BookDownloadCancellation? cancellation,
   }) async {
+    requests.add(request);
     final body = responses[request.url.toString()];
     if (body == null) {
       throw StateError('Missing fake response for ${request.url}');
     }
     return SourceResponse(body: body, finalUri: request.url);
+  }
+}
+
+class _NextChapterEvaluator implements SourceScriptEvaluator {
+  String? nextChapterUrl;
+
+  @override
+  Object? evaluate(String script, SourceScriptContext context) =>
+      nextChapterUrl = context.chapter['nextChapterUrl'] as String?;
+
+  @override
+  Future<Object?> evaluateAsync(
+    String script,
+    SourceScriptContext context,
+  ) async => evaluate(script, context);
+
+  @override
+  void dispose() {}
+}
+
+class _LateResponseTransport implements SourceTransport {
+  final firstResponse = Completer<SourceResponse>();
+  final requests = <SourceRequestTemplate>[];
+  BookDownloadCancellation? cancellation;
+
+  @override
+  Future<SourceResponse> send(
+    SourceRequestTemplate request, {
+    BookDownloadCancellation? cancellation,
+  }) {
+    requests.add(request);
+    this.cancellation ??= cancellation;
+    if (requests.length == 1) return firstResponse.future;
+    return Completer<SourceResponse>().future;
   }
 }
 

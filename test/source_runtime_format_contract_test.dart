@@ -10,7 +10,7 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
-    'strips the Legado reverse marker after merging catalog pages',
+    'strips the Reading Source reverse marker after merging catalog pages',
     () async {
       final transport = _ContractTransport({
         'https://books.test/toc/1': _response('''
@@ -59,26 +59,29 @@ void main() {
     },
   );
 
-  test('strips the Legado plus marker without reversing chapters', () async {
-    final runtime = SourceRuntime(
-      transport: _ContractTransport({
-        'https://books.test/toc': _response('''
+  test(
+    'strips the Reading Source plus marker without reversing chapters',
+    () async {
+      final runtime = SourceRuntime(
+        transport: _ContractTransport({
+          'https://books.test/toc': _response('''
           <ul class="chapter__list-box">
             <li><a href="/chapter/1">第一话</a></li>
             <li><a href="/chapter/2">第二话</a></li>
           </ul>
         ''', 'https://books.test/toc'),
-      }),
-    );
-    addTearDown(runtime.close);
+        }),
+      );
+      addTearDown(runtime.close);
 
-    final chapters = await runtime.getChapters(
-      _source(chapterList: '+class.chapter__list-box@tag.li'),
-      'https://books.test/toc',
-    );
+      final chapters = await runtime.getChapters(
+        _source(chapterList: '+class.chapter__list-box@tag.li'),
+        'https://books.test/toc',
+      );
 
-    expect(chapters.map((chapter) => chapter.title), ['第一话', '第二话']);
-  });
+      expect(chapters.map((chapter) => chapter.title), ['第一话', '第二话']);
+    },
+  );
 
   test(
     'treats a current-page option plus one sibling as a fixed list',
@@ -461,7 +464,7 @@ RegisteredBookSource _source({
   String replaceRegex = '',
   String webJs = '',
 }) => ReadingSourceConfig.fromJson({
-  'bookSourceName': 'Legado contract test',
+  'bookSourceName': 'Reading Source contract test',
   'bookSourceUrl': 'https://books.test',
   'ruleToc': {
     'chapterList': chapterList,

@@ -7,6 +7,7 @@ import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/protocol/reading_source/reading_source_backend.dart';
 import 'package:xxread/book_sources/caching/book_source_chapter_cache.dart';
+import 'package:xxread/book_sources/services/book_download_cancellation.dart';
 import 'package:xxread/book_sources/source_engine/source_runtime.dart';
 
 void main() {
@@ -188,6 +189,8 @@ class _CachingRuntime extends SourceRuntime {
     RegisteredBookSource registered,
     String bookId, {
     Map<String, String> sourceVariables = const {},
+    int? maxChapters,
+    BookDownloadCancellation? cancellation,
   }) async {
     catalogLoads++;
     return const [BookSourceChapter(id: 'chapter', title: 'Chapter', order: 1)];
@@ -199,6 +202,7 @@ class _CachingRuntime extends SourceRuntime {
     required String bookId,
     required String chapterId,
     Map<String, String> sourceVariables = const {},
+    BookDownloadCancellation? cancellation,
   }) async {
     contentLoads++;
     return const BookSourceChapterContent(

@@ -172,6 +172,156 @@ void main() {
       },
     );
 
+    test('passes cancellation to an explicit WebView request', () async {
+      final browser = _PendingWebViewLoader();
+      final transport = SourceHttpTransport(
+        webViewLoader: browser,
+        networkPolicy: BookSourceNetworkPolicy(
+          lookup: (_) async => [InternetAddress('93.184.216.34')],
+        ),
+      );
+      addTearDown(transport.close);
+      final cancellation = BookDownloadCancellation();
+
+      final request = transport.send(
+        SourceRequestTemplate.parse(
+          'https://books.test/channel,{"webView":true}',
+          baseUri: Uri.parse('https://books.test'),
+        ),
+        cancellation: cancellation,
+      );
+      await browser.started.future;
+
+      expect(browser.cancellation, same(cancellation));
+      cancellation.cancel();
+      await expectLater(
+        request,
+        throwsA(isA<BookDownloadCancelledException>()),
+      );
+    });
+
+    test('passes cancellation to the Android browser fallback', () async {
+      final pinned = Dio()..httpClientAdapter = _ThrowingAdapter();
+      final system = Dio()..httpClientAdapter = _ThrowingAdapter();
+      final browser = _PendingWebViewLoader();
+      final transport = SourceHttpTransport(
+        dio: pinned,
+        systemDio: system,
+        webViewLoader: browser,
+        networkPolicy: BookSourceNetworkPolicy(
+          lookup: (_) async => [InternetAddress('93.184.216.34')],
+        ),
+      );
+      addTearDown(transport.close);
+      final cancellation = BookDownloadCancellation();
+
+      final request = transport.send(
+        SourceRequestTemplate.parse(
+          'https://books.test/channel',
+          baseUri: Uri.parse('https://books.test'),
+        ),
+        cancellation: cancellation,
+      );
+      await browser.started.future;
+
+      expect(browser.cancellation, same(cancellation));
+      cancellation.cancel();
+      await expectLater(
+        request,
+        throwsA(isA<BookDownloadCancelledException>()),
+      );
+    });
+
+    test(
+      'cancels an explicit WebView request during final URL validation',
+      () async {
+        final finalValidationStarted = Completer<void>();
+        final releaseFinalValidation = Completer<void>();
+        final finalUri = Uri.parse('https://final.books.test/channel');
+        final browser = _RedirectingWebViewLoader(finalUri);
+        final transport = SourceHttpTransport(
+          webViewLoader: browser,
+          networkPolicy: BookSourceNetworkPolicy(
+            lookup: (host) async {
+              if (host == finalUri.host) {
+                finalValidationStarted.complete();
+                await releaseFinalValidation.future;
+              }
+              return [InternetAddress('93.184.216.34')];
+            },
+          ),
+        );
+        addTearDown(transport.close);
+        final cancellation = BookDownloadCancellation();
+
+        final request = transport.send(
+          SourceRequestTemplate.parse(
+            'https://books.test/channel,{"webView":true}',
+            baseUri: Uri.parse('https://books.test'),
+            cookieJarKey: 'source-1',
+          ),
+          cancellation: cancellation,
+        );
+        await finalValidationStarted.future;
+
+        cancellation.cancel();
+        releaseFinalValidation.complete();
+
+        await expectLater(
+          request,
+          throwsA(isA<BookDownloadCancelledException>()),
+        );
+        expect(transport.scriptCookieHeader('source-1', finalUri), isEmpty);
+      },
+    );
+
+    test(
+      'cancels the Android browser fallback during final URL validation',
+      () async {
+        final pinned = Dio()..httpClientAdapter = _ThrowingAdapter();
+        final system = Dio()..httpClientAdapter = _ThrowingAdapter();
+        final finalValidationStarted = Completer<void>();
+        final releaseFinalValidation = Completer<void>();
+        final finalUri = Uri.parse('https://final.books.test/channel');
+        final browser = _RedirectingWebViewLoader(finalUri);
+        final transport = SourceHttpTransport(
+          dio: pinned,
+          systemDio: system,
+          webViewLoader: browser,
+          networkPolicy: BookSourceNetworkPolicy(
+            lookup: (host) async {
+              if (host == finalUri.host) {
+                finalValidationStarted.complete();
+                await releaseFinalValidation.future;
+              }
+              return [InternetAddress('93.184.216.34')];
+            },
+          ),
+        );
+        addTearDown(transport.close);
+        final cancellation = BookDownloadCancellation();
+
+        final request = transport.send(
+          SourceRequestTemplate.parse(
+            'https://books.test/channel',
+            baseUri: Uri.parse('https://books.test'),
+            cookieJarKey: 'source-1',
+          ),
+          cancellation: cancellation,
+        );
+        await finalValidationStarted.future;
+
+        cancellation.cancel();
+        releaseFinalValidation.complete();
+
+        await expectLater(
+          request,
+          throwsA(isA<BookDownloadCancelledException>()),
+        );
+        expect(transport.scriptCookieHeader('source-1', finalUri), isEmpty);
+      },
+    );
+
     test('does not replay POST after HTTP 400', () async {
       final pinned = Dio()..httpClientAdapter = _SequenceAdapter([400]);
       final system = Dio()
@@ -641,6 +791,7 @@ class _FakeWebViewLoader implements SourceWebViewLoaderPort {
     required Uri url,
     required Map<String, String> headers,
     required int maxBytes,
+    BookDownloadCancellation? cancellation,
   }) async => SourcePlatformBytesResult(
     statusCode: HttpStatus.ok,
     bytes: Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]),
@@ -654,6 +805,7 @@ class _FakeWebViewLoader implements SourceWebViewLoaderPort {
     String? body,
     String? webJs,
     String? html,
+    BookDownloadCancellation? cancellation,
   }) async {
     requests++;
     return SourceWebViewResult(
@@ -662,6 +814,65 @@ class _FakeWebViewLoader implements SourceWebViewLoaderPort {
       cookieHeader: 'sid=browser',
     );
   }
+}
+
+class _PendingWebViewLoader implements SourceWebViewLoaderPort {
+  final Completer<void> started = Completer<void>();
+  BookDownloadCancellation? cancellation;
+
+  @override
+  Future<SourcePlatformBytesResult> loadBytes({
+    required Uri url,
+    required Map<String, String> headers,
+    required int maxBytes,
+    BookDownloadCancellation? cancellation,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<SourceWebViewResult> load({
+    required Uri url,
+    required String method,
+    required Map<String, String> headers,
+    String? body,
+    String? webJs,
+    String? html,
+    BookDownloadCancellation? cancellation,
+  }) async {
+    this.cancellation = cancellation;
+    started.complete();
+    await cancellation!.whenCancelled;
+    cancellation.throwIfCancelled();
+    throw StateError('unreachable');
+  }
+}
+
+class _RedirectingWebViewLoader implements SourceWebViewLoaderPort {
+  _RedirectingWebViewLoader(this.finalUri);
+
+  final Uri finalUri;
+
+  @override
+  Future<SourcePlatformBytesResult> loadBytes({
+    required Uri url,
+    required Map<String, String> headers,
+    required int maxBytes,
+    BookDownloadCancellation? cancellation,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<SourceWebViewResult> load({
+    required Uri url,
+    required String method,
+    required Map<String, String> headers,
+    String? body,
+    String? webJs,
+    String? html,
+    BookDownloadCancellation? cancellation,
+  }) async => SourceWebViewResult(
+    body: '<html><body>redirected</body></html>',
+    finalUri: finalUri,
+    cookieHeader: 'late=should-not-be-stored',
+  );
 }
 
 class _ThrowingAdapter implements HttpClientAdapter {

@@ -333,7 +333,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bookSourcesDetectedOrsp => '検出: ORSP ソース';
 
   @override
-  String get bookSourcesDetectedAdditional => '検出: Legado';
+  String get bookSourcesDetectedAdditional => '検出: 汎用書籍ソース';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP ソース';
@@ -434,14 +434,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bookSourcesMaintenanceTitle => '書籍ソースの整理';
 
   @override
-  String get bookSourcesMaintenanceSubtitle => '重複を整理してから、必要に応じて利用可能か確認します';
+  String get bookSourcesMaintenanceSubtitle => '重複を整理し、書籍ソースの動作を確認';
 
   @override
   String get bookSourcesMaintenanceHealthTitle => 'ソースのヘルスチェック';
 
   @override
-  String get bookSourcesMaintenanceHealthSubtitle =>
-      '検索、詳細、目次、本文をオンラインで確認します。時間がかかる場合があります';
+  String get bookSourcesMaintenanceHealthSubtitle => '検索と読書機能を検査し、最近の正常な結果を再利用';
 
   @override
   String get bookSourcesMaintenanceHealthRunning => 'ヘルスチェック実行中';
@@ -450,8 +449,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bookSourcesMaintenanceDedupeTitle => '重複項目の整理';
 
   @override
-  String get bookSourcesMaintenanceDedupeSubtitle =>
-      'ソースサイトへ接続せず、同一または重複の可能性がある項目を端末内で検索します';
+  String get bookSourcesMaintenanceDedupeSubtitle => '通信せずに端末内で重複を比較';
 
   @override
   String get bookSourcesMaintenanceReviewTitle => '前回のチェック結果';
@@ -462,8 +460,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get bookSourcesMaintenanceSafetyHint =>
-      '整理では既定でソースを停止するだけで、設定は削除しません。';
+  String get bookSourcesMaintenanceSafetyHint => '確認したソースのみ無効にし、設定は保持します。';
 
   @override
   String get bookSourcesMaintenanceProgressTitle => 'ソースを確認中';
@@ -5798,7 +5795,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bookSourcesImportIntro =>
-      'ORSP と Legado のソースを自動判別します。確認してからインポートしてください。';
+      'ORSP と 汎用書籍ソースを自動判別します。確認してからインポートしてください。';
 
   @override
   String get bookSourcesImportInputStep => '書源を選択';
@@ -5908,12 +5905,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceEmptyScope => '対象の書源がありません';
-
-  @override
-  String get bookSourcesMaintenanceLocalLabel => 'ローカル整理';
-
-  @override
-  String get bookSourcesMaintenanceNetworkLabel => 'オンライン検査';
 
   @override
   String get bookSourcesMaintenanceCancelledTitle => '検査を停止しました';

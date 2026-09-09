@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../protocol/book_source_protocol.dart';
+import '../services/book_download_cancellation.dart';
 
 class SourcePlatformBytesResult {
   const SourcePlatformBytesResult({
@@ -32,6 +35,7 @@ abstract interface class SourceWebViewLoaderPort {
     required Uri url,
     required Map<String, String> headers,
     required int maxBytes,
+    BookDownloadCancellation? cancellation,
   });
 
   Future<SourceWebViewResult> load({
@@ -41,21 +45,29 @@ abstract interface class SourceWebViewLoaderPort {
     String? body,
     String? webJs,
     String? html,
+    BookDownloadCancellation? cancellation,
   });
 }
 
 class SourceWebViewLoader implements SourceWebViewLoaderPort {
-  const SourceWebViewLoader();
+  const SourceWebViewLoader() : _channel = _defaultChannel;
 
-  static const MethodChannel _channel = MethodChannel(
+  @visibleForTesting
+  const SourceWebViewLoader.withChannel(this._channel);
+
+  static const MethodChannel _defaultChannel = MethodChannel(
     'com.niki.xxread/source_webview',
   );
+  static int _requestSequence = 0;
+
+  final MethodChannel _channel;
 
   @override
   Future<SourcePlatformBytesResult> loadBytes({
     required Uri url,
     required Map<String, String> headers,
     required int maxBytes,
+    BookDownloadCancellation? cancellation,
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       throw const BookSourceProtocolException(
@@ -63,13 +75,17 @@ class SourceWebViewLoader implements SourceWebViewLoaderPort {
       );
     }
     try {
-      final result = await _channel
-          .invokeMapMethod<String, dynamic>('loadBytes', {
-            'url': url.toString(),
-            'headers': headers,
-            'maxBytes': maxBytes,
-            'timeoutMs': 15000,
-          });
+      final result = await _invokeCancellable(
+        method: 'loadBytes',
+        arguments: {
+          'url': url.toString(),
+          'headers': headers,
+          'maxBytes': maxBytes,
+          'timeoutMs': 15000,
+        },
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
       final statusCode = result?['statusCode'];
       final bytes = result?['bytes'];
       if (statusCode is! int || bytes is! Uint8List) {
@@ -83,6 +99,7 @@ class SourceWebViewLoader implements SourceWebViewLoaderPort {
         location: result?['location'] as String?,
       );
     } on PlatformException catch (error) {
+      cancellation?.throwIfCancelled();
       throw BookSourceProtocolException(
         error.message ?? 'Platform byte loading failed.',
       );
@@ -97,6 +114,7 @@ class SourceWebViewLoader implements SourceWebViewLoaderPort {
     String? body,
     String? webJs,
     String? html,
+    BookDownloadCancellation? cancellation,
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       throw const BookSourceProtocolException(
@@ -104,15 +122,20 @@ class SourceWebViewLoader implements SourceWebViewLoaderPort {
       );
     }
     try {
-      final result = await _channel.invokeMapMethod<String, dynamic>('load', {
-        'url': url.toString(),
-        'method': method,
-        'headers': headers,
-        'body': body,
-        'webJs': webJs,
-        'html': html,
-        'timeoutMs': 15000,
-      });
+      final result = await _invokeCancellable(
+        method: 'load',
+        arguments: {
+          'url': url.toString(),
+          'method': method,
+          'headers': headers,
+          'body': body,
+          'webJs': webJs,
+          'html': html,
+          'timeoutMs': 15000,
+        },
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
       final responseBody = result?['body'];
       final finalUrl = result?['finalUrl'];
       final cookieHeader = result?['cookieHeader'];
@@ -128,8 +151,57 @@ class SourceWebViewLoader implements SourceWebViewLoaderPort {
         cookieHeader: cookieHeader is String ? cookieHeader : null,
       );
     } on PlatformException catch (error) {
+      cancellation?.throwIfCancelled();
       throw BookSourceProtocolException(
         error.message ?? 'Background browser failed to load this source.',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _invokeCancellable({
+    required String method,
+    required Map<String, dynamic> arguments,
+    BookDownloadCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
+    final requestId =
+        '${DateTime.now().microsecondsSinceEpoch}-${_requestSequence++}';
+    final platformLoad = _channel.invokeMapMethod<String, dynamic>(method, {
+      ...arguments,
+      'requestId': requestId,
+    });
+    if (cancellation == null) return platformLoad;
+
+    void cancelPlatformLoad() {
+      unawaited(_cancelPlatformLoad(requestId));
+    }
+
+    cancellation.addListener(cancelPlatformLoad);
+    try {
+      return await Future.any<Map<String, dynamic>?>([
+        platformLoad,
+        cancellation.whenCancelled.then<Map<String, dynamic>?>((_) {
+          throw const BookDownloadCancelledException();
+        }),
+      ]);
+    } finally {
+      cancellation.removeListener(cancelPlatformLoad);
+    }
+  }
+
+  Future<void> _cancelPlatformLoad(String requestId) async {
+    try {
+      await _channel.invokeMethod<bool>('cancel', {'requestId': requestId});
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'source WebView loader',
+          context: ErrorDescription(
+            'while cancelling background browser request $requestId',
+          ),
+        ),
       );
     }
   }

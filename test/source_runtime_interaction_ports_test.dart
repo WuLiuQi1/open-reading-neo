@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -179,6 +180,48 @@ void main() {
       expect(transport.requests.single.headers['Cookie'], 'verified=yes');
     },
   );
+
+  test(
+    'cancellation during final URI validation blocks cookie writes and refetch',
+    () async {
+      final transport = _BlockingFinalValidationTransport();
+      final coordinator = _Coordinator(
+        result: const SourceScriptInteractionResult(
+          finalUrl: 'https://books.test/after',
+          cookieHeader: 'verified=yes',
+        ),
+      );
+      final harness = _Harness(transport: transport, coordinator: coordinator);
+      final cancellation = BookDownloadCancellation();
+
+      final interaction = harness.interact(
+        const SourceScriptInteractionRequest(
+          signature: 'browser',
+          kind: SourceScriptInteractionKind.browserAwait,
+          url: '/gate',
+          refetchAfterSuccess: true,
+        ),
+        cancellation: cancellation,
+      );
+      await transport.finalValidationStarted.future;
+      cancellation.cancel();
+      transport.releaseFinalValidation.complete();
+
+      await expectLater(
+        interaction,
+        throwsA(isA<BookDownloadCancelledException>()),
+      );
+      expect(
+        transport.scriptCookieHeader(harness.source.stableId, _afterUri),
+        isEmpty,
+      );
+      expect(
+        harness.sessions.current(harness.source).loginHeaders,
+        isNot(contains('Cookie')),
+      );
+      expect(transport.requests, isEmpty);
+    },
+  );
 }
 
 final _afterUri = Uri.parse('https://books.test/after');
@@ -220,9 +263,12 @@ class _Harness {
   late final SourceRuntimeRequests requests;
 
   Future<SourceScriptInteractionResult> interact(
-    SourceScriptInteractionRequest interaction,
-  ) async {
-    final handler = requests.scriptContext(source).interactionHandler;
+    SourceScriptInteractionRequest interaction, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    final handler = requests
+        .scriptContext(source, cancellation: cancellation)
+        .interactionHandler;
     return handler!(interaction);
   }
 }
@@ -239,9 +285,23 @@ class _Coordinator implements SourceInteractionCoordinatorPort {
     required String sourceName,
     required SourceScriptInteractionRequest interaction,
     Duration timeout = const Duration(minutes: 5),
+    BookDownloadCancellation? cancellation,
   }) async {
     requests.add(interaction);
     return result;
+  }
+}
+
+class _BlockingFinalValidationTransport extends _CapabilityTransport {
+  final Completer<void> finalValidationStarted = Completer<void>();
+  final Completer<void> releaseFinalValidation = Completer<void>();
+
+  @override
+  Future<void> validateInteractionUri(Uri uri) async {
+    validatedUris.add(uri);
+    if (uri != _afterUri) return;
+    finalValidationStarted.complete();
+    await releaseFinalValidation.future;
   }
 }
 

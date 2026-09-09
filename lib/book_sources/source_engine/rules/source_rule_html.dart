@@ -22,6 +22,8 @@ List<Object?> evaluateSourceHtmlRule(
   required bool listMode,
   bool allAttributes = false,
 }) {
+  final isCss = rule.toLowerCase().startsWith('@css:');
+  if (isCss) rule = rule.substring(5).trimLeft();
   // Compatible RuleAnalyzer semantics keep separators inside quoted selectors
   // and predicates intact (for example, URLs containing `@`).
   final segments = splitSourceRuleTopLevel(
@@ -38,8 +40,13 @@ List<Object?> evaluateSourceHtmlRule(
       segment,
       singleValue: isLast && !listMode && !allAttributes,
     );
-    if (terminal != null && isLast) return terminal;
-    current = selectSourceHtml(current, segment, includeRoots: index == 0);
+    if (terminal != null && isLast && (!isCss || index > 0)) return terminal;
+    current = selectSourceHtml(
+      current,
+      segment,
+      includeRoots: index == 0,
+      legacy: !isCss,
+    );
     if (current.isEmpty) return const [];
   }
   return listMode ? current : current.map((node) => node.text).toList();
@@ -94,69 +101,74 @@ List<Element> selectSourceHtml(
   List<Element> roots,
   String raw, {
   required bool includeRoots,
+  bool legacy = true,
 }) {
-  final parsed = parseSourceLegacySelector(raw);
+  final parsed = legacy
+      ? parseSourceLegacySelector(raw)
+      : SourceLegacySelector(css: raw);
   final selected = <Element>[];
   for (final root in roots) {
-    if (parsed.text != null) {
-      final candidates = <Element>[root, ...root.querySelectorAll('*')];
-      final exact = candidates
-          .where((element) => element.text.trim() == parsed.text)
-          .toList();
+    final candidates = parsed.directChildren
+        ? root.children.toList()
+        : parsed.text != null
+        ? <Element>[root, ...root.querySelectorAll('*')]
+              .where(
+                (element) => sourceOwnText(
+                  element,
+                ).toLowerCase().contains(parsed.text!.toLowerCase()),
+              )
+              .toList()
+        : _selectSourceCss(root, parsed.css, includeRoot: includeRoots);
+    // Indexes belong to each parent context, including exclusion and ranges.
+    // Combining first would discard entries from later catalog sections.
+    if (parsed.excludedSelection != null) {
+      final excluded = sourceSelectionIndexes(
+        parsed.excludedSelection!,
+        candidates.length,
+      ).toSet();
+      selected.addAll([
+        for (var index = 0; index < candidates.length; index++)
+          if (!excluded.contains(index)) candidates[index],
+      ]);
+    } else if (parsed.selection != null) {
       selected.addAll(
-        exact.isNotEmpty
-            ? exact
-            : candidates.where(
-                (element) => element.text.contains(parsed.text!),
-              ),
+        sourceSelectionIndexes(
+          parsed.selection!,
+          candidates.length,
+        ).map((index) => candidates[index]),
       );
     } else {
-      final compatible = selectSourceHtmlWithJsoupExtensions(
-        root,
-        parsed.css,
-        includeRoot: includeRoots,
-      );
-      if (compatible != null) {
-        selected.addAll(compatible);
-        continue;
-      }
-      try {
-        if (includeRoots && sourceHtmlMatches(root, parsed.css)) {
-          selected.add(root);
-        }
-        selected.addAll(root.querySelectorAll(parsed.css));
-      } on FormatException {
-        throw BookSourceProtocolException(
-          'Unsupported reading source CSS selector: ${parsed.css}.',
-        );
-      } on UnimplementedError {
-        throw BookSourceProtocolException(
-          'Unsupported reading source CSS selector: ${parsed.css}.',
-        );
-      }
+      selected.addAll(candidates);
     }
   }
-  final deduped = selected.toSet().toList();
-  if (parsed.exclude != null) {
-    final excluded = normalizeSourceIndex(parsed.exclude!, deduped.length);
-    if (excluded >= 0 && excluded < deduped.length) deduped.removeAt(excluded);
-  }
-  if (deduped.isEmpty) return const [];
-  if (parsed.excludedSelection != null) {
-    final excluded = sourceSelectionIndexes(
-      parsed.excludedSelection!,
-      deduped.length,
-    ).toSet();
+  return selected;
+}
+
+List<Element> _selectSourceCss(
+  Element root,
+  String selector, {
+  required bool includeRoot,
+}) {
+  final compatible = selectSourceHtmlWithJsoupExtensions(
+    root,
+    selector,
+    includeRoot: includeRoot,
+  );
+  if (compatible != null) return compatible;
+  try {
     return [
-      for (var index = 0; index < deduped.length; index++)
-        if (!excluded.contains(index)) deduped[index],
+      if (includeRoot && sourceHtmlMatches(root, selector)) root,
+      ...root.querySelectorAll(selector),
     ];
+  } on FormatException {
+    throw BookSourceProtocolException(
+      'Unsupported reading source CSS selector: $selector.',
+    );
+  } on UnimplementedError {
+    throw BookSourceProtocolException(
+      'Unsupported reading source CSS selector: $selector.',
+    );
   }
-  if (parsed.selection == null) return deduped;
-  return sourceSelectionIndexes(parsed.selection!, deduped.length)
-      .where((value) => value >= 0 && value < deduped.length)
-      .map((value) => deduped[value])
-      .toList();
 }
 
 List<Element>? selectSourceHtmlWithJsoupExtensions(
@@ -208,12 +220,16 @@ List<Element>? selectSourceHtmlWithJsoupExtensions(
         siblingIndexes ??= _sourceSiblingIndexes(candidates);
       }
       final argument = stripSourceRuleQuotes(pseudo.argument.trim());
+      final nthChild = pseudo.name.toLowerCase() == 'nth-child'
+          ? _sourceNthChildFormula(argument)
+          : null;
       for (final candidate in candidates) {
         if (_matchesJsoupPseudo(
           candidate,
           pseudo.name,
           argument,
           siblingIndexes: siblingIndexes,
+          nthChild: nthChild,
         )) {
           candidate.attributes[marker] = '';
         }
@@ -246,6 +262,7 @@ bool _matchesJsoupPseudo(
   String name,
   String argument, {
   Map<Element, int>? siblingIndexes,
+  (int, int)? nthChild,
 }) {
   switch (name.toLowerCase()) {
     case 'contains':
@@ -266,6 +283,13 @@ bool _matchesJsoupPseudo(
       ).hasMatch(sourceOwnText(element));
     case 'has':
       return _matchesRelativeSelector(element, argument);
+    case 'nth-child':
+      if (nthChild == null) return false;
+      final (coefficient, offset) = nthChild;
+      final position = (siblingIndexes?[element] ?? 0) + 1;
+      if (coefficient == 0) return position == offset;
+      final distance = position - offset;
+      return distance % coefficient == 0 && distance ~/ coefficient >= 0;
     case 'eq':
     case 'lt':
     case 'gt':
@@ -280,7 +304,23 @@ bool _matchesJsoupPseudo(
 }
 
 bool _isJsoupPositionPseudo(String name) =>
-    const {'eq', 'lt', 'gt'}.contains(name.toLowerCase());
+    const {'eq', 'lt', 'gt', 'nth-child'}.contains(name.toLowerCase());
+
+(int, int)? _sourceNthChildFormula(String argument) {
+  final formula = argument.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  if (formula == 'odd') return (2, 1);
+  if (formula == 'even') return (2, 0);
+  final position = int.tryParse(formula);
+  if (position != null) return (0, position);
+  final match = RegExp(r'^([+-]?\d*)n([+-]\d+)?$').firstMatch(formula);
+  if (match == null) return null;
+  final coefficient = switch (match.group(1)!) {
+    '' || '+' => 1,
+    '-' => -1,
+    final value => int.parse(value),
+  };
+  return (coefficient, int.parse(match.group(2) ?? '0'));
+}
 
 Map<Element, int> _sourceSiblingIndexes(List<Element> candidates) {
   final indexes = <Element, int>{};
@@ -390,7 +430,7 @@ _SourceJsoupPseudo? _findInnermostJsoupPseudo(String selector) {
     }
     if (char != ':') continue;
     final nameMatch = RegExp(
-      r'^(containsOwn|contains|matchesOwn|matches|has|eq|lt|gt)\(',
+      r'^(containsOwn|contains|matchesOwn|matches|has|eq|lt|gt|nth-child)\(',
       caseSensitive: false,
     ).firstMatch(selector.substring(index + 1));
     if (nameMatch == null) continue;

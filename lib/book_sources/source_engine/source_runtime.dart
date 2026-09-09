@@ -128,14 +128,16 @@ class SourceRuntime {
   );
 
   Future<List<BookSourceCategory>> getExploreCategories(
-    RegisteredBookSource registered,
-  ) => _catalog.getExploreCategories(registered);
+    RegisteredBookSource registered, {
+    BookDownloadCancellation? cancellation,
+  }) => _catalog.getExploreCategories(registered, cancellation: cancellation);
 
   Future<BookSourceSearchPage> browse(
     RegisteredBookSource registered, {
     required String? category,
     int page = 1,
     int pageSize = 20,
+    BookDownloadCancellation? cancellation,
   }) => _trace.stage(
     'explore',
     () => _catalog.browse(
@@ -143,6 +145,7 @@ class SourceRuntime {
       category: category,
       page: page,
       pageSize: pageSize,
+      cancellation: cancellation,
     ),
     describe: (page) => '${page.items.length} result(s)',
   );
@@ -151,10 +154,15 @@ class SourceRuntime {
     RegisteredBookSource registered,
     String bookId, {
     Map<String, String> sourceVariables = const {},
+    BookDownloadCancellation? cancellation,
   }) => _trace.stage(
     'info',
-    () =>
-        _catalog.getBook(registered, bookId, sourceVariables: sourceVariables),
+    () => _catalog.getBook(
+      registered,
+      bookId,
+      sourceVariables: sourceVariables,
+      cancellation: cancellation,
+    ),
     describe: (book) =>
         '"${book.title}" by ${book.author.isEmpty ? 'unknown author' : book.author}',
   );
@@ -163,12 +171,16 @@ class SourceRuntime {
     RegisteredBookSource registered,
     String bookId, {
     Map<String, String> sourceVariables = const {},
+    int? maxChapters,
+    BookDownloadCancellation? cancellation,
   }) => _trace.stage(
     'toc',
     () => _reading.getChapters(
       registered,
       bookId,
       sourceVariables: sourceVariables,
+      maxChapters: maxChapters,
+      cancellation: cancellation,
     ),
     describe: (chapters) => '${chapters.length} chapter(s)',
   );
@@ -178,6 +190,7 @@ class SourceRuntime {
     required String bookId,
     required String chapterId,
     Map<String, String> sourceVariables = const {},
+    BookDownloadCancellation? cancellation,
   }) => _trace.stage(
     'content',
     () => _reading.getChapterContent(
@@ -185,6 +198,7 @@ class SourceRuntime {
       bookId: bookId,
       chapterId: chapterId,
       sourceVariables: sourceVariables,
+      cancellation: cancellation,
     ),
     describe: (content) => '${content.content.length} character(s)',
   );

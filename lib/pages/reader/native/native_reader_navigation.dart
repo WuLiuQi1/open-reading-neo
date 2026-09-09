@@ -268,20 +268,45 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
     );
   }
 
-  Future<List<ReaderSearchDocument>> _loadSearchDocuments() async {
-    final documents = <ReaderSearchDocument>[];
-    for (var index = 0; index < _loadedChapters.length; index++) {
-      final chapter = _loadedChapters[index];
-      await chapter.loadTextAsync();
-      documents.add(
-        ReaderSearchDocument(
+  Stream<ReaderSearchDocument> _loadSearchDocuments() async* {
+    const epubBatchSize = 8;
+    for (
+      var start = 0;
+      start < _loadedChapters.length;
+      start += epubBatchSize
+    ) {
+      final end = math.min(start + epubBatchSize, _loadedChapters.length);
+      // Keep search-only EPUB content out of the reader's retained window.
+      // These copies are released with the batch, including on cancellation.
+      final batch = _loadedChapters
+          .sublist(start, end)
+          .map((chapter) {
+            if (!chapter.isLazyEpub ||
+                chapter.hasLoadedText ||
+                chapter.hasPendingLoad) {
+              return chapter;
+            }
+            return _NativeChapter.lazyEpub(
+              descriptor: chapter.epubDescriptor,
+              loadArguments: chapter.epubLoadArguments,
+              replaceBookTitle: chapter.replaceBookTitle,
+            )..applyPreparedTitle(chapter.title);
+          })
+          .toList(growable: false);
+      final epubChapters = batch
+          .where((chapter) => chapter.isLazyEpub && !chapter.hasLoadedText)
+          .toList(growable: false);
+      if (epubChapters.isNotEmpty) await _loadEpubChapterBatch(epubChapters);
+      for (var index = start; index < end; index++) {
+        final chapter = batch[index - start];
+        await chapter.prepareReplacementAsync(_replaceRules);
+        yield ReaderSearchDocument(
           chapterIndex: index,
           chapterTitle: chapter.title,
           text: chapter.plainText,
-        ),
-      );
+        );
+      }
     }
-    return documents;
   }
 
   Future<void> _showFullTextSearch({String initialQuery = ''}) async {
@@ -292,21 +317,22 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
       palette: _readerTheme,
       initialQuery: initialQuery,
       loadDocuments: _loadSearchDocuments,
+      documentCount: _loadedChapters.length,
       onResultSelected: (result) => unawaited(_jumpToSearchResult(result)),
     );
   }
 
   Future<void> _jumpToSearchResult(ReaderSearchResult result) async {
-    if (_loadedChapters.isEmpty) return;
+    if (result.chapterIndex < 0 ||
+        result.chapterIndex >= _loadedChapters.length) {
+      return;
+    }
     final chapter = _loadedChapters[result.chapterIndex];
     final locator = CanonicalLocator.fromComponents(
       format: BookFormat.fromFileExtension(widget.book.format),
       chapterId: chapter.id,
       offset: result.offset,
       excerpt: result.excerpt,
-      progression: chapter.plainText.isEmpty
-          ? 0
-          : result.offset / chapter.plainText.length,
     );
     await _jumpToBookmark(
       Bookmark(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../models/registered_book_source.dart';
 import '../protocol/book_source_protocol.dart';
+import '../services/book_download_cancellation.dart';
 import 'source_runtime.dart';
 import 'source_transport.dart';
 
@@ -149,11 +150,19 @@ class SourceHealthChecker {
     final checked = <SourceHealthCapability>{};
     final failed = <SourceHealthCapability>{};
     final stopwatch = Stopwatch()..start();
+    final cancellation = BookDownloadCancellation();
     var timedOut = false;
     try {
-      await _runChecks(engine, source, checked, failed).timeout(timeout);
+      await _runChecks(
+        engine,
+        source,
+        checked,
+        failed,
+        cancellation,
+      ).timeout(timeout);
     } on TimeoutException {
       timedOut = true;
+      cancellation.cancel();
     } finally {
       stopwatch.stop();
       if (owned) engine.close();
@@ -172,39 +181,58 @@ class SourceHealthChecker {
     RegisteredBookSource source,
     Set<SourceHealthCapability> checked,
     Set<SourceHealthCapability> failed,
+    BookDownloadCancellation cancellation,
   ) async {
     BookSourceBook? candidate;
 
+    cancellation.throwIfCancelled();
     if (source.capabilities.contains('search')) {
       checked.add(SourceHealthCapability.search);
       try {
-        final page = await engine.search(source, keyword, pageSize: 5);
+        final page = await engine.search(
+          source,
+          keyword,
+          pageSize: 5,
+          cancellation: cancellation,
+        );
+        cancellation.throwIfCancelled();
         candidate = page.items.firstWhere(
           (book) => book.id.trim().isNotEmpty && book.title.trim().isNotEmpty,
         );
+      } on BookDownloadCancelledException {
+        rethrow;
       } on Object {
         failed.add(SourceHealthCapability.search);
       }
     }
 
+    cancellation.throwIfCancelled();
     if (source.capabilities.contains('browse')) {
       checked.add(SourceHealthCapability.discover);
       try {
-        final categories = await engine.getExploreCategories(source);
+        final categories = await engine.getExploreCategories(
+          source,
+          cancellation: cancellation,
+        );
         final page = await engine.browse(
           source,
           category: categories.first.id,
           pageSize: 5,
+          cancellation: cancellation,
         );
+        cancellation.throwIfCancelled();
         final hit = page.items.firstWhere(
           (book) => book.id.trim().isNotEmpty && book.title.trim().isNotEmpty,
         );
         candidate ??= hit;
+      } on BookDownloadCancelledException {
+        rethrow;
       } on Object {
         failed.add(SourceHealthCapability.discover);
       }
     }
 
+    cancellation.throwIfCancelled();
     if (candidate == null) return;
 
     checked.add(SourceHealthCapability.info);
@@ -214,7 +242,11 @@ class SourceHealthChecker {
         source,
         candidate.id,
         sourceVariables: candidate.sourceVariables,
+        cancellation: cancellation,
       );
+      cancellation.throwIfCancelled();
+    } on BookDownloadCancelledException {
+      rethrow;
     } on Object {
       failed.add(SourceHealthCapability.info);
       return;
@@ -227,8 +259,17 @@ class SourceHealthChecker {
         source,
         book.id,
         sourceVariables: book.sourceVariables,
+        // Two entries preserve the first chapter's `nextChapterUrl`, which
+        // content scripts may require. Reverse-order catalogs deliberately
+        // ignore this sampling limit so their first readable chapter stays
+        // the same as a normal full catalog load.
+        maxChapters: 2,
+        cancellation: cancellation,
       );
+      cancellation.throwIfCancelled();
       if (chapters.isEmpty) throw const BookSourceProtocolException('empty');
+    } on BookDownloadCancelledException {
+      rethrow;
     } on Object {
       failed.add(SourceHealthCapability.catalog);
       return;
@@ -241,10 +282,14 @@ class SourceHealthChecker {
         bookId: book.id,
         chapterId: chapters.first.id,
         sourceVariables: book.sourceVariables,
+        cancellation: cancellation,
       );
+      cancellation.throwIfCancelled();
       if (content.content.trim().isEmpty && content.images.isEmpty) {
         throw const BookSourceProtocolException('empty');
       }
+    } on BookDownloadCancelledException {
+      rethrow;
     } on Object {
       failed.add(SourceHealthCapability.content);
     }

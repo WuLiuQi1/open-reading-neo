@@ -19,6 +19,7 @@ import 'package:xxread/models/book.dart';
 import 'package:xxread/pages/reader/native/native_reader_page.dart';
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/reader/replace_rule_service.dart';
+import 'package:xxread/widgets/reader_annotated_text_page.dart';
 import 'package:xxread/widgets/reader_paper_page_leaf.dart';
 
 import 'support/reader_cache_test_utils.dart';
@@ -118,6 +119,134 @@ void main() {
         expect(controller.initialPage, greaterThan(0));
         expect(initialLeaf.metadata.chapterTitle, 'Chapter 2');
         expect(initialLeaf.metadata.pageNumber, greaterThan(1));
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await drainReaderCache(tester);
+        await tester.binding.setSurfaceSize(null);
+        debugDefaultTargetPlatformOverride = null;
+        directory.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
+    'EPUB full-text search loads a later chapter and opens the matching page',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.binding.setSurfaceSize(const Size(480, 800));
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
+        ReplaceRuleService.preferenceKey: '''[
+          {
+            "id":"epub-search-cleanup",
+            "name":"epub-search-cleanup",
+            "pattern":"Chapter 10 paragraph 47",
+            "replacement":"cleaned search target",
+            "enabled":true,
+            "isRegex":false,
+            "scopeTitle":false,
+            "scopeContent":true,
+            "order":0
+          }
+        ]''',
+      });
+      final directory = Directory.systemTemp.createTempSync(
+        'open-reading-epub-search-navigation-',
+      );
+      final epub = File('${directory.path}/search-navigation.epub')
+        ..writeAsBytesSync(_epubFixture(chapterCount: 10));
+      const searchTarget = 'cleaned search target';
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: NativeReaderPage(
+              replaceRuleService: replaceRuleService,
+              book: Book(
+                title: 'EPUB search navigation fixture',
+                filePath: epub.path,
+                format: 'epub',
+                currentPage: 0,
+                fileModifiedTime: epub
+                    .lastModifiedSync()
+                    .millisecondsSinceEpoch,
+              ),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 60; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            if (find.byType(PageView).evaluate().isNotEmpty) return;
+          }
+        });
+        await _pumpUntil(
+          tester,
+          () => find.byType(PageView).evaluate().isNotEmpty,
+        );
+
+        await tester.tapAt(const Offset(240, 400));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(
+          find.byKey(const ValueKey('native-reader-bottom-controls')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('全文搜索'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('reader-full-text-search-field')),
+          searchTarget,
+        );
+        await tester.pump(const Duration(milliseconds: 251));
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 100; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            final result = find.descendant(
+              of: find.byType(ListTile),
+              matching: find.textContaining(searchTarget),
+            );
+            if (result.evaluate().isNotEmpty) return;
+          }
+        });
+        final resultTile = find.byType(ListTile);
+        expect(
+          find.descendant(
+            of: resultTile,
+            matching: find.textContaining(searchTarget),
+          ),
+          findsOneWidget,
+        );
+        await _pumpUntil(
+          tester,
+          () => find.byType(LinearProgressIndicator).evaluate().isEmpty,
+        );
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        await tester.tap(resultTile);
+
+        final matchingBody = find.descendant(
+          of: find.byType(ReaderAnnotatedTextPage),
+          matching: find.textContaining(searchTarget, findRichText: true),
+        );
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 100; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            if (matchingBody.evaluate().isNotEmpty) return;
+          }
+        });
+        await _pumpUntil(tester, () => matchingBody.evaluate().isNotEmpty);
+
+        final pageView = tester.widget<PageView>(find.byType(PageView));
+        final matchedLeaf = _pageLeafForControllerPage(tester, pageView);
+        expect(matchedLeaf.metadata.chapterTitle, 'Chapter 10');
+        expect(matchedLeaf.metadata.pageNumber, greaterThan(1));
+        expect(matchingBody, findsOneWidget);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
@@ -368,7 +497,7 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
   fail('Timed out waiting for EPUB reader state.');
 }
 
-List<int> _epubFixture() {
+List<int> _epubFixture({int chapterCount = 3}) {
   final archive = Archive();
   void add(String name, String content) {
     final bytes = utf8.encode(content);
@@ -388,17 +517,17 @@ List<int> _epubFixture() {
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    ${List.generate(3, (index) => '<item id="c${index + 1}" href="chapter${index + 1}.xhtml" media-type="application/xhtml+xml"/>').join()}
+    ${List.generate(chapterCount, (index) => '<item id="c${index + 1}" href="chapter${index + 1}.xhtml" media-type="application/xhtml+xml"/>').join()}
   </manifest>
-  <spine toc="ncx">${List.generate(3, (index) => '<itemref idref="c${index + 1}"/>').join()}</spine>
+  <spine toc="ncx">${List.generate(chapterCount, (index) => '<itemref idref="c${index + 1}"/>').join()}</spine>
 </package>''');
   add('OEBPS/toc.ncx', '''<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head><meta name="dtb:uid" content="initial-progress-fixture"/></head>
   <docTitle><text>Initial progress fixture</text></docTitle>
-  <navMap>${List.generate(3, (index) => '<navPoint id="nav${index + 1}" playOrder="${index + 1}"><navLabel><text>Chapter ${index + 1}</text></navLabel><content src="chapter${index + 1}.xhtml"/></navPoint>').join()}</navMap>
+  <navMap>${List.generate(chapterCount, (index) => '<navPoint id="nav${index + 1}" playOrder="${index + 1}"><navLabel><text>Chapter ${index + 1}</text></navLabel><content src="chapter${index + 1}.xhtml"/></navPoint>').join()}</navMap>
 </ncx>''');
-  for (var chapter = 1; chapter <= 3; chapter++) {
+  for (var chapter = 1; chapter <= chapterCount; chapter++) {
     add('OEBPS/chapter$chapter.xhtml', '''<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter $chapter</title></head><body>
 <h1>Chapter $chapter</h1>

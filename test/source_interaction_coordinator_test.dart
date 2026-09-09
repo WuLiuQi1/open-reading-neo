@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:xxread/book_sources/services/book_download_cancellation.dart';
 import 'package:xxread/book_sources/source_engine/source_interaction_coordinator.dart';
 import 'package:xxread/book_sources/source_engine/source_script_contract.dart';
 
@@ -85,6 +86,46 @@ void main() {
     expect((await pending).cancelled, isTrue);
     expect(coordinator.pendingCount, 0);
   });
+
+  test(
+    'request cancellation removes only its own waiting interaction',
+    () async {
+      final coordinator = SourceInteractionCoordinator.forTesting();
+      final tickets = <SourceInteractionTicket>[];
+      final subscription = coordinator.requests.listen(tickets.add);
+      addTearDown(subscription.cancel);
+      final cancellation = BookDownloadCancellation();
+      final cancelled = coordinator.request(
+        sourceId: 'cancelled',
+        sourceName: 'Cancelled',
+        interaction: const SourceScriptInteractionRequest(
+          signature: 'cancelled',
+          kind: SourceScriptInteractionKind.browserAwait,
+          url: 'https://cancelled.test',
+        ),
+        cancellation: cancellation,
+      );
+      final retained = coordinator.request(
+        sourceId: 'retained',
+        sourceName: 'Retained',
+        interaction: const SourceScriptInteractionRequest(
+          signature: 'retained',
+          kind: SourceScriptInteractionKind.browserAwait,
+          url: 'https://retained.test',
+        ),
+      );
+
+      cancellation.cancel();
+
+      expect((await cancelled).cancelled, isTrue);
+      expect(coordinator.pendingCount, 1);
+      coordinator.complete(
+        tickets.last.requestId,
+        const SourceScriptInteractionResult(value: 'kept'),
+      );
+      expect((await retained).value, 'kept');
+    },
+  );
 
   test(
     'singleton refuses work when the verification screen is not listening',

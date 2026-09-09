@@ -354,6 +354,47 @@ void main() {
     expect(find.byType(Checkbox), findsOneWidget);
   });
 
+  testWidgets('keeps source text aligned when selection mode opens', (
+    tester,
+  ) async {
+    unmountPage(tester);
+    final source = RegisteredBookSource(
+      id: 'org.example.aligned',
+      name: 'Aligned Example',
+      description: 'Stable text column',
+      manifestUrl: Uri.parse('https://aligned.example/source.json'),
+      apiBaseUrl: Uri.parse('https://aligned.example/api/'),
+      protocolVersion: '1.5',
+      languages: const ['en'],
+      capabilities: const {'search', 'detail', 'catalog', 'content'},
+      enabled: true,
+      addedAt: DateTime.utc(2026, 8, 20),
+    );
+    SharedPreferences.setMockInitialValues({
+      'open_reading_book_sources_v1': jsonEncode([source.toJson()]),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: BookSourceManagementPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final title = find.text('Aligned Example');
+    final normalLeft = tester.getRect(title).left;
+    await tester.tap(find.byKey(const Key('bookSourcesToolButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bookSourcesSelectionModeButton')));
+    await tester.pump();
+
+    expect((tester.getRect(title).left - normalLeft).abs(), lessThan(1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows operator-supplied rights metadata as unverified', (
     tester,
   ) async {

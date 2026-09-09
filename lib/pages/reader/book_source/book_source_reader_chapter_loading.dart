@@ -52,13 +52,17 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     final preparedLayout = _preparedPagedLayoutForChapter(index, content);
     final preparedPages = preparedLayout?.pages;
     final preparedPageCount = preparedPages?.length ?? 1;
+    final restoredTextOffset = _restoreTextOffset;
+    final preparedTarget = preparedPages == null
+        ? 0
+        : restoredTextOffset != null
+        ? bookSourcePageIndexForOffset(preparedPages, restoredTextOffset)
+        : ((preparedPageCount - 1) * normalizedProgress).round();
     final preparedPageIndex = preparedPages == null
         ? 0
         : (_usesTwoPageLayout
-                  ? _spreadStartForPage(
-                      ((preparedPageCount - 1) * normalizedProgress).round(),
-                    )
-                  : ((preparedPageCount - 1) * normalizedProgress).round())
+                  ? _spreadStartForPage(preparedTarget)
+                  : preparedTarget)
               .clamp(0, preparedPageCount - 1);
     final slideLeading = _slideLeadingPageCount(index);
     _pagedLayouts.removeWhere(
@@ -80,6 +84,7 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
       _paginationKey = preparedLayout?.fingerprint;
       _restorePageProgress = normalizedProgress;
       _restorePagedPosition = preparedLayout == null;
+      if (preparedLayout != null) _restoreTextOffset = null;
       _ignoreSlidePageChanges = true;
       _pendingSlideChapterIndex = null;
       _pendingSlideBoundaryViewIndex = null;

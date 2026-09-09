@@ -220,16 +220,18 @@ class _BookSourceManagementPageState extends State<BookSourceManagementPage> {
               value: _BookSourceHeaderAction.maintenance,
               itemKey: const Key('bookSourcesMaintenanceButton'),
               startsSection: true,
-              iconColor: Theme.of(context).colorScheme.tertiary,
-              child: AnimatedBuilder(
-                animation: _maintenance,
-                builder: (context, _) => ListTile(
-                  leading: Icon(
+              child: ListTile(
+                leading: AnimatedBuilder(
+                  animation: _maintenance,
+                  builder: (context, _) => Icon(
                     _maintenance.state.isRunning
                         ? Icons.monitor_heart_rounded
-                        : Icons.home_repair_service_outlined,
+                        : Icons.playlist_add_check_rounded,
                   ),
-                  title: Text(
+                ),
+                title: AnimatedBuilder(
+                  animation: _maintenance,
+                  builder: (context, _) => Text(
                     _maintenance.state.isRunning
                         ? context.l10n.bookSourcesMaintenanceRunningMenuLabel(
                             _maintenance.state.progress?.completed ?? 0,

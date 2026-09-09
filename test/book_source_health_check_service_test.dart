@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/book_sources/services/book_download_cancellation.dart';
@@ -13,6 +14,10 @@ void main() {
   setUp(() async {
     await BookSourceRegistry.resetForTesting();
     SharedPreferences.setMockInitialValues({});
+  });
+
+  tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
   });
 
   test(
@@ -168,6 +173,48 @@ void main() {
     },
   );
 
+  for (final testCase in <(TargetPlatform, int)>[
+    (TargetPlatform.iOS, 3),
+    (TargetPlatform.android, 4),
+    (TargetPlatform.macOS, 8),
+  ]) {
+    final (platform, expectedConcurrency) = testCase;
+    test(
+      'checkAllForCleanup caps concurrent checks at $expectedConcurrency on ${platform.name}',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        final transport = _ConcurrencyTrackingTransport(expectedConcurrency);
+        final registry = BookSourceRegistry(storage: _MemoryRegistryStorage());
+        final sources = List.generate(
+          expectedConcurrency + 2,
+          (index) => _fixtureSource().toRegisteredSource(
+            id: 'source-$index',
+            enabled: true,
+          ),
+        );
+        for (final source in sources) {
+          await registry.applySynced(source);
+        }
+        final service = BookSourceHealthCheckService(
+          checker: SourceHealthChecker(transport: transport),
+          registry: registry,
+        );
+
+        final sweep = service.checkAllForCleanup(sources);
+        await transport.capReached.future;
+
+        expect(transport.active, expectedConcurrency);
+        expect(transport.maxActive, expectedConcurrency);
+
+        transport.release.complete();
+        final updated = await sweep;
+
+        expect(updated, hasLength(sources.length));
+        expect(transport.maxActive, expectedConcurrency);
+      },
+    );
+  }
+
   test(
     'cleanup rejects a fresh cached result when its rules change mid-sweep',
     () async {
@@ -302,6 +349,31 @@ class _BlockingTransport implements SourceTransport {
   }) {
     if (!started.isCompleted) started.complete();
     return response.future;
+  }
+}
+
+class _ConcurrencyTrackingTransport implements SourceTransport {
+  _ConcurrencyTrackingTransport(this.expectedConcurrency);
+
+  final int expectedConcurrency;
+  final capReached = Completer<void>();
+  final release = Completer<void>();
+  var active = 0;
+  var maxActive = 0;
+
+  @override
+  Future<SourceResponse> send(
+    SourceRequestTemplate request, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    active++;
+    maxActive = maxActive < active ? active : maxActive;
+    if (active == expectedConcurrency && !capReached.isCompleted) {
+      capReached.complete();
+    }
+    await release.future;
+    active--;
+    return SourceResponse(body: '<html></html>', finalUri: request.url);
   }
 }
 

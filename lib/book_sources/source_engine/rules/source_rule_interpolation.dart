@@ -18,6 +18,10 @@ typedef SourceInlineScriptEvaluator =
     Object? Function(Object? context, String script);
 typedef SourceAsyncInlineScriptEvaluator =
     Future<Object?> Function(Object? context, String script);
+typedef SourceEmbeddedRuleEvaluator =
+    String Function(Object? context, String rule);
+typedef SourceAsyncEmbeddedRuleEvaluator =
+    Future<String> Function(Object? context, String rule);
 
 class SourceRuleInterpolation {
   const SourceRuleInterpolation({
@@ -25,18 +29,23 @@ class SourceRuleInterpolation {
     required this.evaluateSingleAsync,
     required this.evaluateScript,
     required this.evaluateScriptAsync,
+    required this.evaluateEmbeddedRule,
+    required this.evaluateEmbeddedRuleAsync,
   });
 
   final SourceSingleRuleEvaluator evaluateSingle;
   final SourceAsyncSingleRuleEvaluator evaluateSingleAsync;
   final SourceInlineScriptEvaluator evaluateScript;
   final SourceAsyncInlineScriptEvaluator evaluateScriptAsync;
+  final SourceEmbeddedRuleEvaluator evaluateEmbeddedRule;
+  final SourceAsyncEmbeddedRuleEvaluator evaluateEmbeddedRuleAsync;
 
   List<Object?> evaluateAlternatives(
     Object? context,
     String selector, {
     required bool listMode,
   }) {
+    final mode = _sourceExplicitRuleMode(selector);
     for (final fallback in splitSourceRuleTopLevel(selector, '||')) {
       final interleaved = splitSourceRuleTopLevel(fallback, '%%');
       if (interleaved.length > 1) {
@@ -46,6 +55,7 @@ class SourceRuleInterpolation {
             context,
             part,
             listMode: listMode,
+            inheritedMode: mode,
           );
           if (values.isNotEmpty) groups.add(values);
         }
@@ -56,6 +66,7 @@ class SourceRuleInterpolation {
         context,
         fallback,
         listMode: listMode,
+        inheritedMode: mode,
       );
       if (concatenated.any(
         (value) => sourceRuleStringValue(value).isNotEmpty,
@@ -70,11 +81,16 @@ class SourceRuleInterpolation {
     Object? context,
     String selector, {
     required bool listMode,
+    String inheritedMode = '',
   }) {
     final concatenated = <Object?>[];
     for (final part in splitSourceRuleTopLevel(selector, '&&')) {
       concatenated.addAll(
-        evaluateSingle(context, part.trim(), listMode: listMode),
+        evaluateSingle(
+          context,
+          _sourceRuleWithMode(part, inheritedMode),
+          listMode: listMode,
+        ),
       );
     }
     return concatenated;
@@ -85,6 +101,7 @@ class SourceRuleInterpolation {
     String selector, {
     required bool listMode,
   }) async {
+    final mode = _sourceExplicitRuleMode(selector);
     for (final fallback in splitSourceRuleTopLevel(selector, '||')) {
       final interleaved = splitSourceRuleTopLevel(fallback, '%%');
       if (interleaved.length > 1) {
@@ -94,6 +111,7 @@ class SourceRuleInterpolation {
             context,
             part,
             listMode: listMode,
+            inheritedMode: mode,
           );
           if (values.isNotEmpty) groups.add(values);
         }
@@ -104,6 +122,7 @@ class SourceRuleInterpolation {
         context,
         fallback,
         listMode: listMode,
+        inheritedMode: mode,
       );
       if (concatenated.any(
         (value) => sourceRuleStringValue(value).isNotEmpty,
@@ -118,11 +137,16 @@ class SourceRuleInterpolation {
     Object? context,
     String selector, {
     required bool listMode,
+    String inheritedMode = '',
   }) async {
     final concatenated = <Object?>[];
     for (final part in splitSourceRuleTopLevel(selector, '&&')) {
       concatenated.addAll(
-        await evaluateSingleAsync(context, part.trim(), listMode: listMode),
+        await evaluateSingleAsync(
+          context,
+          _sourceRuleWithMode(part, inheritedMode),
+          listMode: listMode,
+        ),
       );
     }
     return concatenated;
@@ -136,6 +160,9 @@ class SourceRuleInterpolation {
       if ((expression.startsWith('"') && expression.endsWith('"')) ||
           (expression.startsWith("'") && expression.endsWith("'"))) {
         return expression.substring(1, expression.length - 1);
+      }
+      if (_sourceIsEmbeddedSelector(expression)) {
+        return evaluateEmbeddedRule(context, expression);
       }
       final selected = evaluateSourceJsonPath(
         context,
@@ -159,6 +186,8 @@ class SourceRuleInterpolation {
       if ((expression.startsWith('"') && expression.endsWith('"')) ||
           (expression.startsWith("'") && expression.endsWith("'"))) {
         output.write(expression.substring(1, expression.length - 1));
+      } else if (_sourceIsEmbeddedSelector(expression)) {
+        output.write(await evaluateEmbeddedRuleAsync(context, expression));
       } else {
         final selected = evaluateSourceJsonPath(
           context,
@@ -180,4 +209,24 @@ class SourceRuleInterpolation {
     output.write(template.substring(offset));
     return output.toString();
   }
+}
+
+String _sourceExplicitRuleMode(String rule) =>
+    RegExp(
+      r'^\+?\s*(@(?:css|json|xpath):)',
+      caseSensitive: false,
+    ).firstMatch(rule.trimLeft())?.group(1) ??
+    '';
+
+bool _sourceIsEmbeddedSelector(String expression) =>
+    expression.startsWith('@') ||
+    expression.startsWith(r'$.') ||
+    expression.startsWith(r'$[') ||
+    expression.startsWith('//');
+
+String _sourceRuleWithMode(String rule, String inheritedMode) {
+  final trimmed = rule.trim();
+  return inheritedMode.isEmpty || _sourceExplicitRuleMode(trimmed).isNotEmpty
+      ? trimmed
+      : '$inheritedMode$trimmed';
 }

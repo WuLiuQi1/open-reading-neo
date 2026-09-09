@@ -188,9 +188,11 @@ class SourceHttpTransport
         body: request.body,
         webJs: request.webJs,
         html: request.webViewHtml,
+        cancellation: cancellation,
       );
       cancellation?.throwIfCancelled();
       await _networkPolicy.validate(loaded.finalUri);
+      cancellation?.throwIfCancelled();
       if (utf8.encode(loaded.body).length > maxResponseBytes) {
         throw BookSourceProtocolException(
           'Reading source response exceeds $maxResponseBytes bytes.',
@@ -411,8 +413,11 @@ class SourceHttpTransport
                 url: current,
                 method: 'GET',
                 headers: browserHeaders,
+                cancellation: cancellation,
               );
+              cancellation?.throwIfCancelled();
               await _networkPolicy.validate(loaded.finalUri);
+              cancellation?.throwIfCancelled();
               if (utf8.encode(loaded.body).length > maxResponseBytes) {
                 throw BookSourceProtocolException(
                   'Reading source response exceeds $maxResponseBytes bytes.',

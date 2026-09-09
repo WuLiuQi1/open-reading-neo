@@ -68,6 +68,7 @@ class SourceRuntimeCatalog {
         source,
         response,
         variables: {'key': query, 'page': '$page'},
+        cancellation: cancellation,
       );
       final rule = source.rule('ruleSearch');
       final bookListRule = _rules.requiredRule(rule, 'bookList');
@@ -141,10 +142,12 @@ class SourceRuntimeCatalog {
   }
 
   Future<List<BookSourceCategory>> getExploreCategories(
-    RegisteredBookSource registered,
-  ) async {
+    RegisteredBookSource registered, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
     final source = sourceFromRegistered(registered);
-    final catalog = await _exploreCatalog(source);
+    final catalog = await _exploreCatalog(source, cancellation: cancellation);
     if (!catalog.canBrowse) {
       throw BookSourceProtocolException(
         catalog.error ?? 'This compatible source has no discovery channels.',
@@ -161,9 +164,11 @@ class SourceRuntimeCatalog {
     required String? category,
     int page = 1,
     int pageSize = 20,
+    BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     final source = sourceFromRegistered(registered);
-    final catalog = await _exploreCatalog(source);
+    final catalog = await _exploreCatalog(source, cancellation: cancellation);
     if (!catalog.canBrowse) {
       throw BookSourceProtocolException(
         catalog.error ?? 'This compatible source has no discovery channels.',
@@ -181,11 +186,13 @@ class SourceRuntimeCatalog {
       source,
       entry.url,
       variables: {'page': '$page'},
+      cancellation: cancellation,
     );
     final document = _requests.document(
       source,
       response,
       variables: {'page': '$page'},
+      cancellation: cancellation,
     );
     final exploreRule = source.rule('ruleExplore');
     final rule = _rules.optionalRule(exploreRule, 'bookList').isEmpty
@@ -214,7 +221,9 @@ class SourceRuntimeCatalog {
     RegisteredBookSource registered,
     String bookId, {
     Map<String, String> sourceVariables = const {},
+    BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     final source = sourceFromRegistered(registered);
     final ruleState = _ruleStateFor(source, bookId, sourceVariables);
     final bookContext = _state.bookContext(
@@ -228,6 +237,7 @@ class SourceRuntimeCatalog {
       decodeSourceDataTarget(bookId) ?? bookId,
       variables: requestVariables(ruleState, {'bookUrl': bookId}),
       book: bookContext,
+      cancellation: cancellation,
     );
     _state.rememberBookInfoResponse(source, bookId, response);
     final document = _requests.document(
@@ -236,6 +246,7 @@ class SourceRuntimeCatalog {
       variables: {'bookUrl': bookId},
       book: bookContext,
       ruleState: ruleState,
+      cancellation: cancellation,
     );
     final contextualDocument = document.withScriptEntities(
       book: bookContext,
@@ -393,8 +404,9 @@ class SourceRuntimeCatalog {
   }
 
   Future<SourceExploreCatalog> _exploreCatalog(
-    ReadingSourceConfig source,
-  ) async {
+    ReadingSourceConfig source, {
+    BookDownloadCancellation? cancellation,
+  }) async {
     final staticCatalog = source.exploreCatalog;
     if (staticCatalog.canBrowse || source.exploreUrl.trim().isEmpty) {
       return staticCatalog;
@@ -403,6 +415,7 @@ class SourceRuntimeCatalog {
       source,
       source.exploreUrl,
       const {'page': '1'},
+      cancellation: cancellation,
     );
     return parseSourceExploreCatalog({...source.raw, 'exploreUrl': expanded});
   }

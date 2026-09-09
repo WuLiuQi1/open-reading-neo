@@ -348,7 +348,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bookSourcesDetectedOrsp => 'Detected: ORSP';
 
   @override
-  String get bookSourcesDetectedAdditional => 'Detected: Legado';
+  String get bookSourcesDetectedAdditional => 'Detected: Reading Source';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP sources';
@@ -450,14 +450,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceSubtitle =>
-      'Find duplicates, then check availability as needed';
+      'Find duplicates and check source availability';
 
   @override
   String get bookSourcesMaintenanceHealthTitle => 'Source health check';
 
   @override
   String get bookSourcesMaintenanceHealthSubtitle =>
-      'Checks search, details, catalogs, and content online; this may take a while';
+      'Test search and reading; reuse recent healthy results';
 
   @override
   String get bookSourcesMaintenanceHealthRunning =>
@@ -468,7 +468,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceDedupeSubtitle =>
-      'Finds identical or possible duplicates locally without visiting source sites';
+      'Compare sources locally, no network needed';
 
   @override
   String get bookSourcesMaintenanceReviewTitle => 'Last health-check result';
@@ -480,7 +480,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceSafetyHint =>
-      'Maintenance disables sources by default and never deletes source configurations.';
+      'Only sources you confirm are disabled. Their configurations are kept.';
 
   @override
   String get bookSourcesMaintenanceProgressTitle => 'Checking sources';
@@ -6020,7 +6020,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesImportIntro =>
-      'Automatically detects ORSP and Legado sources. Review before importing.';
+      'Automatically detects ORSP and Reading Source sources. Review before importing.';
 
   @override
   String get bookSourcesImportInputStep => 'Choose source';
@@ -6141,12 +6141,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceEmptyScope => 'No sources in this scope';
-
-  @override
-  String get bookSourcesMaintenanceLocalLabel => 'Local cleanup';
-
-  @override
-  String get bookSourcesMaintenanceNetworkLabel => 'Online checks';
 
   @override
   String get bookSourcesMaintenanceCancelledTitle => 'Check stopped';

@@ -22,7 +22,7 @@ enum BookSourceManagementFilter {
   requiresLogin,
 }
 
-enum BookSourceManagementMutation { enable, refresh, remove, health, cleanup }
+enum BookSourceManagementMutation { enable, refresh, remove, health }
 
 @immutable
 class BookSourceInstalledDedupeResult {
@@ -33,22 +33,6 @@ class BookSourceInstalledDedupeResult {
 
   final BookSourceDedupeResult result;
   final Map<int, RegisteredBookSource> sourcesByIndex;
-}
-
-@immutable
-class BookSourceCleanupSweepResult {
-  const BookSourceCleanupSweepResult({
-    required this.fullyAvailable,
-    required this.needsAttention,
-  });
-
-  final List<RegisteredBookSource> fullyAvailable;
-  final List<RegisteredBookSource> needsAttention;
-
-  static const empty = BookSourceCleanupSweepResult(
-    fullyAvailable: [],
-    needsAttention: [],
-  );
 }
 
 @immutable
@@ -110,7 +94,6 @@ class BookSourceManagementController extends ChangeNotifier {
   int _organizationRevision = 0;
   int _mutationRevision = 0;
   int _healthRevision = 0;
-  bool _cleanupCancelRequested = false;
   Timer? _healthProgressTimer;
   BookSourceHealthProgress? _pendingHealthProgress;
 
@@ -404,90 +387,6 @@ class BookSourceManagementController extends ChangeNotifier {
     }
   }
 
-  /// Stops a running [runCleanupSweep] from starting any more checks. Sources
-  /// already in flight still finish (bounded by the cleanup sweep's own
-  /// timeout), and whatever was checked before this call is still persisted
-  /// and included in the result — a library of thousands of sources can take
-  /// a long time, so cancelling must never discard progress already made.
-  void cancelCleanupSweep() {
-    _cleanupCancelRequested = true;
-  }
-
-  /// Runs [BookSourceHealthCheckService.checkAllForCleanup] over every
-  /// `readingSource`-protocol source and buckets the results, so a caller can
-  /// offer to disable whatever didn't come back fully available.
-  Future<BookSourceCleanupSweepResult> runCleanupSweep() async {
-    final targets = _state.sources
-        .where(
-          (source) =>
-              source.sourceProtocol == BookSourceProtocolKind.readingSource,
-        )
-        .toList(growable: false);
-    if (targets.isEmpty || _state.healthProgress != null) {
-      return BookSourceCleanupSweepResult.empty;
-    }
-    _loadRevision++;
-    _mutationRevision++;
-    final revision = ++_healthRevision;
-    _cleanupCancelRequested = false;
-    _emit(
-      _state.copyWith(
-        mutation: BookSourceManagementMutation.cleanup,
-        healthProgress: BookSourceHealthProgress(
-          completed: 0,
-          total: targets.length,
-        ),
-        failure: null,
-      ),
-    );
-    try {
-      final updated = await _sourceHealthService.checkAllForCleanup(
-        targets,
-        onProgress: (completed, total) {
-          if (!_isCurrentHealth(revision)) return;
-          _queueHealthProgress(
-            BookSourceHealthProgress(completed: completed, total: total),
-            revision,
-          );
-        },
-        isCancelled: () =>
-            _cleanupCancelRequested || !_isCurrentHealth(revision),
-      );
-      if (!_isCurrentHealth(revision)) {
-        return BookSourceCleanupSweepResult.empty;
-      }
-      _clearPendingHealthProgress();
-      _emit(
-        _state.copyWith(
-          sources: updated.isEmpty ? null : _mergedHealthSources(updated),
-          mutation: null,
-          healthProgress: null,
-        ),
-      );
-      final fullyAvailable = <RegisteredBookSource>[];
-      final needsAttention = <RegisteredBookSource>[];
-      for (final source in updated) {
-        final result = sourceHealthCheckResultOf(source);
-        (result?.fullyAvailable == true ? fullyAvailable : needsAttention).add(
-          source,
-        );
-      }
-      return BookSourceCleanupSweepResult(
-        fullyAvailable: List.unmodifiable(fullyAvailable),
-        needsAttention: List.unmodifiable(needsAttention),
-      );
-    } on Object catch (error) {
-      if (!_isCurrentHealth(revision)) {
-        return BookSourceCleanupSweepResult.empty;
-      }
-      _clearPendingHealthProgress();
-      _emit(
-        _state.copyWith(mutation: null, healthProgress: null, failure: error),
-      );
-      rethrow;
-    }
-  }
-
   /// Disables every source in [ids] in one write — used to apply a cleanup
   /// sweep's "needs attention" bucket after the user reviews it.
   Future<void> disableSources(Iterable<String> ids) async {
@@ -498,19 +397,6 @@ class BookSourceManagementController extends ChangeNotifier {
       () => _registry.setEnabledAll(idSet, false),
     );
   }
-
-  BookSourceInstalledDedupeResult findDuplicateSources({
-    BookSourceDedupeMode mode = BookSourceDedupeMode.standard,
-    Set<String>? sourceIds,
-    Set<String> referencedSourceIds = const {},
-  }) => _resolveDedupeResult(
-    _prepareAndAnalyzeInstalledSources((
-      sources: _state.sources,
-      mode: mode,
-      sourceIds: sourceIds,
-      referencedSourceIds: referencedSourceIds,
-    )),
-  );
 
   Future<BookSourceInstalledDedupeResult> findDuplicateSourcesInBackground({
     BookSourceDedupeMode mode = BookSourceDedupeMode.standard,

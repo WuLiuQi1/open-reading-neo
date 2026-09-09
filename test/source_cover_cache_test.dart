@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/book_sources/networking/book_source_network_policy.dart';
 import 'package:xxread/book_sources/caching/source_cover_cache.dart';
 import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
+import 'package:xxread/book_sources/services/book_download_cancellation.dart';
 import 'package:xxread/book_sources/source_engine/source_webview_loader.dart';
 
 void main() {
@@ -462,6 +463,7 @@ class _FakePlatformImageLoader implements SourceWebViewLoaderPort {
     required Uri url,
     required Map<String, String> headers,
     required int maxBytes,
+    BookDownloadCancellation? cancellation,
   }) async {
     requests++;
     lastHeaders = headers;
@@ -492,6 +494,7 @@ class _FakePlatformImageLoader implements SourceWebViewLoaderPort {
     String? body,
     String? webJs,
     String? html,
+    BookDownloadCancellation? cancellation,
   }) => throw UnimplementedError();
 }
 

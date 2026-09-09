@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'package:xxread/book_sources/source_engine/rules/source_rule_engine.dart';
 import 'package:xxread/book_sources/source_engine/rules/source_rule_parser.dart';
+import 'package:xxread/book_sources/source_engine/source_request_template.dart';
 
 import 'source_script_contract.dart';
 import 'source_script_state.dart';
@@ -31,22 +32,43 @@ class SourceScriptDomApi {
     SourceScriptContext? context, {
     required bool listMode,
   }) {
-    if (context == null || arguments.isEmpty) return listMode ? const [] : '';
+    if (context == null || arguments.isEmpty) return listMode ? null : '';
     final rule = '${arguments.first ?? ''}';
+    if (rule.isEmpty) return listMode ? null : '';
     final content = arguments.length > 1 ? arguments[1] : context.result;
-    final document = _document(content, context);
+    if (content == null && listMode) return null;
+    final baseUrl = arguments.length > 2
+        ? Uri.tryParse('${arguments[2] ?? ''}')
+        : null;
+    final document = _document(
+      content,
+      baseUrl?.hasAuthority == true
+          ? context.copyWith(baseUrl: baseUrl)
+          : context,
+    );
+    final isUrl = arguments.length > 3 && arguments[3] == true;
     if (!listMode) {
-      return _selectors.evaluateString(
+      var value = _selectors.evaluateString(
         document,
         document.value,
         rule,
-        joinSeparator: '\n',
+        joinSeparator: isUrl ? '' : '\n',
         regexDotAll: false,
       );
+      final unescape = arguments.length <= 4 || arguments[4] != false;
+      if (unescape && value.contains('&')) {
+        // Decode entities without interpreting source text as HTML markup.
+        value =
+            html_parser.parseFragment(value.replaceAll('<', '&lt;')).text ?? '';
+      }
+      return isUrl ? _resolveUrl(document.baseUri, value) : value;
     }
     final transform = splitSourceRuleTransform(rule);
-    return _selectors
-        .evaluateList(document, document.value, rule)
+    final scalar = content is Map ? content[transform.selector] : null;
+    final selected = scalar is String
+        ? <Object?>[scalar]
+        : _selectors.evaluateList(document, document.value, rule);
+    final values = selected
         .map((item) {
           if (item is String || item is num || item is bool) return '$item';
           if (item is Map || item is List) return jsonEncode(item);
@@ -67,7 +89,20 @@ class SourceScriptDomApi {
                   '##${transform.pattern}##${transform.replacement}',
                 ),
         )
+        .expand((value) => scalar is String ? value.split('\n') : [value])
         .toList(growable: false);
+    if (!isUrl) return values;
+    return values
+        .map((value) => _resolveUrl(document.baseUri, value))
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
+  String _resolveUrl(Uri baseUri, String value) {
+    final target = value.trim();
+    if (target.startsWith('javascript')) return '';
+    return resolveSourceRequestUrl(baseUri, target);
   }
 
   List<Object?> _selectElements(List arguments, SourceScriptContext? context) {

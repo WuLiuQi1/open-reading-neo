@@ -7,8 +7,7 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
     _scrollProgress.value = progress.clamp(0.0, 1.0);
   }
 
-  Future<List<ReaderSearchDocument>> _loadSearchDocuments() async {
-    final documents = <ReaderSearchDocument>[];
+  Stream<ReaderSearchDocument> _loadSearchDocuments() async* {
     for (var index = 0; index < _chapters.length; index++) {
       final content = await _continuousContentFor(index);
       final text =
@@ -17,15 +16,12 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
             content,
             fallbackTitle: _chapters[index].title,
           );
-      documents.add(
-        ReaderSearchDocument(
-          chapterIndex: index,
-          chapterTitle: _chapters[index].title,
-          text: text,
-        ),
+      yield ReaderSearchDocument(
+        chapterIndex: index,
+        chapterTitle: _chapters[index].title,
+        text: text,
       );
     }
-    return documents;
   }
 
   Future<void> _showFullTextSearch({String initialQuery = ''}) async {
@@ -37,8 +33,31 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
       palette: _readerTheme,
       initialQuery: initialQuery,
       loadDocuments: _loadSearchDocuments,
-      onResultSelected: (result) =>
-          unawaited(_loadChapter(result.chapterIndex, restoreProgress: 0)),
+      documentCount: _chapters.length,
+      onResultSelected: (result) => unawaited(_jumpToSearchResult(result)),
+    );
+  }
+
+  Future<void> _jumpToSearchResult(ReaderSearchResult result) async {
+    if (result.chapterIndex < 0 || result.chapterIndex >= _chapters.length) {
+      return;
+    }
+    final text = _readableChapterText[result.chapterIndex] ?? '';
+    final locator = CanonicalLocator.fromComponents(
+      format: BookFormat.txt,
+      chapterId: _chapters[result.chapterIndex].id,
+      offset: result.offset,
+      excerpt: result.excerpt,
+      progression: text.isEmpty ? 0 : result.offset / text.length,
+    );
+    await _jumpToBookmark(
+      Bookmark(
+        bookId: _shelfBookId ?? 0,
+        pageNumber: result.chapterIndex,
+        chapterIndex: result.chapterIndex,
+        chapterTitle: result.chapterTitle,
+        canonicalLocator: LocatorCodec.encodeCanonicalLocator(locator),
+      ),
     );
   }
 

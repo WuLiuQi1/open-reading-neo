@@ -60,7 +60,7 @@ void main() {
     expect(gbk.body, 'q=%3F');
   });
 
-  test('expands Legado page alternatives inside POST options', () {
+  test('expands Reading Source page alternatives inside POST options', () {
     for (final page in [1, 2, 3]) {
       final request = SourceRequestTemplate.parse(
         '/search,{"method":"POST","charset":"gbk",'

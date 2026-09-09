@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../services/book_download_cancellation.dart';
 import 'scripting/source_script_contract.dart';
 
 abstract interface class SourceInteractionCoordinatorPort {
@@ -8,6 +9,7 @@ abstract interface class SourceInteractionCoordinatorPort {
     required String sourceName,
     required SourceScriptInteractionRequest interaction,
     Duration timeout = const Duration(minutes: 5),
+    BookDownloadCancellation? cancellation,
   });
 }
 
@@ -46,7 +48,9 @@ class SourceInteractionCoordinator implements SourceInteractionCoordinatorPort {
     required String sourceName,
     required SourceScriptInteractionRequest interaction,
     Duration timeout = const Duration(minutes: 5),
+    BookDownloadCancellation? cancellation,
   }) {
+    cancellation?.throwIfCancelled();
     if (!_requests.hasListener) {
       return Future.value(
         const SourceScriptInteractionResult(
@@ -58,6 +62,13 @@ class SourceInteractionCoordinator implements SourceInteractionCoordinatorPort {
         '$sourceId:${DateTime.now().microsecondsSinceEpoch}:${_serial++}';
     final completer = Completer<SourceScriptInteractionResult>();
     _pending[requestId] = completer;
+    void cancelRequest() {
+      final pending = _pending.remove(requestId);
+      if (pending != null && !pending.isCompleted) {
+        pending.complete(const SourceScriptInteractionResult(cancelled: true));
+      }
+    }
+
     _requests.add(
       SourceInteractionTicket(
         requestId: requestId,
@@ -66,15 +77,18 @@ class SourceInteractionCoordinator implements SourceInteractionCoordinatorPort {
         request: interaction,
       ),
     );
-    return completer.future.timeout(
-      timeout,
-      onTimeout: () {
-        _pending.remove(requestId);
-        return const SourceScriptInteractionResult(
-          error: 'Reading source verification timed out.',
-        );
-      },
-    );
+    cancellation?.addListener(cancelRequest);
+    return completer.future
+        .timeout(
+          timeout,
+          onTimeout: () {
+            _pending.remove(requestId);
+            return const SourceScriptInteractionResult(
+              error: 'Reading source verification timed out.',
+            );
+          },
+        )
+        .whenComplete(() => cancellation?.removeListener(cancelRequest));
   }
 
   int get pendingCount => _pending.length;

@@ -330,7 +330,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesDetectedOrsp => '识别为：ORSP 书源';
 
   @override
-  String get bookSourcesDetectedAdditional => '识别为：Legado 书源';
+  String get bookSourcesDetectedAdditional => '识别为：通用书源';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP 书源';
@@ -429,13 +429,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesMaintenanceTitle => '书源整理';
 
   @override
-  String get bookSourcesMaintenanceSubtitle => '先整理重复项，再按需检查可用性';
+  String get bookSourcesMaintenanceSubtitle => '清理重复项，检查书源是否可用';
 
   @override
   String get bookSourcesMaintenanceHealthTitle => '书源体检';
 
   @override
-  String get bookSourcesMaintenanceHealthSubtitle => '联网检查搜索、详情、目录和正文，可能需要一些时间';
+  String get bookSourcesMaintenanceHealthSubtitle => '检查搜索、目录与正文，自动复用近期正常结果';
 
   @override
   String get bookSourcesMaintenanceHealthRunning => '书源体检进行中';
@@ -444,7 +444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesMaintenanceDedupeTitle => '重复项整理';
 
   @override
-  String get bookSourcesMaintenanceDedupeSubtitle => '本地查找相同或疑似重复的书源，不会访问书源网站';
+  String get bookSourcesMaintenanceDedupeSubtitle => '本地比对重复书源，无需联网';
 
   @override
   String get bookSourcesMaintenanceReviewTitle => '上次体检结果';
@@ -455,7 +455,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get bookSourcesMaintenanceSafetyHint => '整理操作默认只关闭书源，不会删除书源配置。';
+  String get bookSourcesMaintenanceSafetyHint => '确认后仅停用所选书源，配置始终保留。';
 
   @override
   String get bookSourcesMaintenanceProgressTitle => '正在体检书源';
@@ -5708,7 +5708,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '正文修改会更新下方位置的 TXT。升级前的上传副本会保留，但不再跟随正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '自动识别 ORSP 和 Legado 书源，预览后再导入。';
+  String get bookSourcesImportIntro => '自动识别 ORSP 和 通用书源，预览后再导入。';
 
   @override
   String get bookSourcesImportInputStep => '选择书源';
@@ -5813,12 +5813,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceEmptyScope => '这个范围内没有可整理的书源';
-
-  @override
-  String get bookSourcesMaintenanceLocalLabel => '本地整理';
-
-  @override
-  String get bookSourcesMaintenanceNetworkLabel => '联网检测';
 
   @override
   String get bookSourcesMaintenanceCancelledTitle => '检测已停止';
@@ -6223,7 +6217,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesDetectedOrsp => '識別為：ORSP 書源';
 
   @override
-  String get bookSourcesDetectedAdditional => '識別為：Legado 書源';
+  String get bookSourcesDetectedAdditional => '識別為：通用書源';
 
   @override
   String get bookSourcesProtocolGroupOrsp => 'ORSP 書源';
@@ -6322,13 +6316,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesMaintenanceTitle => '書源整理';
 
   @override
-  String get bookSourcesMaintenanceSubtitle => '先整理重複項，再按需檢查可用性';
+  String get bookSourcesMaintenanceSubtitle => '整理重複項目，檢查書源是否可用';
 
   @override
   String get bookSourcesMaintenanceHealthTitle => '書源體檢';
 
   @override
-  String get bookSourcesMaintenanceHealthSubtitle => '連線檢查搜尋、詳情、目錄和正文，可能需要一些時間';
+  String get bookSourcesMaintenanceHealthSubtitle => '檢查搜尋、目錄與正文，自動沿用近期正常結果';
 
   @override
   String get bookSourcesMaintenanceHealthRunning => '書源體檢進行中';
@@ -6337,7 +6331,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesMaintenanceDedupeTitle => '重複項整理';
 
   @override
-  String get bookSourcesMaintenanceDedupeSubtitle => '在本機尋找相同或疑似重複的書源，不會存取書源網站';
+  String get bookSourcesMaintenanceDedupeSubtitle => '本機比對重複書源，無需連網';
 
   @override
   String get bookSourcesMaintenanceReviewTitle => '上次體檢結果';
@@ -6348,7 +6342,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get bookSourcesMaintenanceSafetyHint => '整理操作預設只停用書源，不會刪除書源設定。';
+  String get bookSourcesMaintenanceSafetyHint => '確認後僅停用所選書源，設定始終保留。';
 
   @override
   String get bookSourcesMaintenanceProgressTitle => '正在體檢書源';
@@ -11481,7 +11475,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '正文修改會更新下方位置的 TXT。升級前的上傳副本會保留，但不再跟隨正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '自動識別 ORSP 和 Legado 書源，預覽後再匯入。';
+  String get bookSourcesImportIntro => '自動識別 ORSP 和 通用書源，預覽後再匯入。';
 
   @override
   String get bookSourcesImportInputStep => '選擇書源';
@@ -11587,12 +11581,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get bookSourcesMaintenanceEmptyScope => '這個範圍內沒有可整理的書源';
-
-  @override
-  String get bookSourcesMaintenanceLocalLabel => '本地整理';
-
-  @override
-  String get bookSourcesMaintenanceNetworkLabel => '連網檢測';
 
   @override
   String get bookSourcesMaintenanceCancelledTitle => '檢測已停止';

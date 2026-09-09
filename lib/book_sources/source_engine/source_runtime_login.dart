@@ -1,5 +1,6 @@
 import '../models/registered_book_source.dart';
 import '../protocol/book_source_protocol.dart';
+import '../services/book_download_cancellation.dart';
 import 'source_config.dart';
 import 'source_login_session.dart';
 import 'source_login_ui.dart';
@@ -36,6 +37,7 @@ abstract interface class SourceRuntimeScriptContextPort {
     Map<String, Object?> book,
     Map<String, Object?> chapter,
     bool includeSourceHeaders,
+    BookDownloadCancellation? cancellation,
   });
 }
 

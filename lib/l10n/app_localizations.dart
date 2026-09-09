@@ -686,7 +686,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesDetectedAdditional.
   ///
   /// In en, this message translates to:
-  /// **'Detected: Legado'**
+  /// **'Detected: Reading Source'**
   String get bookSourcesDetectedAdditional;
 
   /// No description provided for @bookSourcesProtocolGroupOrsp.
@@ -843,7 +843,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesMaintenanceSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Find duplicates, then check availability as needed'**
+  /// **'Find duplicates and check source availability'**
   String get bookSourcesMaintenanceSubtitle;
 
   /// No description provided for @bookSourcesMaintenanceHealthTitle.
@@ -855,7 +855,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesMaintenanceHealthSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Checks search, details, catalogs, and content online; this may take a while'**
+  /// **'Test search and reading; reuse recent healthy results'**
   String get bookSourcesMaintenanceHealthSubtitle;
 
   /// No description provided for @bookSourcesMaintenanceHealthRunning.
@@ -873,7 +873,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesMaintenanceDedupeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Finds identical or possible duplicates locally without visiting source sites'**
+  /// **'Compare sources locally, no network needed'**
   String get bookSourcesMaintenanceDedupeSubtitle;
 
   /// No description provided for @bookSourcesMaintenanceReviewTitle.
@@ -891,7 +891,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesMaintenanceSafetyHint.
   ///
   /// In en, this message translates to:
-  /// **'Maintenance disables sources by default and never deletes source configurations.'**
+  /// **'Only sources you confirm are disabled. Their configurations are kept.'**
   String get bookSourcesMaintenanceSafetyHint;
 
   /// No description provided for @bookSourcesMaintenanceProgressTitle.
@@ -10535,7 +10535,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesImportIntro.
   ///
   /// In en, this message translates to:
-  /// **'Automatically detects ORSP and Legado sources. Review before importing.'**
+  /// **'Automatically detects ORSP and Reading Source sources. Review before importing.'**
   String get bookSourcesImportIntro;
 
   /// No description provided for @bookSourcesImportInputStep.
@@ -10735,18 +10735,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No sources in this scope'**
   String get bookSourcesMaintenanceEmptyScope;
-
-  /// No description provided for @bookSourcesMaintenanceLocalLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Local cleanup'**
-  String get bookSourcesMaintenanceLocalLabel;
-
-  /// No description provided for @bookSourcesMaintenanceNetworkLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Online checks'**
-  String get bookSourcesMaintenanceNetworkLabel;
 
   /// No description provided for @bookSourcesMaintenanceCancelledTitle.
   ///

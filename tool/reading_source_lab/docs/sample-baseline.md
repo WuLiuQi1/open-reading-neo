@@ -1,5 +1,8 @@
 # Reading source compatibility audit
 
+Historical per-file structural report. It predates global version selection and does not establish
+execution compatibility. See the [current corpus baseline](corpus-baseline-2026-09-09.md).
+
 > Offline structural audit. It does not execute scripts, contact sites, or expose auth values.
 
 Parsed **4139** sources from **3** files; duplicates: **12**; parse errors: **1**; invalid/empty URLs: **65**.

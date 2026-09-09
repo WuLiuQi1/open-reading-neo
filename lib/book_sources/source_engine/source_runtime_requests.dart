@@ -32,6 +32,7 @@ abstract interface class SourceRuntimeRequestPort {
     required Map<String, String> variables,
     Map<String, Object?> book,
     Map<String, Object?> chapter,
+    BookDownloadCancellation? cancellation,
   });
   SourceRuleDocument document(
     ReadingSourceConfig source,
@@ -40,14 +41,19 @@ abstract interface class SourceRuntimeRequestPort {
     Map<String, Object?> book,
     Map<String, Object?> chapter,
     Map<String, Object?>? ruleState,
+    BookDownloadCancellation? cancellation,
   });
-  Future<Map<String, String>> sourceHeaders(ReadingSourceConfig source);
+  Future<Map<String, String>> sourceHeaders(
+    ReadingSourceConfig source, {
+    BookDownloadCancellation? cancellation,
+  });
   Future<String> expandScriptTemplate(
     ReadingSourceConfig source,
     String template,
     Map<String, String> variables, {
     Map<String, Object?> book,
     Map<String, Object?> chapter,
+    BookDownloadCancellation? cancellation,
   });
   String cookieHeader(ReadingSourceConfig source, Uri uri);
 }
@@ -108,6 +114,7 @@ class SourceRuntimeRequests
     String? defaultWebJs,
     BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     await _sessions.ensure(source);
     final expandedTemplate = await expandScriptTemplate(
       source,
@@ -115,12 +122,14 @@ class SourceRuntimeRequests
       variables,
       book: book,
       chapter: chapter,
+      cancellation: cancellation,
     );
+    cancellation?.throwIfCancelled();
     final outgoing = SourceRequestTemplate.parse(
       expandedTemplate,
       baseUri: source.baseUri,
       variables: variables,
-      sourceHeaders: await sourceHeaders(source),
+      sourceHeaders: await sourceHeaders(source, cancellation: cancellation),
       cookieJarKey: source.enabledCookieJar ? source.stableId : null,
       defaultWebJs: defaultWebJs,
     );
@@ -135,8 +144,9 @@ class SourceRuntimeRequests
         outgoing,
         cancellation: cancellation,
       );
+      cancellation?.throwIfCancelled();
       _trace.networkSuccess(outgoing, response, stopwatch);
-      return _applyLoginCheck(source, response);
+      return _applyLoginCheck(source, response, cancellation: cancellation);
     } catch (error) {
       _trace.networkFailure(outgoing, error, stopwatch);
       rethrow;
@@ -151,7 +161,9 @@ class SourceRuntimeRequests
     required Map<String, String> variables,
     Map<String, Object?> book = const {},
     Map<String, Object?> chapter = const {},
+    BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     if (target == (decodeSourceDataTarget(bookId) ?? bookId)) {
       final cached = _state.takeBookInfoResponse(source, bookId);
       if (cached != null) return cached;
@@ -162,6 +174,7 @@ class SourceRuntimeRequests
       variables: variables,
       book: book,
       chapter: chapter,
+      cancellation: cancellation,
     );
   }
 
@@ -173,6 +186,7 @@ class SourceRuntimeRequests
     Map<String, Object?> book = const {},
     Map<String, Object?> chapter = const {},
     Map<String, Object?>? ruleState,
+    BookDownloadCancellation? cancellation,
   }) {
     final state = ruleState ?? <String, Object?>{};
     return _rules.document(
@@ -185,6 +199,7 @@ class SourceRuntimeRequests
         variables: requestVariables(state, variables),
         book: book,
         chapter: chapter,
+        cancellation: cancellation,
       ),
     );
   }
@@ -198,7 +213,9 @@ class SourceRuntimeRequests
     Map<String, Object?> book = const {},
     Map<String, Object?> chapter = const {},
     bool includeSourceHeaders = true,
+    BookDownloadCancellation? cancellation,
   }) {
+    cancellation?.throwIfCancelled();
     final loginSession = _sessions.current(source);
     return SourceScriptContext(
       source: source,
@@ -213,6 +230,7 @@ class SourceRuntimeRequests
         source,
         request,
         includeSourceHeaders: includeSourceHeaders,
+        cancellation: cancellation,
       ),
       cookieReader: (uri) => _sessions.cookieHeader(source, uri),
       cookieWriter: (uri, cookie) => _sessions.setCookies(source, uri, cookie),
@@ -222,14 +240,16 @@ class SourceRuntimeRequests
       loginInfoWriter: (value) => _sessions.updateInfo(source, value),
       loginHeaderWriter: (value) => _sessions.updateHeaders(source, value),
       interactionHandler: (request) =>
-          _handleScriptInteraction(source, request),
+          _handleScriptInteraction(source, request, cancellation: cancellation),
     );
   }
 
   Future<SourceScriptInteractionResult> _handleScriptInteraction(
     ReadingSourceConfig source,
-    SourceScriptInteractionRequest request,
-  ) async {
+    SourceScriptInteractionRequest request, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
     var target = source.baseUri.resolve(request.url);
     var interaction = request;
     if (request.kind != SourceScriptInteractionKind.verificationCode &&
@@ -247,9 +267,14 @@ class SourceRuntimeRequests
         );
       }
     }
-    final headers = await _interactionHeaders(source, target);
+    final headers = await _interactionHeaders(
+      source,
+      target,
+      cancellation: cancellation,
+    );
     var prepared = interaction.copyWith(headers: headers);
     await _interactionTransport?.validateInteractionUri(target);
+    cancellation?.throwIfCancelled();
     if (request.kind == SourceScriptInteractionKind.verificationCode) {
       final interactionTransport = _interactionTransport;
       if (interactionTransport == null) {
@@ -263,19 +288,25 @@ class SourceRuntimeRequests
         headers: headers,
         cookieJarKey: source.enabledCookieJar ? source.stableId : null,
       );
+      cancellation?.throwIfCancelled();
       prepared = prepared.copyWith(imageBytes: bytes);
     }
+    cancellation?.throwIfCancelled();
     final result = await _interactionCoordinator.request(
       sourceId: source.stableId,
       sourceName: source.name,
       interaction: prepared,
+      cancellation: cancellation,
     );
+    cancellation?.throwIfCancelled();
     final finalUri = Uri.tryParse(result.finalUrl);
     if (finalUri != null) {
       await _interactionTransport?.validateInteractionUri(finalUri);
     }
+    cancellation?.throwIfCancelled();
     if (result.cookieHeader?.trim().isNotEmpty == true &&
         source.enabledCookieJar) {
+      cancellation?.throwIfCancelled();
       if (finalUri != null) {
         _sessions.setCookies(source, finalUri, result.cookieHeader!);
       }
@@ -296,6 +327,7 @@ class SourceRuntimeRequests
           method: 'GET',
           url: result.finalUrl.isEmpty ? request.url : result.finalUrl,
         ),
+        cancellation: cancellation,
       );
       return SourceScriptInteractionResult(
         body: response.body,
@@ -308,9 +340,11 @@ class SourceRuntimeRequests
 
   Future<Map<String, String>> _interactionHeaders(
     ReadingSourceConfig source,
-    Uri uri,
-  ) async {
+    Uri uri, {
+    BookDownloadCancellation? cancellation,
+  }) async {
     await _sessions.ensure(source);
+    cancellation?.throwIfCancelled();
     final headers = <String, String>{..._sessions.current(source).loginHeaders};
     final raw = source.raw['header'];
     Object? decoded = raw;
@@ -338,8 +372,10 @@ class SourceRuntimeRequests
 
   Future<SourceResponse> _applyLoginCheck(
     ReadingSourceConfig source,
-    SourceResponse response,
-  ) async {
+    SourceResponse response, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
     final script = sourceScriptBody(source.loginCheckJs) ?? source.loginCheckJs;
     if (script.isEmpty) return response;
     final result = SourceScriptNetworkResult(
@@ -351,7 +387,12 @@ class SourceRuntimeRequests
     );
     final checked = await _scripts().evaluateAsync(
       script,
-      scriptContext(source, result: result, baseUrl: response.finalUri),
+      scriptContext(
+        source,
+        result: result,
+        baseUrl: response.finalUri,
+        cancellation: cancellation,
+      ),
     );
     await _sessions.flush(source);
     if (checked is! Map) return response;
@@ -368,7 +409,11 @@ class SourceRuntimeRequests
   }
 
   @override
-  Future<Map<String, String>> sourceHeaders(ReadingSourceConfig source) async {
+  Future<Map<String, String>> sourceHeaders(
+    ReadingSourceConfig source, {
+    BookDownloadCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
     await _sessions.ensure(source);
     final raw = source.raw['header'];
     final loginHeaders = _sessions.current(source).loginHeaders;
@@ -385,6 +430,7 @@ class SourceRuntimeRequests
             source,
             baseUrl: source.baseUri,
             includeSourceHeaders: false,
+            cancellation: cancellation,
           ),
         );
         if (decoded is String) {
@@ -441,7 +487,9 @@ class SourceRuntimeRequests
     Map<String, String> variables, {
     Map<String, Object?> book = const {},
     Map<String, Object?> chapter = const {},
+    BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     await _sessions.ensure(source);
     SourceScriptContext context() => scriptContext(
       source,
@@ -449,6 +497,7 @@ class SourceRuntimeRequests
       variables: variables,
       book: book,
       chapter: chapter,
+      cancellation: cancellation,
     );
     final trimmed = template.trimLeft();
     final directScript = sourceScriptBody(template);
@@ -489,7 +538,9 @@ class SourceRuntimeRequests
     ReadingSourceConfig source,
     SourceScriptNetworkRequest request, {
     bool includeSourceHeaders = true,
+    BookDownloadCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     final method = request.method.toUpperCase();
     if (!const {'GET', 'HEAD', 'POST', 'WEBVIEW'}.contains(method)) {
       throw BookSourceProtocolException(
@@ -497,10 +548,15 @@ class SourceRuntimeRequests
       );
     }
     final headers = <String, String>{
-      if (includeSourceHeaders) ...await sourceHeaders(source),
+      if (includeSourceHeaders)
+        ...await sourceHeaders(source, cancellation: cancellation),
       ...request.headers,
     };
-    await _limiter.acquire(source.stableId, source.concurrentRate);
+    await _limiter.acquire(
+      source.stableId,
+      source.concurrentRate,
+      cancellation: cancellation,
+    );
     final SourceRequestTemplate outgoing;
     if (method == 'WEBVIEW') {
       final baseRequest = SourceRequestTemplate.parse(
@@ -535,7 +591,11 @@ class SourceRuntimeRequests
     }
     final stopwatch = _trace.startNetwork();
     try {
-      final response = await _transport.send(outgoing);
+      final response = await _transport.send(
+        outgoing,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
       _trace.networkSuccess(outgoing, response, stopwatch);
       return SourceScriptNetworkResult(
         body: response.body,

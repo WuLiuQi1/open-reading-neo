@@ -11,8 +11,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/services/book_source_maintenance_coordinator.dart';
+import 'package:xxread/book_sources/services/book_source_registry.dart';
 import 'package:xxread/book_sources/source_engine/source_health_checker.dart';
 import 'package:xxread/l10n/app_localizations.dart';
+import 'package:xxread/pages/book_sources/book_source_management_page.dart';
 import 'package:xxread/pages/book_sources/widgets/book_source_cleanup_review_sheet.dart';
 import 'package:xxread/pages/book_sources/widgets/book_source_maintenance_sheet.dart';
 import 'package:xxread/utils/app_themes.dart';
@@ -29,6 +31,11 @@ const _outputDirectory = '.omx/maintenance-previews/$_variant';
 void main() {
   final specs = <_PreviewSpec>[
     const _PreviewSpec('entry', _PreviewScene.entry),
+    const _PreviewSpec(
+      'entry-dark',
+      _PreviewScene.entry,
+      brightness: Brightness.dark,
+    ),
     const _PreviewSpec('progress', _PreviewScene.progress),
     const _PreviewSpec('cancelling', _PreviewScene.cancelling),
     const _PreviewSpec('cancelled', _PreviewScene.cancelled),
@@ -64,6 +71,59 @@ void main() {
       await _writePng(tester, '${spec.name}-panel', _surfaceKey);
     });
   }
+
+  for (final running in [false, true]) {
+    testWidgets('capture menu ${running ? 'running' : 'idle'}', (tester) async {
+      await tester.runAsync(_loadPreviewFonts);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      final coordinator = _PreviewMaintenanceCoordinator(
+        _stateFor(running ? _PreviewScene.progress : _PreviewScene.entry),
+      );
+      addTearDown(coordinator.dispose);
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _captureKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: AppThemes.defaultAccentColor,
+              ),
+              fontFamily: _previewFont,
+              useMaterial3: true,
+            ),
+            home: BookSourceManagementPage(
+              maintenance: coordinator,
+              registry: _PreviewRegistry(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('bookSourcesToolButton')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await _writePng(
+        tester,
+        running ? 'menu-running' : 'menu-idle',
+        _captureKey,
+      );
+    });
+  }
+}
+
+class _PreviewRegistry extends BookSourceRegistry {
+  @override
+  Future<List<RegisteredBookSource>> loadInBackground() async =>
+      _reviewSources();
+
+  @override
+  Future<List<String>> loadGroups() async => const [];
 }
 
 Widget _previewApp(

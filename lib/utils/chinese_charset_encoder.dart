@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:gbk_codec/src/gbk_maps.dart'
     show json_char_to_gbk, json_gbk_to_char;
 
-/// Encodes the Chinese legacy charsets used by Legado request rules.
+/// Encodes the Chinese legacy charsets used by reading-source request rules.
 ///
 /// The bundled GBK map supplies the common double-byte repertoire. Compact
 /// deltas below align it with Java's GB2312, GBK, and GB18030-2022 encoders;

@@ -361,7 +361,7 @@ SourceImportResult parseReadingSourcePayload(
         }
       }
       // A service landing page can itself be JSON. It is not an empty
-      // Legado collection; let URL import try ORSP discovery instead.
+      // reading-source collection; let URL import try ORSP discovery instead.
       if (!recognized) {
         throw const FormatException('No recognized book source format.');
       }

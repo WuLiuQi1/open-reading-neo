@@ -22,7 +22,10 @@ class ReadingSource:
 
     @property
     def is_http_url(self) -> bool:
-        parsed = urlparse(self.url.split("#", 1)[0])
+        try:
+            parsed = urlparse(self.url.split("#", 1)[0])
+        except ValueError:
+            return False
         return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
@@ -32,6 +35,8 @@ class ParseResult:
     source_urls: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     duplicates: int = 0
+    record_count: int = 0
+    classification: str = "sources"
 
 
 def load_file(path: str | Path) -> ParseResult:
@@ -43,9 +48,19 @@ def load_file(path: str | Path) -> ParseResult:
     return parse_payload(payload, origin=str(source_path))
 
 
-def parse_payload(payload: Any, *, origin: str = "<memory>") -> ParseResult:
+def parse_payload(
+    payload: Any, *, origin: str = "<memory>", deduplicate: bool = True
+) -> ParseResult:
     result = ParseResult()
     candidates = list(_source_candidates(payload, result))
+    result.record_count = len(candidates)
+    if not any(
+        isinstance(raw, dict)
+        and ("bookSourceName" in raw or "bookSourceUrl" in raw)
+        for raw in candidates
+    ):
+        result.classification = "url_list" if result.source_urls else "unrelated"
+        return result
     by_key: dict[str, ReadingSource] = {}
     for index, raw in enumerate(candidates):
         if not isinstance(raw, dict):
@@ -64,6 +79,9 @@ def parse_payload(payload: Any, *, origin: str = "<memory>") -> ParseResult:
             origin=origin,
             index=index,
         )
+        if not deduplicate:
+            result.sources.append(source)
+            continue
         if source.stable_key in by_key:
             result.duplicates += 1
             by_key.pop(source.stable_key)
@@ -78,6 +96,7 @@ def _source_candidates(payload: Any, result: ParseResult) -> Iterable[Any]:
         return
     if not isinstance(payload, dict):
         result.errors.append("payload must be an object or array")
+        yield payload
         return
     if "bookSourceUrl" in payload or "bookSourceName" in payload:
         yield payload
@@ -94,6 +113,7 @@ def _source_candidates(payload: Any, result: ParseResult) -> Iterable[Any]:
             return
     if not result.source_urls:
         result.errors.append("object does not contain a reading source or source list")
+        yield payload
 
 
 def _text(value: Any) -> str:

@@ -9,8 +9,10 @@ void main() {
     Uri.parse('https://books.test/'),
   );
 
-  test('relative JSONPath filters match Legado book and comic rules', () {
-    final document = SourceRuleDocument.parse('''{
+  test(
+    'relative JSONPath filters match Reading Source book and comic rules',
+    () {
+      final document = SourceRuleDocument.parse('''{
         "data": {
           "catalog": [
             {"name": "volume", "grade": 1},
@@ -20,19 +22,20 @@ void main() {
         }
       }''', Uri.parse('https://books.test/catalog'));
 
-    final chapters = engine.evaluateList(
-      document,
-      null,
-      'data.catalog[?(@.grade > 1)]',
-    );
+      final chapters = engine.evaluateList(
+        document,
+        null,
+        'data.catalog[?(@.grade > 1)]',
+      );
 
-    expect(
-      chapters.map(
-        (chapter) => engine.evaluateString(document, chapter, 'name'),
-      ),
-      ['chapter 1', 'chapter 2'],
-    );
-  });
+      expect(
+        chapters.map(
+          (chapter) => engine.evaluateString(document, chapter, 'name'),
+        ),
+        ['chapter 1', 'chapter 2'],
+      );
+    },
+  );
 
   test('plain relative JSON keys may contain colon and comma characters', () {
     final document = SourceRuleDocument.parse(

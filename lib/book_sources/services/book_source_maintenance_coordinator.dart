@@ -391,7 +391,15 @@ class BookSourceMaintenanceCoordinator extends ChangeNotifier {
     required int expectedRunId,
     Set<String> retryIssueIds = const {},
   }) async {
-    final current = await _registry.load();
+    final List<RegisteredBookSource> current;
+    try {
+      current = await _registry.load();
+    } on Object catch (error) {
+      if (!_disposed && !_state.isRunning && _state.runId == expectedRunId) {
+        _emitFailure(expectedRunId, error);
+      }
+      return null;
+    }
     if (_disposed || _state.isRunning || _state.runId != expectedRunId) {
       return null;
     }

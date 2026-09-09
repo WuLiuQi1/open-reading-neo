@@ -127,7 +127,7 @@ class _BookSourceMaintenanceSheetState
                   l10n.bookSourcesMaintenanceSubtitle,
                   style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 20),
                 Text(
                   l10n.bookSourcesMaintenanceScope,
                   style: Theme.of(context).textTheme.labelLarge,
@@ -149,6 +149,8 @@ class _BookSourceMaintenanceSheetState
                                 BookSourceMaintenanceScope.selected => l10n.bookSourcesMaintenanceScopeSelected,
                               }} ${_sourcesFor(scope).length}',
                           selected: _scope == scope,
+                          backgroundColor: scheme.surfaceContainerLow,
+                          foregroundColor: scheme.onSurfaceVariant,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 10,
@@ -166,37 +168,51 @@ class _BookSourceMaintenanceSheetState
                       : l10n.bookSourcesMaintenanceCount(count),
                   style: TextStyle(
                     color: scheme.onSurfaceVariant,
-                    fontSize: 12,
+                    fontSize: 13,
                   ),
                 ),
                 const SizedBox(height: 20),
-                _MaintenanceActionTile(
-                  key: const Key('bookSourcesDedupeMaintenanceAction'),
-                  icon: Icons.difference_outlined,
-                  title: l10n.bookSourcesMaintenanceDedupeTitle,
-                  subtitle: l10n.bookSourcesMaintenanceDedupeSubtitle,
-                  category: l10n.bookSourcesMaintenanceLocalLabel,
-                  onTap: count == 0 || state.isRunning
-                      ? null
-                      : () => _open(BookSourceMaintenanceAction.dedupe),
-                ),
-                const Divider(height: 25),
-                _MaintenanceActionTile(
-                  key: const Key('bookSourcesHealthMaintenanceAction'),
-                  icon: Icons.health_and_safety_outlined,
-                  title: state.isRunning
-                      ? l10n.bookSourcesMaintenanceHealthRunning
-                      : l10n.bookSourcesMaintenanceHealthTitle,
-                  subtitle: state.isRunning
-                      ? l10n.bookSourcesMaintenanceProgress(
-                          state.progress?.completed ?? 0,
-                          state.progress?.total ?? 0,
-                        )
-                      : l10n.bookSourcesMaintenanceHealthSubtitle,
-                  category: l10n.bookSourcesMaintenanceNetworkLabel,
-                  onTap: count == 0 && !state.isRunning
-                      ? null
-                      : () => _open(BookSourceMaintenanceAction.healthCheck),
+                Material(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(20),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      _MaintenanceActionTile(
+                        key: const Key('bookSourcesDedupeMaintenanceAction'),
+                        icon: Icons.difference_outlined,
+                        title: l10n.bookSourcesMaintenanceDedupeTitle,
+                        subtitle: l10n.bookSourcesMaintenanceDedupeSubtitle,
+                        onTap: count == 0 || state.isRunning
+                            ? null
+                            : () => _open(BookSourceMaintenanceAction.dedupe),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: 72,
+                        endIndent: 16,
+                        color: scheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                      _MaintenanceActionTile(
+                        key: const Key('bookSourcesHealthMaintenanceAction'),
+                        icon: Icons.health_and_safety_outlined,
+                        title: state.isRunning
+                            ? l10n.bookSourcesMaintenanceHealthRunning
+                            : l10n.bookSourcesMaintenanceHealthTitle,
+                        subtitle: state.isRunning
+                            ? l10n.bookSourcesMaintenanceProgress(
+                                state.progress?.completed ?? 0,
+                                state.progress?.total ?? 0,
+                              )
+                            : l10n.bookSourcesMaintenanceHealthSubtitle,
+                        onTap: count == 0 && !state.isRunning
+                            ? null
+                            : () => _open(
+                                BookSourceMaintenanceAction.healthCheck,
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (state.isRunning) ...[
                   const SizedBox(height: 12),
@@ -293,7 +309,7 @@ class _BookSourceMaintenanceSheetState
                   l10n.bookSourcesMaintenanceSafetyHint,
                   style: TextStyle(
                     color: scheme.onSurfaceVariant,
-                    fontSize: 12,
+                    fontSize: 13,
                     height: 1.4,
                   ),
                 ),
@@ -312,75 +328,71 @@ class _MaintenanceActionTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.category,
     required this.onTap,
   });
   final IconData icon;
   final String title;
   final String subtitle;
-  final String category;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Icon(
-                icon,
-                size: 24,
-                color: onTap == null ? scheme.onSurfaceVariant : scheme.primary,
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: enabled ? scheme.surface : scheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  icon,
+                  size: 23,
+                  color: enabled ? scheme.primary : scheme.outline,
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    category,
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 11,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: enabled ? scheme.onSurface : scheme.outline,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.45,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      height: 1.45,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(top: 18),
-              child: Icon(
+              const SizedBox(width: 8),
+              Icon(
                 Icons.chevron_right_rounded,
-                color: scheme.onSurfaceVariant,
+                color: enabled ? scheme.onSurfaceVariant : scheme.outline,
                 size: 20,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

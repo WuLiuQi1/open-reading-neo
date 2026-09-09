@@ -34,47 +34,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('URL import explains automatic detection and labels Legado', (
-    tester,
-  ) async {
-    final analyzer = _Analyzer();
-    await _open(tester, analyzer: analyzer);
-    expect(
-      find.text(
-        'Automatically detects ORSP and Legado sources. Review before importing.',
-      ),
-      findsOneWidget,
-    );
-    await _start(tester);
-    final importer = SourceImportService();
-    addTearDown(importer.close);
-    analyzer.pending.complete(
-      BookSourceImportAnalysis.additional(
-        importer.parseDecoded({
-          'bookSourceName': 'Legado example',
-          'bookSourceUrl': 'https://books.example',
-          'searchUrl': '/search?q={{key}}',
-          'ruleSearch': {'bookList': '.book'},
-          'ruleToc': {'chapterList': '.chapter'},
-          'ruleContent': {'content': '#content@text'},
-        }),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'URL import explains automatic detection and labels Reading Source',
+    (tester) async {
+      final analyzer = _Analyzer();
+      await _open(tester, analyzer: analyzer);
+      expect(
+        find.text(
+          'Automatically detects ORSP and Reading Source sources. Review before importing.',
+        ),
+        findsOneWidget,
+      );
+      await _start(tester);
+      final importer = SourceImportService();
+      addTearDown(importer.close);
+      analyzer.pending.complete(
+        BookSourceImportAnalysis.additional(
+          importer.parseDecoded({
+            'bookSourceName': 'Reading Source example',
+            'bookSourceUrl': 'https://books.example',
+            'searchUrl': '/search?q={{key}}',
+            'ruleSearch': {'bookList': '.book'},
+            'ruleToc': {'chapterList': '.chapter'},
+            'ruleContent': {'content': '#content@text'},
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Detected: Legado'), findsOneWidget);
-    expect(find.text('Detected: ORSP'), findsNothing);
-    expect(find.text('Import 1 source'), findsOneWidget);
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const Key('bookSourceConnectButton')),
-          )
-          .onPressed,
-      isNotNull,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Detected: Reading Source'), findsOneWidget);
+      expect(find.text('Detected: ORSP'), findsNothing);
+      expect(find.text('Import 1 source'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const Key('bookSourceConnectButton')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'phase feedback updates and late analysis is ignored after cancel',

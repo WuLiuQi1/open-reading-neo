@@ -81,11 +81,11 @@ void main() {
   });
 
   test(
-    'downloads and commits Legado sources with rules and conflict counts',
+    'downloads and commits Reading Source sources with rules and conflict counts',
     () async {
       final importService = _FixedDownloadImportService([
         {
-          'bookSourceName': 'Saved Legado source',
+          'bookSourceName': 'Saved Reading Source source',
           'bookSourceUrl': 'https://saved.example',
           'searchUrl': '/search?q={{key}}',
           'ruleSearch': {'bookList': '.result', 'name': 'h3@text'},
@@ -93,7 +93,7 @@ void main() {
           'ruleContent': {'content': '#content@html'},
         },
         {
-          'bookSourceName': 'Conflicting Legado source',
+          'bookSourceName': 'Conflicting Reading Source source',
           'bookSourceUrl': 'https://conflict.example',
           'searchUrl': '/find/{{key}}',
           'ruleSearch': {'bookList': '.book'},
@@ -103,7 +103,7 @@ void main() {
         additionalImporter: importService,
       );
       final registry = _Registry(
-        conflictedNames: const {'Conflicting Legado source'},
+        conflictedNames: const {'Conflicting Reading Source source'},
       );
       final controller = BookSourceAddController(
         registry: registry,
@@ -115,13 +115,15 @@ void main() {
         importService.close();
       });
 
-      await controller.analyzeUrl('https://sources.example/legado.json');
+      await controller.analyzeUrl(
+        'https://sources.example/reading-source.json',
+      );
       final result = await controller.commit();
 
       expect(controller.state.analysis?.kind, BookSourceImportKind.additional);
       expect(registry.bulkUpserted, hasLength(2));
       final saved = registry.bulkUpserted.singleWhere(
-        (source) => source.name == 'Saved Legado source',
+        (source) => source.name == 'Saved Reading Source source',
       );
       expect(saved.sourceProtocol, BookSourceProtocolKind.readingSource);
       expect(saved.sourceConfig?['searchUrl'], '/search?q={{key}}');
@@ -132,7 +134,7 @@ void main() {
       expect(saved.sourceConfig?['ruleContent'], {'content': '#content@html'});
       expect(result?.importedCount, 1);
       expect(result?.conflictedCount, 1);
-      expect(result?.sources.single.name, 'Saved Legado source');
+      expect(result?.sources.single.name, 'Saved Reading Source source');
     },
   );
 

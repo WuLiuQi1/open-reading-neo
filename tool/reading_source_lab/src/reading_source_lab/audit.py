@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict, dataclass
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from .parser import ReadingSource, load_file
+from .parser import ReadingSource, parse_payload
 
 
 FEATURES: dict[str, re.Pattern[str]] = {
@@ -41,24 +43,24 @@ SCRIPT_API = re.compile(
 )
 JAVA_COLLECTION_API = re.compile(r"\.(size|get|isEmpty|toArray)\s*\(")
 
-OPEN_READING_STATUS = {
-    "javascript": "supported-native",
-    "webview": "supported-android",
-    "xpath": "supported-subset",
-    "jsonpath": "supported",
-    "css": "supported",
-    "regex": "supported",
-    "interleave": "supported",
-    "state": "supported-subset",
-    "post": "supported",
-    "cookie": "supported-session",
-    "login": "partial",
-    "crypto": "supported-subset",
-    "java_dom": "supported-subset",
-    "browser_interaction": "unsupported",
-    "head": "supported",
-    "cache_api": "supported-session",
-    "shared_script": "supported-inline",
+CAPABILITY_SCOPE = {
+    "javascript": "native runtime; unavailable on Web",
+    "webview": "requires a native browser host",
+    "xpath": "selector subset",
+    "jsonpath": "JSONPath evaluator",
+    "css": "HTML selector evaluator",
+    "regex": "regular-expression evaluator",
+    "interleave": "list interleaving",
+    "state": "source and book variable subset",
+    "post": "HTTP request transport",
+    "cookie": "source session storage",
+    "login": "requires session or user interaction",
+    "crypto": "cryptographic helper subset",
+    "java_dom": "Java-style DOM helper subset",
+    "browser_interaction": "requires a user interaction host",
+    "head": "HTTP request transport",
+    "cache_api": "source session cache subset",
+    "shared_script": "shared script loading; execution unverified",
 }
 
 
@@ -73,88 +75,189 @@ class FileAudit:
     features: dict[str, int]
     capabilities: dict[str, int]
     core_reading: dict[str, int]
-    compatibility: dict[str, int]
+    capability_readiness: dict[str, int]
     script_apis: dict[str, int]
     java_collection_apis: dict[str, int]
 
 
 def audit_files(paths: Iterable[str | Path]) -> dict[str, Any]:
-    audits: list[FileAudit] = []
-    totals = Counter()
-    feature_totals = Counter()
-    script_api_totals = Counter()
-    collection_api_totals = Counter()
-    for path in paths:
-        parsed = load_file(path)
-        audit = _audit(Path(path), parsed.sources, parsed.duplicates, len(parsed.errors))
-        audits.append(audit)
-        totals.update(
-            parsed=audit.parsed,
-            duplicates=audit.duplicates,
-            errors=audit.errors,
-            invalid_urls=audit.invalid_urls,
-        )
-        feature_totals.update(audit.features)
-        script_api_totals.update(audit.script_apis)
-        collection_api_totals.update(audit.java_collection_apis)
+    files = _input_files(paths)
+    root = Path(os.path.commonpath([path.parent for path in files])) if files else Path(".")
+    audits = []
+    candidates = []
+    totals = Counter(dict.fromkeys((
+        "input_files", "source_files", "unrelated_files", "unrelated_records",
+        "url_list_files", "invalid_files", "source_records", "valid_records",
+        "invalid_records", "unresolved_source_urls",
+    ), 0))
+    for path in files:
+        label = path.relative_to(root).as_posix()
+        item = asdict(_audit(Path(label), [], 0, 0))
+        item.update(file=label, sha256=None, bytes=None, classification="invalid", records=0)
+        totals["input_files"] += 1
+        try:
+            raw = path.read_bytes()
+            item.update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
+            payload = json.loads(raw.decode("utf-8-sig"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            # JSON parser errors may include input text: report only a count.
+            item["errors"] = 1
+            totals["invalid_files"] += 1
+            audits.append(item)
+            continue
+        parsed = parse_payload(payload, origin=label, deduplicate=False)
+        item.update(classification=parsed.classification, records=parsed.record_count)
+        totals["unresolved_source_urls"] += len(parsed.source_urls)
+        if parsed.classification == "sources":
+            selected = _newest_sources(parsed.sources)
+            item.update(asdict(_audit(
+                Path(label), selected, len(parsed.sources) - len(selected), len(parsed.errors)
+            )))
+            item["file"] = label
+            totals.update(source_files=1, source_records=parsed.record_count,
+                          valid_records=len(parsed.sources), invalid_records=len(parsed.errors))
+            candidates.extend(parsed.sources)
+        elif parsed.classification == "url_list":
+            totals["url_list_files"] += 1
+        else:
+            totals.update(unrelated_files=1, unrelated_records=parsed.record_count)
+        audits.append(item)
+    selected = _newest_sources(candidates)
+    corpus = asdict(_audit(
+        Path("corpus"), selected, len(candidates) - len(selected), totals["invalid_records"]
+    ))
+    corpus.pop("file")
+    totals.update(unique_sources=len(selected), duplicate_records=corpus["duplicates"],
+                  invalid_urls=corpus["invalid_urls"])
+    manifest = "".join(f"{item['file']}\t{item['sha256'] or '-'}\n" for item in audits)
     return {
-        "files": [asdict(audit) for audit in audits],
+        "schema_version": 2,
+        "files": audits,
         "totals": dict(totals),
-        "feature_totals": dict(feature_totals),
-        "script_api_totals": dict(script_api_totals),
-        "java_collection_api_totals": dict(collection_api_totals),
-        "support": OPEN_READING_STATUS,
+        "selection": {
+            "identity": "full bookSourceUrl including fragment; missing URL retains its record",
+            "version": "maximum integer lastUpdateTime, then relative path, then zero-based record index",
+            "manifest_sha256": hashlib.sha256(manifest.encode("utf-8")).hexdigest(),
+            "manifest_encoding": "UTF-8 sorted relative path, tab, SHA-256 (or -), newline",
+        },
+        "corpus": corpus,
+        "feature_totals": corpus["features"],
+        "script_api_totals": corpus["script_apis"],
+        "java_collection_api_totals": corpus["java_collection_apis"],
+        "capability_scope": CAPABILITY_SCOPE,
+        "conformance": {
+            "target_percent": 80,
+            "status": "not_verified",
+            "executed_sources": 0,
+            "unknown_sources": len(selected),
+            "pass_rate_percent": None,
+            "network_requests_performed": False,
+            "reason": "Structural readiness and detected APIs do not establish rule execution or live-site success.",
+        },
     }
+
+
+def _input_files(paths: Iterable[str | Path]) -> list[Path]:
+    files = set()
+    for value in paths:
+        path = Path(value).expanduser().resolve()
+        if path.is_dir():
+            files.update(
+                item.resolve() for item in path.rglob("*")
+                if item.is_file() and item.suffix.lower() == ".json"
+            )
+        else:
+            files.add(path)
+    return sorted(files)
+
+
+def _newest_sources(sources: list[ReadingSource]) -> list[ReadingSource]:
+    def rank(source: ReadingSource) -> tuple[int, str, int]:
+        try:
+            updated = int(source.raw.get("lastUpdateTime") or 0)
+        except (TypeError, ValueError, OverflowError):
+            updated = 0
+        return updated, source.origin, source.index
+
+    selected = {}
+    for source in sources:
+        previous = selected.get(source.stable_key)
+        if previous is None or rank(source) > rank(previous):
+            selected[source.stable_key] = source
+    return [selected[key] for key in sorted(selected)]
 
 
 def render_markdown(report: dict[str, Any]) -> str:
     totals = report["totals"]
+    corpus = report["corpus"]
+    count = totals["unique_sources"]
+    ready = corpus["core_reading"].get("ready", 0)
+    rate = 100 * ready / count if count else 0
     lines = [
-        "# Reading source compatibility audit",
+        "# Reading source corpus audit",
         "",
-        "> Offline structural audit. It does not execute scripts, contact sites, or expose auth values.",
+        "> Offline structural audit; no scripts or network requests were executed. Configuration values are omitted.",
         "",
-        f"Parsed **{totals.get('parsed', 0)}** sources from **{len(report['files'])}** files; "
-        f"duplicates: **{totals.get('duplicates', 0)}**; parse errors: **{totals.get('errors', 0)}**; "
-        f"invalid/empty URLs: **{totals.get('invalid_urls', 0)}**.",
+        f"**80% execution compatibility target: `{report['conformance']['status']}`.** "
+        f"Executed sources: **0**; unknown: **{count}**. No execution pass rate is available.",
+        "",
+        f"Inventoried **{totals['input_files']}** JSON files: **{totals['source_files']}** source files, "
+        f"**{totals['unrelated_files']}** unrelated files, **{totals['url_list_files']}** URL lists, "
+        f"**{totals['invalid_files']}** unreadable or malformed files.",
+        "",
+        f"Source records: **{totals['source_records']}**; valid records: **{totals['valid_records']}**; "
+        f"invalid records: **{totals['invalid_records']}**; duplicates: **{totals['duplicate_records']}**; "
+        f"unique sources: **{count}**; invalid/empty URLs among unique sources: **{totals['invalid_urls']}**.",
+        "",
+        f"Unrelated records: **{totals['unrelated_records']}**; unfetched source-list URLs: "
+        f"**{totals['unresolved_source_urls']}**. These are retained separately from the source denominator.",
+        "",
+        "## Selection and manifest",
+        "",
+        report["selection"]["identity"] + ".",
+        report["selection"]["version"] + ". Selection occurs before any per-file deduplication.",
+        "",
+        f"Manifest SHA-256: `{report['selection']['manifest_sha256']}`.",
+        report["selection"]["manifest_encoding"] + ". Paths are relative to the common input-file parent.",
         "",
         "## Files",
         "",
-        "| File | Sources | Invalid URLs | Supported | Partial | Unsupported |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| File | Classification | Records | Selected in file | Errors | SHA-256 |",
+        "|---|---|---:|---:|---:|---|",
     ]
     for item in report["files"]:
-        compatibility = item["compatibility"]
-        core_reading = item["core_reading"]
+        label = item["file"].replace("|", "\\|").replace("\n", " ")
         lines.append(
-            f"| {item['file']} | {item['parsed']} | {item['invalid_urls']} | "
-            f"{compatibility.get('supported', 0)} | {compatibility.get('partial', 0)} | "
-            f"{compatibility.get('unsupported', 0)} |"
+            f"| {label} | {item['classification']} | {item['records']} | {item['parsed']} | "
+            f"{item['errors']} | `{item['sha256'] or 'unavailable'}` |"
         )
-    core_ready = sum(
-        item["core_reading"].get("ready", 0) for item in report["files"]
-    )
-    parsed_total = totals.get("parsed", 0)
-    core_rate = core_ready / parsed_total * 100 if parsed_total else 0
     lines.extend(
         [
             "",
-            "## Core reading chain",
+            "## Structural readiness",
             "",
-            f"**{core_ready} / {parsed_total} ({core_rate:.1f}%)** sources have a text type, "
+            f"**{ready} / {count} ({rate:.2f}%)** unique sources have a text type, "
             "valid HTTP(S) URL, search entry, catalog rules, and content rules. This is an "
-            "offline structural readiness rate, not a live-site success rate.",
+            "offline structural readiness rate, not an execution compatibility or live-site success rate.",
+            "",
+            "Content types: " + ", ".join(f"`{key}`={value}" for key, value in corpus["source_types"].items()) + ".",
+            "",
+            "Capability readiness: " + ", ".join(
+                f"`{key}`={value}" for key, value in corpus["capability_readiness"].items()
+            ) + ". All execution outcomes remain unknown, including sources without detected extended requirements.",
             "",
             "## Feature dependency totals",
             "",
-            "| Feature | Sources | Open Reading status |",
+            "Counts use globally selected sources. Pattern detection is heuristic and implementation scope is descriptive, not a test verdict.",
+            "",
+            "| Feature | Sources | Implementation scope |",
             "|---|---:|---|",
         ]
     )
     for feature, count in sorted(
         report["feature_totals"].items(), key=lambda item: (-item[1], item[0])
     ):
-        lines.append(f"| `{feature}` | {count} | {report['support'][feature]} |")
+        lines.append(f"| `{feature}` | {count} | {report['capability_scope'][feature]} |")
     lines.extend(
         [
             "",
@@ -196,14 +299,14 @@ def _audit(
     features = Counter()
     capabilities = Counter()
     core_reading = Counter()
-    compatibility = Counter()
+    readiness = Counter()
     script_apis = Counter()
     java_collection_apis = Counter()
     invalid_urls = 0
     for source in sources:
         if not source.is_http_url:
             invalid_urls += 1
-        text = _safe_serialized(source.raw)
+        text = _execution_text(source.raw)
         script_apis.update(
             f"{match.group(1)}.{match.group(2)}" for match in SCRIPT_API.finditer(text)
         )
@@ -222,7 +325,7 @@ def _audit(
             if any(source.raw.get(key) for key in keys):
                 capabilities[capability] += 1
         core_reading[_core_reading_status(source)] += 1
-        compatibility[_compatibility(source, matched)] += 1
+        readiness[_capability_readiness(source, matched)] += 1
     return FileAudit(
         file=path.name,
         parsed=len(sources),
@@ -233,22 +336,23 @@ def _audit(
         features=dict(sorted(features.items())),
         capabilities=dict(sorted(capabilities.items())),
         core_reading=dict(sorted(core_reading.items())),
-        compatibility=dict(sorted(compatibility.items())),
+        capability_readiness=dict(sorted(readiness.items())),
         script_apis=dict(sorted(script_apis.items())),
         java_collection_apis=dict(sorted(java_collection_apis.items())),
     )
 
 
-def _compatibility(source: ReadingSource, features: set[str]) -> str:
+def _capability_readiness(source: ReadingSource, features: set[str]) -> str:
     if source.source_type != 0:
-        return "unsupported"
+        return "outside_text_chain"
     if not source.is_http_url or not source.raw.get("ruleContent"):
-        return "unsupported"
-    if "browser_interaction" in features or "login" in features or "webview" in features:
-        return "partial"
-    if any(OPEN_READING_STATUS[name].endswith("subset") for name in features):
-        return "partial"
-    return "supported"
+        return "incomplete_structure"
+    if features & {
+        "javascript", "browser_interaction", "login", "webview", "state", "xpath",
+        "crypto", "java_dom", "shared_script", "cache_api",
+    }:
+        return "needs_runtime_validation"
+    return "no_detected_extended_requirements"
 
 
 def _core_reading_status(source: ReadingSource) -> str:
@@ -337,3 +441,18 @@ def _features_for_source(source: ReadingSource) -> set[str]:
 def _safe_serialized(raw: dict[str, Any]) -> str:
     # Values are scanned only in memory and never returned by the auditor.
     return json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+
+
+def _execution_text(raw: dict[str, Any]) -> str:
+    fields = (
+        "searchUrl", "exploreUrl", "loginUrl", "loginCheckJs", "webJs", "jsLib",
+        "ruleSearch", "ruleExplore", "ruleBookInfo", "ruleToc", "ruleContent",
+    )
+    values = [raw[key] for key in fields if raw.get(key)]
+    header = raw.get("header")
+    if isinstance(header, str) and re.match(r"\s*(?:@js:|<js>)", header, re.I):
+        values.append(header)
+    return "\n".join(
+        value if isinstance(value, str) else _safe_serialized(value)
+        for value in values
+    )

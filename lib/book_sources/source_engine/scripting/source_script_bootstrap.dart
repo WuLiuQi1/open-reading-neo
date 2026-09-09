@@ -415,8 +415,25 @@ class SourceScriptBootstrap {
       const sourceValue = __sourceValues[key];
       return sourceValue == null ? '' : String(sourceValue);
     },
-    getString: (rule, content) => __host('getString', [String(rule), content === undefined ? globalThis.result : content, globalThis.baseUrl]),
-    getStringList: (rule, content) => __javaList(__host('getStringList', [String(rule), content === undefined ? globalThis.result : content, globalThis.baseUrl])),
+    getString: (rule, content, isUrl) => {
+      const decodeOverload = typeof content === 'boolean' && isUrl === undefined;
+      return __host('getString', [
+        String(rule == null ? '' : rule),
+        content == null || decodeOverload ? globalThis.result : content,
+        globalThis.baseUrl,
+        Boolean(isUrl),
+        decodeOverload ? content : true
+      ]);
+    },
+    getStringList: (rule, content, isUrl) => {
+      const values = __host('getStringList', [
+        String(rule == null ? '' : rule),
+        content == null ? globalThis.result : content,
+        globalThis.baseUrl,
+        Boolean(isUrl)
+      ]);
+      return values == null ? null : __javaList(values);
+    },
     getElements: (rule, content) => __elements(rule, content === undefined ? globalThis.result : content),
     getElement: (rule, content) => {
       const values = __elements(rule, content === undefined ? globalThis.result : content);
@@ -616,12 +633,21 @@ class SourceScriptBootstrap {
   if (__payload.result && __payload.result.__networkResponse === true) {
     globalThis.result = __responseObject(__payload.result, __payload.result.finalUrl);
   }
-  const __program = '(function(){\\n' +
+  const __globals = globalThis;
+  const __globalNames = Object.getOwnPropertyNames;
+  const __defineGlobal = Object.defineProperty;
+  const __globalDescriptors = new Map(__globalNames(__globals).map(
+    name => [name, Object.getOwnPropertyDescriptor(__globals, name)]
+  ));
+  const __program = '(function(__exportShared){\\n' +
     (__payload.sharedScript || '') +
     '\\n' + ${jsonEncode(sharedFunctionExports)} +
-    '\\nreturn eval(' + JSON.stringify(__payload.script) + ');\\n})()';
+    '\\nreturn eval(' + JSON.stringify(__payload.script) + ');\\n})';
   try {
-  let __value = (0, eval)(__program);
+  const __run = (0, eval)(__program);
+  let __value = __run((name, value) => {
+    __globals[name] = value;
+  });
   if (__value === undefined || typeof __value === 'function') __value = '';
   return JSON.stringify({
     value: __value,
@@ -635,8 +661,14 @@ class SourceScriptBootstrap {
   });
   } finally {
     for (const [name, descriptor] of __importedGlobals) {
-      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
-      else delete globalThis[name];
+      if (descriptor) __defineGlobal(__globals, name, descriptor);
+      else delete __globals[name];
+    }
+    for (const name of __globalNames(__globals)) {
+      if (!__globalDescriptors.has(name)) delete __globals[name];
+    }
+    for (const [name, descriptor] of __globalDescriptors) {
+      __defineGlobal(__globals, name, descriptor);
     }
   }
 })()
@@ -662,7 +694,7 @@ if (typeof $name === "function") {
   $name = function() {
     return __openReadingOriginal_$name.apply(globalThis, arguments);
   };
-  globalThis[${jsonEncode(name)}] = $name;
+  __exportShared(${jsonEncode(name)}, $name);
 }''',
         )
         .join('\n');

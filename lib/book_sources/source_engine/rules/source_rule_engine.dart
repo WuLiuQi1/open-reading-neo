@@ -278,6 +278,20 @@ class SourceRuleEngine implements SourceRuleSelectorPort {
           _scripts.evaluateInline(document, context, script),
       evaluateScriptAsync: (context, script) =>
           _scripts.evaluateInlineAsync(document, context, script),
+      evaluateEmbeddedRule: (context, rule) => evaluateString(
+        document,
+        context,
+        rule,
+        joinSeparator: '\n',
+        regexDotAll: false,
+      ),
+      evaluateEmbeddedRuleAsync: (context, rule) => evaluateStringAsync(
+        document,
+        context,
+        rule,
+        joinSeparator: '\n',
+        regexDotAll: false,
+      ),
     );
   }
 
@@ -377,9 +391,6 @@ class SourceRuleEngine implements SourceRuleSelectorPort {
     var normalized = rule.trim();
     if (normalized.startsWith('+')) {
       normalized = normalized.substring(1).trimLeft();
-    }
-    if (normalized.toLowerCase().startsWith('@css:')) {
-      normalized = normalized.substring(5).trimLeft();
     }
     return normalized;
   }

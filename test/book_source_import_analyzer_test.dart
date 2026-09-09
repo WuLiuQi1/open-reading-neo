@@ -25,8 +25,8 @@ void main() {
     'apiBaseUrl': 'https://example.org/api/',
     'capabilities': ['search', 'detail', 'catalog', 'content'],
   };
-  final legado = {
-    'bookSourceName': 'Legado source',
+  final readingSource = {
+    'bookSourceName': 'Reading Source source',
     'bookSourceUrl': 'https://books.example',
     'searchUrl': '/search?q={{key}}',
     'ruleSearch': {'bookList': '.book'},
@@ -35,10 +35,10 @@ void main() {
   };
 
   for (final entry in <String, Object>{
-    'single': legado,
-    'array': [legado],
+    'single': readingSource,
+    'array': [readingSource],
     'wrapped': {
-      'bookSourceList': [legado],
+      'bookSourceList': [readingSource],
     },
     'orsp': manifest,
   }.entries) {
@@ -73,8 +73,8 @@ void main() {
       } else {
         expect(result.kind, BookSourceImportKind.additional);
         final source = result.additionalPreview!.sources.single;
-        expect(source.name, 'Legado source');
-        expect(source.raw, legado);
+        expect(source.name, 'Reading Source source');
+        expect(source.raw, readingSource);
       }
     });
   }
@@ -102,7 +102,7 @@ void main() {
     expect(discovery.closed, isTrue);
   });
 
-  test('unrelated JSON files are not reported as Legado sources', () {
+  test('unrelated JSON files are not reported as Reading Source sources', () {
     final analyzer = BookSourceImportAnalyzer();
     addTearDown(analyzer.close);
     expect(

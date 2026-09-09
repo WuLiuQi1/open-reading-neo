@@ -91,7 +91,10 @@ class ParserTest(unittest.TestCase):
             )
             report = audit_files([path])
 
-        self.assertEqual(report["files"][0]["compatibility"], {"supported": 1})
+        self.assertEqual(
+            report["files"][0]["capability_readiness"],
+            {"no_detected_extended_requirements": 1},
+        )
         for feature in ("login", "webview", "cookie", "shared_script"):
             self.assertNotIn(feature, report["feature_totals"])
         self.assertEqual(report["files"][0]["core_reading"], {"ready": 1})

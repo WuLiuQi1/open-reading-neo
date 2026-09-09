@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/registered_book_source.dart';
 import '../source_engine/source_health_checker.dart';
 import 'book_source_registry.dart';
@@ -53,7 +55,15 @@ class BookSourceHealthCheckService {
   /// sweeps: broken sources should fail fast rather than each claim a full
   /// share of the timeout budget across a large source library.
   static const Duration cleanupTimeout = Duration(seconds: 8);
-  static const int cleanupConcurrency = 16;
+
+  /// Health checks allocate networking, parsers and sometimes a native
+  /// JavaScript runtime per in-flight source. Mobile processes have tighter
+  /// native-memory budgets than desktop processes, especially on iOS.
+  static int get cleanupConcurrency => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS => 3,
+    TargetPlatform.android => 4,
+    _ => 8,
+  };
 
   /// A source that was fully available this recently is skipped by
   /// [checkAllForCleanup] rather than re-checked.

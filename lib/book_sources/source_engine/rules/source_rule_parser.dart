@@ -36,14 +36,14 @@ class SourceLegacySelector {
     required this.css,
     this.selection,
     this.excludedSelection,
-    this.exclude,
+    this.directChildren = false,
     this.text,
   });
 
   final String css;
   final List<SourceIndexSpec>? selection;
   final List<SourceIndexSpec>? excludedSelection;
-  final int? exclude;
+  final bool directChildren;
   final String? text;
 }
 
@@ -314,8 +314,9 @@ final _scriptIdentifierStart = RegExp(r'[A-Za-z_$]');
 final _scriptIdentifierPart = RegExp(r'[A-Za-z0-9_$]');
 
 SourceRuleTransform splitSourceRuleTransform(String rule) {
-  final parts = rule.split('##');
-  if (parts.length == 1) return SourceRuleTransform(selector: rule);
+  final boundary = splitSourceRuleTopLevel(rule, '##', limit: 2);
+  if (boundary.length == 1) return SourceRuleTransform(selector: rule);
+  final parts = [boundary.first, ...boundary.last.split('##')];
   return SourceRuleTransform(
     selector: parts.first,
     pattern: parts.length > 1 ? parts[1] : null,
@@ -330,37 +331,30 @@ SourceRuleTransform splitSourceRuleTransform(String rule) {
 
 SourceLegacySelector parseSourceLegacySelector(String input) {
   var selector = input.trim();
-  int? exclude;
-  final exclusion = RegExp(r'!(-?\d+)$').firstMatch(selector);
-  if (exclusion != null) {
-    exclude = int.parse(exclusion.group(1)!);
-    selector = selector.substring(0, exclusion.start);
-  }
+  var excludes = false;
   List<SourceIndexSpec>? selection;
   final bracketMatch = RegExp(
     r'\[\s*(!?)([-\d:,\s]+)\s*\]$',
   ).firstMatch(selector);
   if (bracketMatch != null) {
-    final excludes = bracketMatch.group(1) == '!';
+    excludes = bracketMatch.group(1) == '!';
     selection = parseSourceIndexSelection(bracketMatch.group(2)!);
     selector = selector.substring(0, bracketMatch.start);
-    if (excludes) {
-      return SourceLegacySelector(
-        css: sourceLegacyCss(selector),
-        excludedSelection: selection,
-      );
-    }
   } else {
-    final indexMatch = RegExp(r'\.(-?\d+(?::-?\d+)*)$').firstMatch(selector);
+    final indexMatch = RegExp(
+      r'([.!])(-?\d+(?::-?\d+)*)$',
+    ).firstMatch(selector);
     if (indexMatch != null) {
+      excludes = indexMatch.group(1) == '!';
       selection = indexMatch
-          .group(1)!
+          .group(2)!
           .split(':')
           .map((value) => SourceIndexSpec.single(int.parse(value)))
           .toList(growable: false);
       selector = selector.substring(0, indexMatch.start);
     }
   }
+  final directChildren = selector.isEmpty || selector == 'children';
   String? text;
   if (selector.startsWith('text.')) {
     text = selector.substring(5);
@@ -371,8 +365,9 @@ SourceLegacySelector parseSourceLegacySelector(String input) {
   if (selector.isEmpty) selector = '*';
   return SourceLegacySelector(
     css: selector,
-    selection: selection,
-    exclude: exclude,
+    selection: excludes ? null : selection,
+    excludedSelection: excludes ? selection : null,
+    directChildren: directChildren,
     text: text,
   );
 }
@@ -400,17 +395,22 @@ Iterable<int> sourceSelectionIndexes(
   List<SourceIndexSpec> specs,
   int length,
 ) sync* {
+  if (length <= 0) return;
   final seen = <int>{};
   for (final spec in specs) {
-    var start = spec.start ?? 0;
-    var end = spec.end ?? length - 1;
-    start = normalizeSourceIndex(start, length).clamp(0, length - 1);
-    end = normalizeSourceIndex(end, length).clamp(0, length - 1);
-    final distance = (end - start).abs();
-    var step = spec.step.abs();
-    if (step == 0 || (spec.step < 0 && step < length)) {
-      step = spec.step < 0 ? length - step : 1;
+    var start = normalizeSourceIndex(spec.start ?? 0, length);
+    var end = normalizeSourceIndex(spec.end ?? length - 1, length);
+    if ((start < 0 && end < 0) || (start >= length && end >= length)) {
+      continue;
     }
+    start = start.clamp(0, length - 1);
+    end = end.clamp(0, length - 1);
+    final distance = (end - start).abs();
+    final step = spec.step > 0
+        ? spec.step
+        : -spec.step < length
+        ? spec.step + length
+        : 1;
     if (distance == 0 || step > distance) {
       if (seen.add(start)) yield start;
       continue;

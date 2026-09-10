@@ -10,7 +10,6 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
         _themeOrderStore.load(),
         ReaderSystemUiController.loadPreference(),
         _readerSettingsStore.loadTapZones(),
-        _readerSettingsStore.loadTxtChapterTitlePageEnabled(),
       ]);
       final settings = results[0] as ReaderSettings;
       final scrollByChapter = results[1] as bool;
@@ -18,7 +17,6 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
       final themeOrder = results[3] as List<String>;
       final topBarStyle = results[4] as ReaderTopBarStyle;
       final tapZones = results[5] as ReaderTapZones;
-      final txtChapterTitlePageEnabled = results[6] as bool;
       if (!mounted) return;
       ReaderThemes.setCustomThemes(customThemes);
       ReaderThemes.setThemeOrder(themeOrder);
@@ -43,7 +41,7 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
         _tapZones = tapZones;
         _tabletTwoPageEnabled = settings.tabletTwoPageEnabled;
         _topBarStyle = topBarStyle;
-        _txtChapterTitlePageEnabled = txtChapterTitlePageEnabled;
+        _chapterTitlePageEnabled = settings.chapterTitlePageEnabled;
         _readerSettingsLoaded = true;
       });
       _autoPageTurnController.setVertical(
@@ -116,6 +114,7 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
     pullBookmarkEnabled: _pullBookmarkEnabled,
     tapPageAnimationEnabled: _tapPageAnimationEnabled,
     tabletTwoPageEnabled: _tabletTwoPageEnabled,
+    chapterTitlePageEnabled: _chapterTitlePageEnabled,
   );
 
   ReaderFontProfile get _readerFontProfile => resolveReaderFontProfile(
@@ -325,14 +324,14 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
     await _readerSettingsStore.save(_readerSettings);
   }
 
-  Future<void> _setTxtChapterTitlePageEnabled(bool value) async {
-    if (_txtChapterTitlePageEnabled == value) return;
+  Future<void> _setChapterTitlePageEnabled(bool value) async {
+    if (_chapterTitlePageEnabled == value) return;
     _setReaderState(() {
-      _txtChapterTitlePageEnabled = value;
+      _chapterTitlePageEnabled = value;
       _pageIndex = 0;
       _restoreAnchorAfterLayout = true;
     });
-    await _readerSettingsStore.saveTxtChapterTitlePageEnabled(value);
+    await _readerSettingsStore.save(_readerSettings);
   }
 
   String get _layoutSignature =>
@@ -345,7 +344,7 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
       '${_bottomMargin.toStringAsFixed(1)}:${_pageMode.name}:'
       '$_firstLineIndent:$_paragraphSpacing:'
       '${_readerFontProfile.cacheSignature}:'
-      '${widget.book.format.toLowerCase() == 'txt' ? _txtChapterTitlePageEnabled : true}';
+      '$_chapterTitlePageEnabled';
 
   Future<void> _setTopBarStyle(ReaderTopBarStyle style) async {
     if (_topBarStyle == style) return;

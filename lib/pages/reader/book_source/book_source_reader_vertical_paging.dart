@@ -54,13 +54,11 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
 
   List<BookSourceTextPage> _continuousTextParts(
     String text, {
+    required String chapterTitle,
     required double width,
     required TextDirection direction,
     required Locale? locale,
   }) {
-    if (text.isEmpty) {
-      return const [BookSourceTextPage(text: '')];
-    }
     return paginateBookSourceText(
       text,
       width: width,
@@ -73,7 +71,12 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
       locale: locale,
       firstLineIndent: _firstLineIndent,
       paragraphSpacing: _paragraphSpacing,
-      includeChapterTitlePage: false,
+      includeChapterTitlePage:
+          chapterTitle.trim().isNotEmpty && _chapterTitlePageEnabled,
+      inlineChapterTitleExtent:
+          chapterTitle.trim().isNotEmpty && !_chapterTitlePageEnabled
+          ? 0
+          : null,
     );
   }
 
@@ -107,8 +110,9 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
       textDirection: direction,
       extra:
           '${chrome.paginationSignature}:${_readerFontProfile.cacheSignature}:'
-          '${_replaceRules.rulesSignature}',
-    ).cacheKey('book-source-vertical-v3');
+          '${_replaceRules.rulesSignature}:'
+          '$_chapterTitlePageEnabled:${_chapters[chapterIndex].title}',
+    ).cacheKey('book-source-vertical-v4');
     final cached = _verticalLayouts[chapterIndex];
     if (cached?.fingerprint == fingerprint) return cached!;
     final text =
@@ -119,6 +123,7 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
         );
     final pages = _continuousTextParts(
       text,
+      chapterTitle: _chapters[chapterIndex].title,
       width: width,
       direction: direction,
       locale: locale,
@@ -371,6 +376,18 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
     required int pageIndex,
     required BookSourceChapterContent content,
   }) {
+    if (page.isChapterTitle) {
+      return SizedBox(
+        key: _verticalPartKey(chapterIndex, pageIndex),
+        height: _verticalPageExtentFor(viewport),
+        child: _buildAnnotatedTextPage(
+          page,
+          chapterIndex: chapterIndex,
+          pageIndex: pageIndex,
+          content: content,
+        ),
+      );
+    }
     return Padding(
       key: _verticalPartKey(chapterIndex, pageIndex),
       padding: EdgeInsets.symmetric(horizontal: _horizontalMargin),
@@ -386,13 +403,6 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
             ),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (pageIndex == 0) ...[
-                ReaderInlineChapterTitle(
-                  title: _chapters[chapterIndex].title,
-                  bodyStyle: _bodyTextStyle,
-                ),
-                const SizedBox(height: ReaderInlineChapterTitle.spacingAfter),
-              ],
               _buildAnnotatedTextPage(
                 page,
                 chapterIndex: chapterIndex,
@@ -532,7 +542,7 @@ extension _BookSourceReaderVerticalPaging on _BookSourceReaderPageState {
           '${_fontSize.toStringAsFixed(1)}:$_fontWeight:'
           '${_lineHeight.toStringAsFixed(2)}:'
           '${_letterSpacing.toStringAsFixed(1)}:${_textAlignment.name}:'
-          '$_firstLineIndent:$_paragraphSpacing:'
+          '$_firstLineIndent:$_paragraphSpacing:$_chapterTitlePageEnabled:'
           '${_readerFontProfile.cacheSignature}:'
           '${_verticalChrome.paginationSignature}',
         ),

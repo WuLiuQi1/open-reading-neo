@@ -386,12 +386,11 @@ class _ReaderPageData extends ReaderTextPage {
     super.displayStart = 0,
     super.displayEnd,
     super.isChapterTitle = false,
-    this.showsInlineChapterTitle = false,
+    super.showsInlineChapterTitle = false,
   });
 
   const _ReaderPageData.chapterTitle()
     : imageBlockIndex = null,
-      showsInlineChapterTitle = false,
       super.chapterTitle();
 
   factory _ReaderPageData.fromTextPage(ReaderTextPage page) => _ReaderPageData(
@@ -404,10 +403,10 @@ class _ReaderPageData extends ReaderTextPage {
     displayStart: page.displayStart,
     displayEnd: page.displayEnd,
     isChapterTitle: page.isChapterTitle,
+    showsInlineChapterTitle: page.showsInlineChapterTitle,
   );
 
   final int? imageBlockIndex;
-  final bool showsInlineChapterTitle;
 
   _ReaderPageData copyWith({
     int? imageBlockIndex,

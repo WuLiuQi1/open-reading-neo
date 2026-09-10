@@ -5,12 +5,10 @@ import '../pages/account/account_page.dart';
 import '../services/account/account.dart';
 import '../utils/localization_extension.dart';
 import 'account_avatar_image.dart';
+import 'premium_card_style.dart';
 
 class SettingsAccountCard extends StatelessWidget {
   const SettingsAccountCard({super.key});
-
-  static const _premiumGold = Color(0xFFF1CA86);
-  static const _premiumIvory = Color(0xFFFFEAC1);
 
   @override
   Widget build(BuildContext context) {
@@ -40,16 +38,7 @@ class SettingsAccountCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
               gradient: premium
-                  ? const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF171629),
-                        Color(0xFF39244A),
-                        Color(0xFF795039),
-                      ],
-                      stops: [0, 0.56, 1],
-                    )
+                  ? premiumCardGradient
                   : const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -57,13 +46,13 @@ class SettingsAccountCard extends StatelessWidget {
                     ),
               border: premium
                   ? Border.all(
-                      color: _premiumGold.withValues(alpha: 0.78),
+                      color: premiumGold.withValues(alpha: 0.78),
                       width: 1.5,
                     )
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: (premium ? _premiumGold : const Color(0xFF1768B4))
+                  color: (premium ? premiumGold : const Color(0xFF1768B4))
                       .withValues(alpha: premium ? 0.24 : 0.2),
                   blurRadius: premium ? 30 : 28,
                   offset: const Offset(0, 12),
@@ -114,7 +103,7 @@ class SettingsAccountCard extends StatelessWidget {
                                             .titleMedium
                                             ?.copyWith(
                                               color: premium
-                                                  ? _premiumIvory
+                                                  ? premiumIvory
                                                   : Colors.white,
                                               fontWeight: FontWeight.w800,
                                               letterSpacing: -0.2,
@@ -163,13 +152,13 @@ class SettingsAccountCard extends StatelessWidget {
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: (premium ? _premiumGold : Colors.white)
+                                  color: (premium ? premiumGold : Colors.white)
                                       .withValues(alpha: premium ? 0.28 : 0.14),
                                 ),
                               ),
                               child: Icon(
                                 Icons.arrow_forward_rounded,
-                                color: premium ? _premiumIvory : scheme.surface,
+                                color: premium ? premiumIvory : scheme.surface,
                                 size: 20,
                               ),
                             ),
@@ -181,7 +170,7 @@ class SettingsAccountCard extends StatelessWidget {
                           children: [
                             const Icon(
                               Icons.auto_awesome_rounded,
-                              color: _premiumGold,
+                              color: premiumGold,
                               size: 16,
                             ),
                             const SizedBox(width: 7),
@@ -201,7 +190,7 @@ class SettingsAccountCard extends StatelessWidget {
                             Text(
                               'PREMIUM',
                               style: TextStyle(
-                                color: _premiumIvory.withValues(alpha: 0.48),
+                                color: premiumIvory.withValues(alpha: 0.48),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: 1.4,
@@ -232,25 +221,23 @@ class _PremiumBadge extends StatelessWidget {
     key: const ValueKey('settings-account-premium-badge'),
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
-      color: SettingsAccountCard._premiumGold.withValues(alpha: 0.16),
+      color: premiumGold.withValues(alpha: 0.16),
       borderRadius: BorderRadius.circular(99),
-      border: Border.all(
-        color: SettingsAccountCard._premiumGold.withValues(alpha: 0.34),
-      ),
+      border: Border.all(color: premiumGold.withValues(alpha: 0.34)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(
           Icons.workspace_premium_rounded,
-          color: SettingsAccountCard._premiumGold,
+          color: premiumGold,
           size: 12,
         ),
         const SizedBox(width: 3),
         Text(
           label,
           style: const TextStyle(
-            color: SettingsAccountCard._premiumIvory,
+            color: premiumIvory,
             fontSize: 10,
             fontWeight: FontWeight.w800,
           ),
@@ -269,8 +256,8 @@ class _PremiumCardPattern extends CustomPainter {
       ..shader =
           RadialGradient(
             colors: [
-              SettingsAccountCard._premiumGold.withValues(alpha: 0.17),
-              SettingsAccountCard._premiumGold.withValues(alpha: 0),
+              premiumGold.withValues(alpha: 0.17),
+              premiumGold.withValues(alpha: 0),
             ],
           ).createShader(
             Rect.fromCircle(
@@ -280,7 +267,7 @@ class _PremiumCardPattern extends CustomPainter {
           );
     canvas.drawRect(Offset.zero & size, glow);
     final line = Paint()
-      ..color = SettingsAccountCard._premiumIvory.withValues(alpha: 0.08)
+      ..color = premiumIvory.withValues(alpha: 0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final radius = size.height * 0.64;
@@ -289,7 +276,7 @@ class _PremiumCardPattern extends CustomPainter {
     canvas.drawCircle(center, radius * 0.72, line);
 
     final innerBorder = Paint()
-      ..color = SettingsAccountCard._premiumIvory.withValues(alpha: 0.16)
+      ..color = premiumIvory.withValues(alpha: 0.16)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawRRect(
@@ -330,21 +317,19 @@ class _AccountAvatar extends StatelessWidget {
       height: outerSize,
       decoration: BoxDecoration(
         color: premium
-            ? SettingsAccountCard._premiumGold.withValues(alpha: 0.18)
+            ? premiumGold.withValues(alpha: 0.18)
             : Colors.white.withValues(alpha: 0.13),
         shape: BoxShape.circle,
         border: Border.all(
           color: premium
-              ? SettingsAccountCard._premiumGold.withValues(alpha: 0.95)
+              ? premiumGold.withValues(alpha: 0.95)
               : Colors.white.withValues(alpha: 0.2),
           width: premium ? 2.2 : 1,
         ),
         boxShadow: premium
             ? [
                 BoxShadow(
-                  color: SettingsAccountCard._premiumGold.withValues(
-                    alpha: 0.2,
-                  ),
+                  color: premiumGold.withValues(alpha: 0.2),
                   blurRadius: 12,
                 ),
               ]
@@ -376,14 +361,14 @@ class _AccountAvatar extends StatelessWidget {
     child: initial == null
         ? Icon(
             Icons.person_outline_rounded,
-            color: premium ? SettingsAccountCard._premiumIvory : Colors.white,
+            color: premium ? premiumIvory : Colors.white,
             size: 27,
           )
         : Text(
             initial,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: premium ? SettingsAccountCard._premiumIvory : Colors.white,
+              color: premium ? premiumIvory : Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.w800,
               height: 1,

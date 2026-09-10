@@ -72,7 +72,7 @@ void main() {
     );
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: ReaderPageMode.instantPage.name,
-      ReaderSettingsStore.txtChapterTitlePageKey: false,
+      ReaderSettingsStore.chapterTitlePageKey: false,
       ReaderSettingsStore.fontSizeKey: 19.0,
     });
   });
@@ -124,7 +124,7 @@ void main() {
 
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: ReaderPageMode.instantPage.name,
-        ReaderSettingsStore.txtChapterTitlePageKey: false,
+        ReaderSettingsStore.chapterTitlePageKey: false,
         ReaderSettingsStore.fontSizeKey: 23.0,
       });
       final changedLayoutMisses = <int>[];

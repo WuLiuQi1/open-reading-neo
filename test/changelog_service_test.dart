@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,10 +22,17 @@ void main() {
       final catalogs = await Future.wait(locales.map(service.load));
       final versions = catalogs.first.map((entry) => entry.version).toList();
 
-      expect(versions, hasLength(55));
-      expect(versions.first, '2.6.7');
-      expect(catalogs.first.first.identity, '2.6.7+260908001');
-      expect(catalogs.first[1].identity, '2.6.7+260907001');
+      final currentIdentity = File('pubspec.yaml')
+          .readAsLinesSync()
+          .firstWhere((line) => line.startsWith('version:'))
+          .substring('version:'.length)
+          .trim();
+      expect(versions.length, greaterThanOrEqualTo(55));
+      expect(catalogs.first.first.identity, currentIdentity);
+      expect(
+        catalogs.first.map((entry) => entry.identity),
+        containsAll(['2.6.7+260908001', '2.6.7+260907001']),
+      );
       expect(
         versions,
         containsAll([

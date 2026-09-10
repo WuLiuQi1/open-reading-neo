@@ -259,9 +259,7 @@ extension _NativeReaderVerticalPaging on _NativeReaderPageState {
     final hasSplitChapterTitle =
         chapter.isNeedSplitTitle && chapter.title.trim().isNotEmpty;
     final showsDedicatedChapterTitle =
-        hasSplitChapterTitle &&
-        widget.book.format.toLowerCase() == 'txt' &&
-        _txtChapterTitlePageEnabled;
+        hasSplitChapterTitle && _chapterTitlePageEnabled;
     final parts = <_ContinuousReaderPart>[
       if (showsDedicatedChapterTitle)
         const _ContinuousReaderPart(_ReaderPageData.chapterTitle()),
@@ -296,6 +294,10 @@ extension _NativeReaderVerticalPaging on _NativeReaderPageState {
           flowStyle: flowStyle,
           style: _readerTextStyle,
           sourceOffset: chunkStart,
+          inlineChapterTitleExtent:
+              parts.isEmpty && hasSplitChapterTitle && !_chapterTitlePageEnabled
+              ? 0
+              : null,
           firstLineIndent: _firstLineIndent,
           paragraphSpacing: _paragraphSpacing,
           normalizeParagraphBreaks: _normalizesParagraphBreaks(
@@ -342,6 +344,8 @@ extension _NativeReaderVerticalPaging on _NativeReaderPageState {
             text: '',
             startOffset: 0,
             endOffset: chapter.plainText.length,
+            showsInlineChapterTitle:
+                hasSplitChapterTitle && !_chapterTitlePageEnabled,
           ),
         ),
       );
@@ -384,17 +388,6 @@ extension _NativeReaderVerticalPaging on _NativeReaderPageState {
             ),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (partIndex == 0 &&
-                  chapter.isNeedSplitTitle &&
-                  chapter.title.trim().isNotEmpty &&
-                  (widget.book.format.toLowerCase() != 'txt' ||
-                      !_txtChapterTitlePageEnabled)) ...[
-                ReaderInlineChapterTitle(
-                  title: chapter.title,
-                  bodyStyle: _readerTextStyle,
-                ),
-                const SizedBox(height: ReaderInlineChapterTitle.spacingAfter),
-              ],
               if (imageProvider != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -403,7 +396,8 @@ extension _NativeReaderVerticalPaging on _NativeReaderPageState {
                     child: Image(image: imageProvider, fit: BoxFit.contain),
                   ),
                 ),
-              if (part.content.text.isNotEmpty)
+              if (part.content.text.isNotEmpty ||
+                  part.content.showsInlineChapterTitle)
                 _buildStyledReaderText(
                   chapter,
                   part.content,

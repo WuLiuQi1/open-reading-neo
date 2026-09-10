@@ -19,6 +19,22 @@ class _QueuedCoverTurn {
   final Completer<void> completer = Completer<void>();
 }
 
+class _CoverInteractionSnapshot {
+  const _CoverInteractionSnapshot({
+    required this.currentPage,
+    required this.forwardPage,
+    required this.backwardPage,
+    required this.onTurnForward,
+    required this.onTurnBackward,
+  });
+
+  final ReaderPageSnapshot currentPage;
+  final ReaderPageSnapshot? forwardPage;
+  final ReaderPageSnapshot? backwardPage;
+  final ReaderPageTurnCallback onTurnForward;
+  final ReaderPageTurnCallback onTurnBackward;
+}
+
 class ReaderCoverPageTurnController {
   _ReaderCoverPageTurnState? _state;
 
@@ -29,6 +45,10 @@ class ReaderCoverPageTurnController {
   Future<void> turnBackward() =>
       _state?._enqueueProgrammaticTurn(ReaderPageTurnDirection.backward) ??
       Future<void>.value();
+
+  /// Whether the page is still moving, excluding a completed turn waiting
+  /// for its destination content.
+  bool get isAnimating => _state?._ticker.isActive ?? false;
 
   @visibleForTesting
   double? get debugTopSheetOffset => _state?._offset.value;
@@ -109,6 +129,8 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
   bool _settleCommits = false;
   double _viewportWidth = 0;
 
+  _CoverInteractionSnapshot? _interactionSnapshot;
+
   int? _activePointer;
   Offset? _downPosition;
   double? _gestureOriginDx;
@@ -131,8 +153,10 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
       oldWidget.controller?._detach(this);
       widget.controller?._attach(this);
     }
-    if (_phase == _CoverTurnPhase.dragging &&
-        _pagesChangedUnderGesture(oldWidget)) {
+    if ((_phase == _CoverTurnPhase.dragging ||
+            _phase == _CoverTurnPhase.settling) &&
+        oldWidget.currentPage.key.pageIdentity !=
+            widget.currentPage.key.pageIdentity) {
       _abortInteraction();
     }
   }
@@ -154,18 +178,27 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
     super.dispose();
   }
 
-  bool _pagesChangedUnderGesture(ReaderCoverPageTurn oldWidget) {
-    if (oldWidget.currentPage.key.pageIdentity !=
-        widget.currentPage.key.pageIdentity) {
-      return true;
-    }
-    final oldNeighbour = _direction == ReaderPageTurnDirection.backward
-        ? oldWidget.backwardPage
-        : oldWidget.forwardPage;
-    final neighbour = _direction == ReaderPageTurnDirection.backward
-        ? widget.backwardPage
-        : widget.forwardPage;
-    return oldNeighbour?.key.pageIdentity != neighbour?.key.pageIdentity;
+  ReaderPageSnapshot get _currentPage =>
+      _interactionSnapshot?.currentPage ?? widget.currentPage;
+
+  ReaderPageSnapshot? get _forwardPage {
+    final interaction = _interactionSnapshot;
+    return interaction == null ? widget.forwardPage : interaction.forwardPage;
+  }
+
+  ReaderPageSnapshot? get _backwardPage {
+    final interaction = _interactionSnapshot;
+    return interaction == null ? widget.backwardPage : interaction.backwardPage;
+  }
+
+  void _captureInteractionSnapshots() {
+    _interactionSnapshot ??= _CoverInteractionSnapshot(
+      currentPage: widget.currentPage,
+      forwardPage: widget.forwardPage,
+      backwardPage: widget.backwardPage,
+      onTurnForward: widget.onTurnForward,
+      onTurnBackward: widget.onTurnBackward,
+    );
   }
 
   /// Sheet that moves with [_offset]: the previous page while a backward turn
@@ -173,12 +206,12 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
   bool get _backwardSheetActive =>
       _phase != _CoverTurnPhase.idle &&
       _direction == ReaderPageTurnDirection.backward &&
-      widget.backwardPage != null;
+      _backwardPage != null;
 
   bool get _forwardSheetRevealed =>
       _phase != _CoverTurnPhase.idle &&
       _direction == ReaderPageTurnDirection.forward &&
-      widget.forwardPage != null;
+      _forwardPage != null;
 
   double get _rubberLimit => math.max(24, _viewportWidth * 0.07);
 
@@ -198,10 +231,10 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
   double _gestureDeltaForOffset() {
     final offset = _offset.value;
     if (_direction == ReaderPageTurnDirection.backward) {
-      if (widget.backwardPage != null) return offset + _viewportWidth;
+      if (_backwardPage != null) return offset + _viewportWidth;
       return _rubberStretchInverse(offset);
     }
-    if (widget.forwardPage != null) return offset;
+    if (_forwardPage != null) return offset;
     return -_rubberStretchInverse(-offset);
   }
 
@@ -224,6 +257,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
         continue;
       }
       _activeTurn = turn;
+      _captureInteractionSnapshots();
       _direction = turn.direction;
       _offset.value = turn.direction == ReaderPageTurnDirection.forward
           ? 0
@@ -291,6 +325,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
       _selectionHoldTimer = null;
       _dragStarted = true;
       _gestureOriginDx = event.position.dx;
+      _captureInteractionSnapshots();
       setState(() => _phase = _CoverTurnPhase.dragging);
       return;
     }
@@ -349,11 +384,11 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
       setState(() => _direction = direction);
     }
     if (direction == ReaderPageTurnDirection.forward) {
-      _offset.value = widget.forwardPage != null
+      _offset.value = _forwardPage != null
           ? math.max(delta, -_viewportWidth)
           : -_rubberStretch(-delta);
     } else {
-      _offset.value = widget.backwardPage != null
+      _offset.value = _backwardPage != null
           ? -_viewportWidth + math.min(delta, _viewportWidth)
           : _rubberStretch(delta);
     }
@@ -367,14 +402,13 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
       return;
     }
     final bool commit;
-    if (direction == ReaderPageTurnDirection.forward &&
-        widget.forwardPage != null) {
+    if (direction == ReaderPageTurnDirection.forward && _forwardPage != null) {
       commit =
           velocityDx <= -_minFlingVelocity ||
           (velocityDx < _minFlingVelocity &&
               _offset.value <= -width * _commitDragFraction);
     } else if (direction == ReaderPageTurnDirection.backward &&
-        widget.backwardPage != null) {
+        _backwardPage != null) {
       commit =
           velocityDx >= _minFlingVelocity ||
           (velocityDx > -_minFlingVelocity &&
@@ -392,8 +426,8 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
       return;
     }
     final hasNeighbour = direction == ReaderPageTurnDirection.forward
-        ? widget.forwardPage != null
-        : widget.backwardPage != null;
+        ? _forwardPage != null
+        : _backwardPage != null;
     final double target;
     if (!hasNeighbour) {
       target = 0;
@@ -445,9 +479,10 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
 
   Future<void> _commitTurn() async {
     try {
+      final interaction = _interactionSnapshot;
       final callback = _direction == ReaderPageTurnDirection.backward
-          ? widget.onTurnBackward
-          : widget.onTurnForward;
+          ? (interaction?.onTurnBackward ?? widget.onTurnBackward)
+          : (interaction?.onTurnForward ?? widget.onTurnForward);
       await Future<void>.sync(callback);
     } catch (error, stackTrace) {
       debugPrint('Reader cover page turn callback failed: $error');
@@ -476,6 +511,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
 
   void _resetToIdle() {
     _offset.value = 0;
+    _interactionSnapshot = null;
     if (!mounted) {
       _phase = _CoverTurnPhase.idle;
       _direction = null;
@@ -550,7 +586,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
                   Positioned.fill(
                     key: const ValueKey('reader-cover-forward-sheet'),
                     child: _hiddenSheet(
-                      widget.forwardPage,
+                      _forwardPage,
                       visible: forwardSheetRevealed,
                     ),
                   ),
@@ -570,7 +606,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
                     top: 0,
                     bottom: 0,
                     width: width,
-                    child: _sheet(widget.currentPage),
+                    child: _sheet(_currentPage),
                   ),
                   Positioned(
                     key: const ValueKey('reader-cover-current-dim'),
@@ -594,7 +630,7 @@ class _ReaderCoverPageTurnState extends State<ReaderCoverPageTurn>
                     bottom: 0,
                     width: width,
                     child: _hiddenSheet(
-                      widget.backwardPage,
+                      _backwardPage,
                       visible: backwardSheetActive,
                     ),
                   ),

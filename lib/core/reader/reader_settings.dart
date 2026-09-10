@@ -106,6 +106,7 @@ class ReaderSettings {
     this.pullBookmarkEnabled = false,
     this.tapPageAnimationEnabled = true,
     this.tabletTwoPageEnabled = defaultTabletTwoPageEnabled,
+    this.chapterTitlePageEnabled = true,
   });
 
   final double fontSize;
@@ -125,6 +126,7 @@ class ReaderSettings {
   final bool pullBookmarkEnabled;
   final bool tapPageAnimationEnabled;
   final bool tabletTwoPageEnabled;
+  final bool chapterTitlePageEnabled;
 
   ReaderSettings copyWith({
     double? fontSize,
@@ -144,6 +146,7 @@ class ReaderSettings {
     bool? pullBookmarkEnabled,
     bool? tapPageAnimationEnabled,
     bool? tabletTwoPageEnabled,
+    bool? chapterTitlePageEnabled,
   }) {
     return ReaderSettings(
       fontSize: (fontSize ?? this.fontSize).clamp(14, 32),
@@ -179,6 +182,8 @@ class ReaderSettings {
       tapPageAnimationEnabled:
           tapPageAnimationEnabled ?? this.tapPageAnimationEnabled,
       tabletTwoPageEnabled: tabletTwoPageEnabled ?? this.tabletTwoPageEnabled,
+      chapterTitlePageEnabled:
+          chapterTitlePageEnabled ?? this.chapterTitlePageEnabled,
     );
   }
 }
@@ -206,7 +211,8 @@ class ReaderSettingsStore {
   static const tapPageAnimationKey = 'reader_tap_page_animation_enabled';
   static const tabletTwoPageKey = 'reader_tablet_two_page_enabled';
   static const scrollByChapterKey = 'native_reader_scroll_by_chapter';
-  static const txtChapterTitlePageKey =
+  // Retain the historical key so existing devices keep their preference.
+  static const chapterTitlePageKey =
       'native_reader_txt_chapter_title_page_enabled';
   static const tapZonesKey = 'reader_tap_zones_v1';
   static const legacyBookSourceLineHeightKey = 'book_source_reader_line_height';
@@ -310,6 +316,7 @@ class ReaderSettingsStore {
           (prefs.getInt(paragraphSpacingKey) ??
                   ReaderSettings.defaultParagraphSpacing)
               .clamp(0, 2),
+      chapterTitlePageEnabled: prefs.getBool(chapterTitlePageKey) ?? true,
       pullBookmarkEnabled: prefs.getBool(pullBookmarkKey) ?? false,
       tapPageAnimationEnabled: prefs.getBool(tapPageAnimationKey) ?? true,
       tabletTwoPageEnabled:
@@ -339,6 +346,7 @@ class ReaderSettingsStore {
       prefs.setBool(pullBookmarkKey, settings.pullBookmarkEnabled),
       prefs.setBool(tapPageAnimationKey, settings.tapPageAnimationEnabled),
       prefs.setBool(tabletTwoPageKey, settings.tabletTwoPageEnabled),
+      prefs.setBool(chapterTitlePageKey, settings.chapterTitlePageEnabled),
     ]);
   }
 
@@ -350,16 +358,6 @@ class ReaderSettingsStore {
   Future<void> saveScrollByChapter(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(scrollByChapterKey, value);
-  }
-
-  Future<bool> loadTxtChapterTitlePageEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(txtChapterTitlePageKey) ?? true;
-  }
-
-  Future<void> saveTxtChapterTitlePageEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(txtChapterTitlePageKey, value);
   }
 
   Future<ReaderTapZones> loadTapZones() async {

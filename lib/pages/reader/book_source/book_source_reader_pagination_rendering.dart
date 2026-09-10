@@ -1,7 +1,7 @@
 part of 'book_source_reader_page.dart';
 
 extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
-  _BookSourcePagedLayout _pagedLayoutFor(
+  _BookSourcePagedLayoutInput _pagedLayoutInputFor(
     int chapterIndex,
     BookSourceChapterContent content,
     Size viewport,
@@ -13,6 +13,8 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
           content,
           fallbackTitle: _chapters[chapterIndex].title,
         );
+    final chapterTitle = _chapters[chapterIndex].title;
+    final hasChapterTitle = chapterTitle.trim().isNotEmpty;
     final candidate = _persistedOnlinePagination[chapterIndex];
     final stored = candidate?.text == text ? candidate : null;
     final revision =
@@ -23,7 +25,7 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
     final height = readerTextContentHeight(viewport.height, top, bottom);
     const textScaler = readerBodyTextScaler;
     final locale = Localizations.maybeLocaleOf(context);
-    final key = ReaderLayoutFingerprint(
+    final fingerprint = ReaderLayoutFingerprint(
       contentKey: '${_chapters[chapterIndex].id}:$revision',
       viewport: Size(width, height),
       fontSize: _fontSize,
@@ -42,42 +44,158 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
       extra:
           '${_readerSafeArea.paginationSignature}:'
           '${_readerFontProfile.cacheSignature}:'
-          '${_replaceRules.rulesSignature}',
-    ).cacheKey('book-source-line-v6');
+          '${_replaceRules.rulesSignature}:'
+          '$_chapterTitlePageEnabled:$chapterTitle',
+    ).cacheKey('book-source-line-v7');
+    final style = _bodyTextStyle;
+    final textDirection = Directionality.of(context);
+    return _BookSourcePagedLayoutInput(
+      fingerprint: fingerprint,
+      revision: revision,
+      epoch: _paginationCacheEpoch,
+      payload: stored?.layouts[fingerprint],
+      text: text,
+      width: width,
+      height: height,
+      style: style,
+      flowStyle: NativeTextFlowStyle(
+        textDirection: textDirection,
+        textScaler: textScaler,
+        locale: locale,
+        strutStyle: readerStrutStyle(style),
+        textHeightBehavior: readerTextHeightBehavior,
+        textAlign: _bodyTextAlign,
+      ),
+      firstLineIndent: _firstLineIndent,
+      paragraphSpacing: _paragraphSpacing,
+      includeChapterTitlePage: hasChapterTitle && _chapterTitlePageEnabled,
+      inlineChapterTitleExtent: hasChapterTitle && !_chapterTitlePageEnabled
+          ? ReaderInlineChapterTitle.extentFor(
+              title: chapterTitle,
+              maxWidth: width,
+              bodyStyle: style,
+              textDirection: textDirection,
+              textScaler: textScaler,
+              locale: locale,
+            )
+          : null,
+    );
+  }
+
+  _BookSourcePagedLayout? _cachedPagedLayoutFor(
+    int chapterIndex,
+    BookSourceChapterContent content,
+    Size viewport,
+  ) {
+    final input = _pagedLayoutInputFor(chapterIndex, content, viewport);
     final cached = _pagedLayouts[chapterIndex];
-    if (cached?.fingerprint == key) return cached!;
-    final payload = stored?.layouts[key];
-    final restored = payload == null
-        ? null
-        : ReaderPaginationCacheCodec.restoreTextPages(
-            payload,
-            text: text,
-            firstLineIndent: _firstLineIndent,
-            paragraphSpacing: _paragraphSpacing,
-          );
-    if (restored == null) widget.onPaginationCacheMiss?.call(chapterIndex);
-    final pages =
-        restored ??
-        paginateBookSourceText(
-          text,
-          width: width,
-          firstPageHeight: height,
-          pageHeight: height,
-          style: _bodyTextStyle,
-          textDirection: Directionality.of(context),
-          textScaler: textScaler,
-          textAlign: _bodyTextAlign,
-          locale: locale,
-          firstLineIndent: _firstLineIndent,
-          paragraphSpacing: _paragraphSpacing,
-          includeChapterTitlePage: true,
-        );
-    if (restored == null) {
-      _persistOnlinePagination(chapterIndex, revision, key, pages);
+    return cached?.fingerprint == input.fingerprint ? cached : null;
+  }
+
+  _BookSourcePagedLayout _publishPagedLayout(
+    int chapterIndex,
+    _BookSourcePagedLayoutInput input,
+    List<ReaderTextPage> pages, {
+    required bool persist,
+  }) {
+    if (persist) {
+      _persistOnlinePagination(
+        chapterIndex,
+        input.revision,
+        input.fingerprint,
+        pages,
+      );
     }
-    final layout = _BookSourcePagedLayout(fingerprint: key, pages: pages);
+    final layout = _BookSourcePagedLayout(
+      fingerprint: input.fingerprint,
+      pages: pages,
+    );
     _pagedLayouts[chapterIndex] = layout;
     return layout;
+  }
+
+  _BookSourcePagedLayout _pagedLayoutFor(
+    int chapterIndex,
+    BookSourceChapterContent content,
+    Size viewport,
+  ) {
+    final input = _pagedLayoutInputFor(chapterIndex, content, viewport);
+    final cached = _pagedLayouts[chapterIndex];
+    if (cached?.fingerprint == input.fingerprint) return cached!;
+    final restored = input.restorePages();
+    if (restored == null) widget.onPaginationCacheMiss?.call(chapterIndex);
+    return _publishPagedLayout(
+      chapterIndex,
+      input,
+      restored ?? input.paginate(),
+      persist: restored == null,
+    );
+  }
+
+  Future<_BookSourcePagedLayout?> _preparePagedLayoutFor(
+    int chapterIndex,
+    BookSourceChapterContent content,
+    Size viewport, {
+    required Future<void> Function() yieldBetweenPages,
+    required bool Function() isCurrent,
+  }) async {
+    if (!mounted || !isCurrent()) return null;
+    final input = _pagedLayoutInputFor(chapterIndex, content, viewport);
+    // Compare the source and scalar settings while yielding; hashing all
+    // chapter text and measuring its title again on every page would undo
+    // the benefit of incremental pagination.
+    Object validityToken() => (
+      _readableChapterText[chapterIndex],
+      _chapters[chapterIndex].title,
+      _readerFont,
+      _fontSize,
+      _fontWeight,
+      _lineHeight,
+      _letterSpacing,
+      _textAlignment,
+      _horizontalMargin,
+      _topMargin,
+      _bottomMargin,
+      _topBarStyle,
+      _pageMode,
+      _firstLineIndent,
+      _paragraphSpacing,
+      _chapterTitlePageEnabled,
+      _replaceRules.rulesSignature,
+      MediaQuery.viewPaddingOf(context),
+      MediaQuery.sizeOf(context),
+      Localizations.maybeLocaleOf(context),
+      Directionality.of(context),
+      PaginationCacheDao.epoch,
+    );
+    final token = validityToken();
+    bool stillCurrent() => mounted && isCurrent() && validityToken() == token;
+
+    final cached = _pagedLayouts[chapterIndex];
+    if (cached?.fingerprint == input.fingerprint) return cached;
+    // Cache decoding also stays behind the caller's interaction-aware yield.
+    await yieldBetweenPages();
+    if (!stillCurrent()) return null;
+    final restored = input.restorePages();
+    if (restored != null) {
+      return _publishPagedLayout(chapterIndex, input, restored, persist: false);
+    }
+    widget.onPaginationCacheMiss?.call(chapterIndex);
+    try {
+      final pages = await input.paginateIncrementally(() async {
+        await yieldBetweenPages();
+        if (!stillCurrent()) throw const _ObsoletePagedLayout();
+      });
+      if (!stillCurrent()) return null;
+      final current = _pagedLayoutInputFor(chapterIndex, content, viewport);
+      if (current.epoch != input.epoch ||
+          current.fingerprint != input.fingerprint) {
+        return null;
+      }
+      return _publishPagedLayout(chapterIndex, input, pages, persist: true);
+    } on _ObsoletePagedLayout {
+      return null;
+    }
   }
 
   void _ensurePagination(
@@ -246,7 +364,11 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
   }) {
     final content = _prefetchedContent[chapterIndex];
     if (content == null) return null;
-    final layout = _pagedLayoutFor(chapterIndex, content, viewport);
+    final layout = _cachedPagedLayoutFor(chapterIndex, content, viewport);
+    if (layout == null) {
+      _schedulePagedLayoutWarm(chapterIndex);
+      return null;
+    }
     final pages = layout.pages;
     final pageIndex = selectPageIndex(pages.length);
     if (pageIndex < 0 || pageIndex >= pages.length) return null;
@@ -276,7 +398,9 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
               ? (pageCount) => pageCount - 1
               : (_) => 0,
         );
-        if (data == null) return const SizedBox.shrink();
+        if (data == null) {
+          return _buildBoundaryLeaf(forward: chapterIndex > _chapterIndex);
+        }
         return _buildPageLeaf(
           data.page,
           pageIndex: data.pageIndex,
@@ -352,5 +476,81 @@ extension _BookSourceReaderPaginationRendering on _BookSourceReaderPageState {
       topInformationLayout: topInformationLayout,
       slotIdentity: slotIdentity,
     ),
+  );
+}
+
+class _ObsoletePagedLayout implements Exception {
+  const _ObsoletePagedLayout();
+}
+
+class _BookSourcePagedLayoutInput {
+  const _BookSourcePagedLayoutInput({
+    required this.fingerprint,
+    required this.revision,
+    required this.epoch,
+    required this.payload,
+    required this.text,
+    required this.width,
+    required this.height,
+    required this.style,
+    required this.flowStyle,
+    required this.firstLineIndent,
+    required this.paragraphSpacing,
+    required this.includeChapterTitlePage,
+    required this.inlineChapterTitleExtent,
+  });
+
+  final String fingerprint;
+  final String revision;
+  final int epoch;
+  final Uint8List? payload;
+  final String text;
+  final double width;
+  final double height;
+  final TextStyle style;
+  final NativeTextFlowStyle flowStyle;
+  final int firstLineIndent;
+  final int paragraphSpacing;
+  final bool includeChapterTitlePage;
+  final double? inlineChapterTitleExtent;
+
+  List<ReaderTextPage>? restorePages() => payload == null
+      ? null
+      : ReaderPaginationCacheCodec.restoreTextPages(
+          payload!,
+          text: text,
+          firstLineIndent: firstLineIndent,
+          paragraphSpacing: paragraphSpacing,
+        );
+
+  List<ReaderTextPage> paginate() => paginateReaderText(
+    text: text,
+    maxWidth: width,
+    maxHeight: height,
+    firstPageHeight: height,
+    flowStyle: flowStyle,
+    style: style,
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: paragraphSpacing,
+    normalizeParagraphBreaks: true,
+    includeChapterTitlePage: includeChapterTitlePage,
+    inlineChapterTitleExtent: inlineChapterTitleExtent,
+  );
+
+  Future<List<ReaderTextPage>> paginateIncrementally(
+    Future<void> Function() yieldBetweenPages,
+  ) => paginateReaderTextIncrementally(
+    text: text,
+    maxWidth: width,
+    maxHeight: height,
+    firstPageHeight: height,
+    flowStyle: flowStyle,
+    style: style,
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: paragraphSpacing,
+    normalizeParagraphBreaks: true,
+    includeChapterTitlePage: includeChapterTitlePage,
+    inlineChapterTitleExtent: inlineChapterTitleExtent,
+    yieldBetweenPages: yieldBetweenPages,
   );
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import 'secure_sync_config.dart';
@@ -153,13 +154,29 @@ class WebDavClient {
   Future<WebDavResourceState> resourceState(Uri uri) async {
     try {
       final response = await _request('HEAD', uri);
-      return WebDavResourceState(
-        exists: true,
-        etag: response.headers.value('etag'),
-        contentLength: int.tryParse(
-          response.headers.value(Headers.contentLengthHeader) ?? '',
-        ),
+      final etag = response.headers.value('etag');
+      final length = int.tryParse(
+        response.headers.value(Headers.contentLengthHeader) ?? '',
       );
+      if (_isStrongEtag(etag)) {
+        return WebDavResourceState(
+          exists: true,
+          etag: etag!.trim(),
+          contentLength: length,
+        );
+      }
+      // Some DAV servers expose validators as properties but omit them from
+      // PUT/HEAD headers. Query only this resource, not its containing folder.
+      final properties = await _request(
+        'PROPFIND',
+        uri,
+        headers: const {
+          'Depth': '0',
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+        data: _resourcePropfindBody,
+      );
+      return _parseResourceProperties(properties.data ?? '', uri, length);
     } on WebDavSyncFailure catch (error) {
       if (error.statusCode == 404) return const WebDavResourceState.missing();
       rethrow;
@@ -170,8 +187,8 @@ class WebDavClient {
   ///
   /// Callers must provide exactly one precondition: [ifMatch] for an existing
   /// resource or [ifNoneMatch] for first publication. A server that omits ETag
-  /// after the write is rejected because subsequent safe updates would be
-  /// impossible.
+  /// in response headers is queried through DAV properties. A validator read
+  /// after PUT is accepted only after verifying the stored bytes and version.
   Future<WebDavConditionalWriteResult> putFileConditionally(
     Uri uri,
     File file, {
@@ -216,20 +233,57 @@ class WebDavClient {
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) throw _statusFailure(status);
       var etag = response.headers.value('etag');
-      if (etag == null || etag.trim().isEmpty) {
+      final needsVerification = !_isStrongEtag(etag);
+      if (needsVerification) {
         etag = (await resourceState(uri)).etag;
       }
-      if (etag == null || etag.trim().isEmpty) {
+      if (!_isStrongEtag(etag)) {
         throw const WebDavSyncFailure(
           WebDavSyncErrorCode.serverIncompatible,
           'The WebDAV server did not provide an ETag for a mutable file.',
         );
       }
-      return WebDavConditionalWriteResult(etag: etag, contentLength: total);
+      final version = etag!.trim();
+      if (needsVerification) {
+        await _verifyWrittenVersion(uri, file, version);
+      }
+      return WebDavConditionalWriteResult(etag: version, contentLength: total);
     } on WebDavSyncFailure catch (error) {
       throw error.withRequest('PUT', uri);
     } on DioException catch (error) {
       throw _dioFailure(error).withRequest('PUT', uri);
+    }
+  }
+
+  Future<void> _verifyWrittenVersion(Uri uri, File file, String etag) async {
+    final response = await _dio.get<ResponseBody>(
+      uri.toString(),
+      options: Options(
+        followRedirects: false,
+        validateStatus: (_) => true,
+        responseType: ResponseType.stream,
+        headers: {
+          'Authorization': _authorization,
+          'If-Match': etag,
+          'Cache-Control': 'no-cache',
+        },
+      ),
+    );
+    final status = response.statusCode ?? 0;
+    if (status != 200 || response.data == null) {
+      await response.data?.stream.listen(null).cancel();
+      throw _statusFailure(status).withRequest('GET', uri);
+    }
+    final remoteHash = await sha256.bind(response.data!.stream).first;
+    final localHash = await sha256.bind(file.openRead()).first;
+    final current = await resourceState(uri);
+    if (remoteHash != localHash || !current.exists || current.etag != etag) {
+      throw WebDavSyncFailure(
+        WebDavSyncErrorCode.conflict,
+        'The uploaded file changed before its WebDAV version could be verified.',
+        requestMethod: 'GET',
+        resourcePath: uri.path,
+      );
     }
   }
 
@@ -620,6 +674,68 @@ class WebDavConditionalWriteResult {
 const _propfindBody = '''<?xml version="1.0" encoding="utf-8" ?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:resourcetype/></d:prop></d:propfind>''';
 
+const _resourcePropfindBody = '''<?xml version="1.0" encoding="utf-8" ?>
+<d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:getcontentlength/></d:prop></d:propfind>''';
+
+bool _isStrongEtag(String? value) =>
+    value != null &&
+    RegExp(r'^"[\x21\x23-\x7e\x80-\xff]*"$').hasMatch(value.trim());
+
+// The DAV properties used here contain only text. Keep extraction scoped to
+// the matching response and successful propstat, as a 207 can include failures
+// and properties belonging to other resources.
+Iterable<String> _xmlValues(String body, String name) sync* {
+  final pattern = RegExp(
+    '<((?:[A-Za-z_][A-Za-z0-9_.-]*:)?$name)(?:\\s[^>]*)?>(.*?)</\\1\\s*>',
+    dotAll: true,
+  );
+  for (final match in pattern.allMatches(body)) {
+    yield match.group(2)!;
+  }
+}
+
+WebDavResourceState _parseResourceProperties(
+  String body,
+  Uri uri,
+  int? headLength,
+) {
+  for (final response in _xmlValues(body, 'response')) {
+    final hrefs = _xmlValues(response, 'href').toList();
+    if (hrefs.length != 1) continue;
+    final target = uri.resolve(_decodeXml(hrefs.single.trim()));
+    if (target != uri) continue;
+    String? etag;
+    int? length;
+    for (final propstat in _xmlValues(response, 'propstat')) {
+      final statuses = _xmlValues(propstat, 'status').toList();
+      if (statuses.length != 1 ||
+          !RegExp(r'^HTTP/\S+ 200(?:\s|$)').hasMatch(statuses.single.trim())) {
+        continue;
+      }
+      for (final prop in _xmlValues(propstat, 'prop')) {
+        for (final value in _xmlValues(prop, 'getetag')) {
+          final decoded = _decodeXml(value.trim());
+          if (_isStrongEtag(decoded)) etag = decoded;
+        }
+        for (final value in _xmlValues(prop, 'getcontentlength')) {
+          length = int.tryParse(value.trim());
+        }
+      }
+    }
+    return WebDavResourceState(
+      exists: true,
+      etag: etag,
+      contentLength: length ?? headLength,
+    );
+  }
+  throw WebDavSyncFailure(
+    WebDavSyncErrorCode.serverIncompatible,
+    'The WebDAV property response did not identify the requested resource.',
+    requestMethod: 'PROPFIND',
+    resourcePath: uri.path,
+  );
+}
+
 bool _sameOrigin(Uri a, Uri b) =>
     a.scheme.toLowerCase() == b.scheme.toLowerCase() &&
     a.host.toLowerCase() == b.host.toLowerCase() &&
@@ -633,12 +749,33 @@ DateTime? _parseHttpDate(String value) {
   }
 }
 
-String _decodeXml(String value) => value
-    .replaceAll('&amp;', '&')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'");
+String _decodeXml(String value) => value.replaceAllMapped(
+  RegExp(r'&(?:amp|lt|gt|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);'),
+  (match) {
+    final entity = match.group(0)!;
+    final named = switch (entity) {
+      '&amp;' => '&',
+      '&lt;' => '<',
+      '&gt;' => '>',
+      '&quot;' => '"',
+      '&apos;' => "'",
+      _ => null,
+    };
+    if (named != null) return named;
+    final hex = entity.startsWith('&#x');
+    final code = int.tryParse(
+      entity.substring(hex ? 3 : 2, entity.length - 1),
+      radix: hex ? 16 : 10,
+    );
+    if (code == null ||
+        code > 0x10ffff ||
+        code == 0 ||
+        (code >= 0xd800 && code <= 0xdfff)) {
+      return entity;
+    }
+    return String.fromCharCode(code);
+  },
+);
 
 WebDavSyncFailure _statusFailure(int status) {
   final code = switch (status) {

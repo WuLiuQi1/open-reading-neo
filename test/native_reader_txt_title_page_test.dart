@@ -255,7 +255,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: ReaderPageMode.instantPage.name,
-      ReaderSettingsStore.txtChapterTitlePageKey: false,
+      ReaderSettingsStore.chapterTitlePageKey: false,
     });
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

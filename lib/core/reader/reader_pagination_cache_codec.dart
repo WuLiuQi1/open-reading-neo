@@ -44,7 +44,7 @@ abstract final class ReaderPaginationCacheCodec {
     for (final page in pages)
       ReaderPaginationCachePage(
         isChapterTitle: page.isChapterTitle,
-        showsInlineChapterTitle: false,
+        showsInlineChapterTitle: page.showsInlineChapterTitle,
         imageBlockIndex: null,
         layoutSourceStart: page.layout?.sourceOffset ?? -1,
         layoutSourceEnd: page.layout == null
@@ -80,7 +80,8 @@ abstract final class ReaderPaginationCacheCodec {
     var layoutEnd = 0;
     for (final page in boundaries) {
       if (page.imageBlockIndex != null ||
-          page.showsInlineChapterTitle ||
+          (page.showsInlineChapterTitle &&
+              (pages.isNotEmpty || page.isChapterTitle)) ||
           page.sourceStart != sourceEnd ||
           page.sourceEnd < sourceEnd ||
           page.sourceEnd > text.length) {
@@ -124,6 +125,7 @@ abstract final class ReaderPaginationCacheCodec {
           layoutEnd: page.layoutEnd,
           displayStart: page.displayStart,
           displayEnd: page.displayEnd,
+          showsInlineChapterTitle: page.showsInlineChapterTitle,
         ),
       );
       sourceEnd = page.sourceEnd;

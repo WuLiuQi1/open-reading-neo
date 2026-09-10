@@ -148,7 +148,7 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
         : null;
     final previousLayout = previousContent == null || _pagedViewportSize.isEmpty
         ? null
-        : _pagedLayoutFor(
+        : _cachedPagedLayoutFor(
             previousChapterIndex,
             previousContent,
             _pagedViewportSize,
@@ -161,7 +161,11 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
         : null;
     final nextLayout = nextContent == null || _pagedViewportSize.isEmpty
         ? null
-        : _pagedLayoutFor(nextChapterIndex, nextContent, _pagedViewportSize);
+        : _cachedPagedLayoutFor(
+            nextChapterIndex,
+            nextContent,
+            _pagedViewportSize,
+          );
     final nextPageCount = nextLayout?.pages.length ?? 1;
     final trailing = hasNextChapter ? nextPageCount : 0;
     return NotificationListener<ScrollNotification>(

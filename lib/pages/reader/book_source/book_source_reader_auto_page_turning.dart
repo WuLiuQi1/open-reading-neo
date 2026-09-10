@@ -229,7 +229,15 @@ extension _BookSourceReaderAutoPageTurning on _BookSourceReaderPageState {
           ? _content
           : _prefetchedContent[chapter];
       if (content == null || isImageOnlyBookSourceChapter(content)) return null;
-      final layout = _pagedLayoutFor(chapter, content, _pagedViewportSize);
+      final layout = _cachedPagedLayoutFor(
+        chapter,
+        content,
+        _pagedViewportSize,
+      );
+      if (layout == null) {
+        _schedulePagedLayoutWarm(chapter);
+        return null;
+      }
       if (page >= layout.pages.length) {
         return _buildBlankSourceSnapshot('$chapter:$page');
       }

@@ -9,23 +9,11 @@ extension _NativeReaderShell on _NativeReaderPageState {
   }) {
     final imageIndex = page.imageBlockIndex;
     if (imageIndex == null) {
-      final body = _buildStyledReaderText(
+      return _buildStyledReaderText(
         chapter,
         page,
         chapterIndex: chapterIndex,
         pageIndex: pageIndex,
-      );
-      if (!page.showsInlineChapterTitle) return body;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ReaderInlineChapterTitle(
-            title: chapter.title,
-            bodyStyle: _readerTextStyle,
-          ),
-          const SizedBox(height: ReaderInlineChapterTitle.spacingAfter),
-          Expanded(child: body),
-        ],
       );
     }
     final imageBlock = chapter.blocks[imageIndex];

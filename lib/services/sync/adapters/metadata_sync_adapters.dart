@@ -1302,8 +1302,8 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
       'tap_page_animation': settings.tapPageAnimationEnabled,
       'tablet_two_page': settings.tabletTwoPageEnabled,
       'scroll_by_chapter': await settingsStore.loadScrollByChapter(),
-      'txt_chapter_title_page': await settingsStore
-          .loadTxtChapterTitlePageEnabled(),
+      // Keep the record ID compatible with existing sync peers.
+      'txt_chapter_title_page': settings.chapterTitlePageEnabled,
       'tap_zones': (await settingsStore.loadTapZones()).encode(),
       'image_reader_background':
           (await const PagedImageReaderSettingsStore().loadBackground()).name,
@@ -1590,7 +1590,9 @@ class ReaderSettingsSyncAdapter extends _BaseAdapter {
       case 'scroll_by_chapter':
         await settingsStore.saveScrollByChapter(_syncBool(value));
       case 'txt_chapter_title_page':
-        await settingsStore.saveTxtChapterTitlePageEnabled(_syncBool(value));
+        await settingsStore.save(
+          settings.copyWith(chapterTitlePageEnabled: _syncBool(value)),
+        );
       case 'tap_zones':
         final encoded = _syncString(value, maxLength: 320);
         final zones = ReaderTapZones.decode(encoded);

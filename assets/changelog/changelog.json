@@ -3,6 +3,22 @@
     "entries": [
         {
             "version": "2.6.7",
+            "buildNumber": "260910002",
+            "notes": {
+                "zh": [
+                    "统一高级会员页与设置页会员卡风格，优化会员状态、权益、购买和恢复购买的层次，适配手机、平板及深浅主题。",
+                    "移除会员页退款快捷入口，保留恢复购买、会员条款和隐私说明。",
+                    "将内置隐私说明中的下载明细保留期限更正为实际的 180 天。"
+                ],
+                "en": [
+                    "Refresh Premium with the existing membership-card style, clearer status and benefits, and responsive light and dark layouts.",
+                    "Remove refund shortcuts from the membership page while keeping Restore Purchases, membership terms and privacy information.",
+                    "Correct the download-event retention period in privacy information to 180 days."
+                ]
+            }
+        },
+        {
+            "version": "2.6.7",
             "buildNumber": "260910001",
             "notes": {
                 "zh": [

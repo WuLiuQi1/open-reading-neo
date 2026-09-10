@@ -393,12 +393,8 @@ extension _NativeReaderControls on _NativeReaderPageState {
         horizontalMarginLabel: context.l10n.readerHorizontalMarginLabel,
         topMarginLabel: context.l10n.readerTopMarginLabel,
         bottomMarginLabel: context.l10n.readerBottomMarginLabel,
-        txtChapterTitlePageTitle: widget.book.format.toLowerCase() == 'txt'
-            ? context.l10n.readerTxtChapterTitlePageTitle
-            : null,
-        txtChapterTitlePageHint: widget.book.format.toLowerCase() == 'txt'
-            ? context.l10n.readerTxtChapterTitlePageHint
-            : null,
+        chapterTitlePageTitle: context.l10n.readerTxtChapterTitlePageTitle,
+        chapterTitlePageHint: context.l10n.readerTxtChapterTitlePageHint,
         themeId: _readerThemeId,
         fontSize: _fontSize,
         textBrightness: _textBrightness,
@@ -420,9 +416,7 @@ extension _NativeReaderControls on _NativeReaderPageState {
         pullBookmarkEnabled: _pullBookmarkEnabled,
         tapPageAnimationEnabled: _tapPageAnimationEnabled,
         tabletTwoPageEnabled: _tabletTwoPageEnabled,
-        txtChapterTitlePageEnabled: widget.book.format.toLowerCase() == 'txt'
-            ? _txtChapterTitlePageEnabled
-            : null,
+        chapterTitlePageEnabled: _chapterTitlePageEnabled,
         themeLabelFor: (id) => _readerThemeName(context, id),
         onThemeChanged: (id) => unawaited(_setReaderTheme(id)),
         onCustomThemeTap: _showCustomThemeEditor,
@@ -458,9 +452,8 @@ extension _NativeReaderControls on _NativeReaderPageState {
             unawaited(_setInteractionPreferences(tapAnimation: value)),
         onTabletTwoPageChanged: (value) =>
             unawaited(_setTabletTwoPageEnabled(value)),
-        onTxtChapterTitlePageChanged: widget.book.format.toLowerCase() == 'txt'
-            ? (value) => unawaited(_setTxtChapterTitlePageEnabled(value))
-            : null,
+        onChapterTitlePageChanged: (value) =>
+            unawaited(_setChapterTitlePageEnabled(value)),
       ),
     );
     if (!mounted) return;

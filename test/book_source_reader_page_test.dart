@@ -27,7 +27,9 @@ import 'package:xxread/services/books/pagination_cache_dao.dart';
 import 'package:xxread/utils/glass_config.dart';
 import 'package:xxread/utils/reader_themes.dart';
 import 'package:xxread/widgets/reader_chapter_title_page.dart';
+import 'package:xxread/widgets/reader_cover_page_turn.dart';
 import 'package:xxread/widgets/reader_annotated_text_page.dart';
+import 'package:xxread/widgets/reader_text_page_content.dart';
 import 'package:xxread/widgets/reader_opening_loader.dart';
 import 'package:xxread/widgets/reader_paper_page_leaf.dart';
 import 'package:xxread/widgets/reader_shader_page_curl.dart';
@@ -348,6 +350,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+      'native_reader_txt_chapter_title_page_enabled': false,
     });
     final source = RegisteredBookSource(
       id: 'example.source',
@@ -510,6 +513,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+      'native_reader_txt_chapter_title_page_enabled': false,
       ReplaceRuleService.preferenceKey: '''[
         {
           "id":"title-clean",
@@ -614,6 +618,201 @@ void main() {
 
     expect(client.requestedChapterIds.first, 'chapter-2');
   });
+
+  for (final mode in BookSourcePageMode.values) {
+    for (final titlePageEnabled in [true, false]) {
+      testWidgets(
+        'online chapter title preference is shared in ${mode.name} enabled=$titlePageEnabled',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({
+            ReaderSettingsStore.pageModeKey: mode.name,
+            // Keep the persisted legacy key covered while the API becomes generic.
+            'native_reader_txt_chapter_title_page_enabled': titlePageEnabled,
+          });
+          await tester.pumpWidget(
+            _buildTabletSourceReader(_SingleChapterBookSourceClient()),
+          );
+          await _pumpUntilFound(tester, find.byType(ReaderAnnotatedTextPage));
+          await tester.pumpAndSettle();
+          expect(
+            find.byType(ReaderChapterTitlePage),
+            titlePageEnabled ? findsWidgets : findsNothing,
+          );
+          expect(
+            find.byType(ReaderInlineChapterTitle),
+            titlePageEnabled ? findsNothing : findsWidgets,
+          );
+          if (!titlePageEnabled) {
+            expect(
+              find.textContaining('Short body.', findRichText: true),
+              findsWidgets,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'online chapter title settings switch defaults on and updates the shared preference',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(393, 852));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+      tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewPadding);
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: BookSourcePageMode.instantPage.name,
+      });
+      await tester.pumpWidget(
+        _buildTabletSourceReader(_SingleChapterBookSourceClient()),
+      );
+      await _pumpUntilFound(tester, find.byType(ReaderChapterTitlePage));
+      await _showReaderControls(tester);
+      await tester.tap(find.byIcon(Icons.tune_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Layout'));
+      await tester.pumpAndSettle();
+      final titleSwitch = find.byKey(
+        const ValueKey('reader-chapter-title-page-switch'),
+      );
+      expect(titleSwitch, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(titleSwitch).value, isTrue);
+      expect(
+        titleSwitch.hitTestable(),
+        findsOneWidget,
+        reason:
+            'The title switch must be visible when Layout opens on a phone, without scrolling.',
+      );
+      await tester.tap(titleSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(titleSwitch).value, isFalse);
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getBool('native_reader_txt_chapter_title_page_enabled'),
+        isFalse,
+      );
+      Navigator.of(tester.element(titleSwitch)).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(ReaderChapterTitlePage), findsNothing);
+      expect(find.byType(ReaderInlineChapterTitle), findsOneWidget);
+      expect(
+        find.textContaining('Short body.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('online chapter title toggle preserves the current body offset', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      ReaderSettingsStore.pageModeKey: BookSourcePageMode.instantPage.name,
+      'native_reader_txt_chapter_title_page_enabled': false,
+    });
+    await tester.pumpWidget(
+      _buildTabletSourceReader(_LongFakeBookSourceClient()),
+    );
+    await _pumpUntilFound(tester, find.byType(ReaderAnnotatedTextPage));
+    for (var index = 0; index < 3; index++) {
+      await tester.tapAt(const Offset(760, 300));
+      await tester.pumpAndSettle();
+    }
+    final before = tester.widget<ReaderAnnotatedTextPage>(
+      find.byType(ReaderAnnotatedTextPage),
+    );
+    final offset = before.page.startOffset;
+    expect(offset, greaterThan(0));
+    await _showReaderControls(tester);
+    await tester.tap(find.byIcon(Icons.tune_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Layout'));
+    await tester.pumpAndSettle();
+    final titleSwitch = find.byKey(
+      const ValueKey('reader-chapter-title-page-switch'),
+    );
+    expect(titleSwitch, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(titleSwitch).value, isFalse);
+    await tester.ensureVisible(titleSwitch);
+    await tester.pumpAndSettle();
+    await tester.tap(titleSwitch);
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(titleSwitch)).pop();
+    await tester.pumpAndSettle();
+    final after = tester.widget<ReaderAnnotatedTextPage>(
+      find.byType(ReaderAnnotatedTextPage),
+    );
+    expect(after.chapterId, before.chapterId);
+    expect(after.page.isChapterTitle, isFalse);
+    expect(after.page.startOffset, lessThanOrEqualTo(offset));
+    expect(after.page.endOffset, greaterThan(offset));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'online chapter title preference invalidates cached pages and restores inline pages on reopen',
+    (tester) async {
+      final cache = _MemoryPaginationCacheDao();
+      final client = _SingleChapterBookSourceClient();
+      var misses = 0;
+      Future<void> open(bool enabled) async {
+        SharedPreferences.setMockInitialValues({
+          ReaderSettingsStore.pageModeKey: BookSourcePageMode.instantPage.name,
+          'native_reader_txt_chapter_title_page_enabled': enabled,
+        });
+        await tester.pumpWidget(
+          _buildTabletSourceReader(
+            client,
+            paginationCacheDao: cache,
+            onPaginationCacheMiss: (_) => misses++,
+          ),
+        );
+        await _pumpUntilFound(tester, find.byType(ReaderAnnotatedTextPage));
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(ReaderChapterTitlePage),
+          enabled ? findsOneWidget : findsNothing,
+        );
+        if (!enabled) {
+          expect(find.byType(ReaderInlineChapterTitle), findsOneWidget);
+          expect(
+            find.textContaining('Short body.', findRichText: true),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+
+      Future<void> close() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      }
+
+      await open(true);
+      expect(misses, greaterThan(0));
+      await close();
+      misses = 0;
+      await open(false);
+      expect(
+        misses,
+        greaterThan(0),
+        reason: 'title policy changes pagination boundaries',
+      );
+      await close();
+      misses = 0;
+      await open(false);
+      expect(
+        misses,
+        0,
+        reason: 'inline heading metadata survives the pagination codec',
+      );
+      await close();
+      client.close();
+    },
+  );
 
   testWidgets('uses the shared reader settings with independent margins', (
     tester,
@@ -772,6 +971,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+      'native_reader_txt_chapter_title_page_enabled': false,
       ReaderAutoPageTurnController.intervalPreferenceKey: 5,
       ReaderAutoPageTurnController.verticalModePreferenceKey: 'interval',
     });
@@ -910,6 +1110,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+        'native_reader_txt_chapter_title_page_enabled': false,
         ReaderSettingsStore.scrollByChapterKey: true,
         ReaderAutoPageTurnController.verticalModePreferenceKey: 'continuous',
       });
@@ -963,10 +1164,12 @@ void main() {
       );
       await gesture.up();
       await tester.pump();
+      await tester.pumpAndSettle();
       final anchor = _sourceCenterAnchor(tester);
-      await tester.tap(
-        find.byKey(const ValueKey('reader-auto-page-turn-stop')),
-      );
+      final stop = find.byKey(const ValueKey('reader-auto-page-turn-stop'));
+      expect(stop.hitTestable(), findsOneWidget);
+      expect(tester.widget<IconButton>(stop).onPressed, isNotNull);
+      await tester.tap(stop);
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -998,6 +1201,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+        'native_reader_txt_chapter_title_page_enabled': false,
         ReaderSettingsStore.scrollByChapterKey: true,
         ReaderAutoPageTurnController.verticalModePreferenceKey: 'continuous',
         ReaderAutoPageTurnController.continuousSecondsPreferenceKey: 5.0,
@@ -1032,11 +1236,14 @@ void main() {
       await tester.tapAt(const Offset(400, 300));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
+      await _showReaderControls(tester);
+      await tester.pumpAndSettle();
       final anchor = _sourceCenterAnchor(tester);
       expect(anchor.$1, 'chapter-2');
-      await tester.tap(
-        find.byKey(const ValueKey('reader-auto-page-turn-stop')),
-      );
+      final stop = find.byKey(const ValueKey('reader-auto-page-turn-stop'));
+      expect(stop.hitTestable(), findsOneWidget);
+      expect(tester.widget<IconButton>(stop).onPressed, isNotNull);
+      await tester.tap(stop);
       for (var frame = 0; frame < 8; frame++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -1072,6 +1279,8 @@ void main() {
     ) async {
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: mode.name,
+        if (mode == BookSourcePageMode.verticalScroll)
+          'native_reader_txt_chapter_title_page_enabled': false,
       });
 
       await tester.pumpWidget(
@@ -1164,6 +1373,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: BookSourcePageMode.verticalScroll.name,
+      'native_reader_txt_chapter_title_page_enabled': false,
     });
     try {
       await tester.pumpWidget(
@@ -1469,6 +1679,146 @@ void main() {
   );
 
   testWidgets(
+    'adjacent chapter pagination waits until the held pointer is released',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: BookSourcePageMode.coverSlide.name,
+        'native_reader_txt_chapter_title_page_enabled': false,
+      });
+      final client = _DelayedSecondChapterClient(
+        secondChapterText: _tabletChapterText(240),
+      );
+      final cacheMisses = <int>[];
+      try {
+        await tester.pumpWidget(
+          _buildTabletSourceReader(
+            client,
+            onPaginationCacheMiss: cacheMisses.add,
+          ),
+        );
+        await _pumpUntilFound(tester, find.byType(ReaderCoverPageTurn));
+        for (
+          var attempt = 0;
+          attempt < 30 && !client.secondChapterRequested;
+          attempt++
+        ) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(client.secondChapterRequested, isTrue);
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(ReaderCoverPageTurn)),
+        );
+        client.completeSecondChapter();
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        for (var frame = 0; frame < 5; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+
+        expect(cacheMisses, contains(0));
+        expect(cacheMisses, isNot(contains(1)));
+
+        await gesture.up();
+        ReaderCoverPageTurn? cover;
+        for (var attempt = 0; attempt < 60; attempt++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          cover = tester.widget<ReaderCoverPageTurn>(
+            find.byType(ReaderCoverPageTurn),
+          );
+          if (cacheMisses.contains(1) &&
+              cover.forwardPage?.key.pageIdentity.contains(':chapter-2:') ==
+                  true) {
+            break;
+          }
+        }
+
+        expect(cacheMisses.where((chapter) => chapter == 1), hasLength(1));
+        expect(cover?.forwardPage?.key.pageIdentity, contains(':chapter-2:'));
+      } finally {
+        client.completeSecondChapter();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    },
+  );
+
+  testWidgets(
+    'unrelated continuous animation does not starve adjacent pagination',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: BookSourcePageMode.coverSlide.name,
+        'native_reader_txt_chapter_title_page_enabled': false,
+      });
+      final client = _DelayedSecondChapterClient(
+        secondChapterText: _tabletChapterText(240),
+      );
+      final cacheMisses = <int>[];
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => Stack(
+              children: [
+                Positioned.fill(child: child!),
+                const Align(
+                  alignment: Alignment.topLeft,
+                  child: CircularProgressIndicator(),
+                ),
+              ],
+            ),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: BookSourceReaderPage(
+              paginationCacheDao: _MemoryPaginationCacheDao(),
+              onPaginationCacheMiss: cacheMisses.add,
+              replaceRuleService: _replaceRules,
+              source: _testSource(),
+              book: const BookSourceBook(
+                id: 'book-1',
+                title: 'Animated source reader',
+                author: 'Author',
+                description: '',
+                categories: [],
+              ),
+              client: client,
+            ),
+          ),
+        );
+        await _pumpUntilFound(tester, find.byType(ReaderCoverPageTurn));
+        for (
+          var attempt = 0;
+          attempt < 30 && !client.secondChapterRequested;
+          attempt++
+        ) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(client.secondChapterRequested, isTrue);
+
+        client.completeSecondChapter();
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        ReaderCoverPageTurn? cover;
+        for (var frame = 0; frame < 60; frame++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          cover = tester.widget<ReaderCoverPageTurn>(
+            find.byType(ReaderCoverPageTurn),
+          );
+          if (cacheMisses.contains(1) &&
+              cover.forwardPage?.key.pageIdentity.contains(':chapter-2:') ==
+                  true) {
+            break;
+          }
+        }
+
+        expect(cacheMisses.where((chapter) => chapter == 1), hasLength(1));
+        expect(cover?.forwardPage?.key.pageIdentity, contains(':chapter-2:'));
+      } finally {
+        client.completeSecondChapter();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    },
+  );
+
+  testWidgets(
     'prefetched chapter turn does not wait for progress persistence',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
@@ -1639,6 +1989,81 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
         await tester.binding.setSurfaceSize(null);
+      }
+    },
+  );
+
+  testWidgets('horizontal slide requests a frame for an idle boundary commit', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      ReaderSettingsStore.pageModeKey: BookSourcePageMode.horizontalSlide.name,
+    });
+    final client = _ConfigurableBookSourceClient(const {
+      'chapter-1': 'Short first chapter.',
+      'chapter-2': 'Short second chapter.',
+    });
+    await tester.pumpWidget(_slideTestReader(client));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const ValueKey('source-slide:chapter-1')),
+    );
+    await tester.pumpAndSettle();
+    final pageView = tester.widget<PageView>(find.byType(PageView));
+    final boundary = pageView.childrenDelegate.estimatedChildCount! - 1;
+    pageView.onPageChanged!(boundary);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    // ScrollEnd may arrive while the scheduler is idle. Registering a
+    // post-frame callback alone cannot make the next frame happen.
+    ScrollEndNotification(
+      metrics: pageView.controller!.position,
+      context: tester.element(find.byType(PageView)),
+    ).dispatch(tester.element(find.byType(PageView)));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets(
+    'horizontal slide finishes one swipe after a delayed next chapter arrives',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey:
+            BookSourcePageMode.horizontalSlide.name,
+      });
+      final client = _DelayedSecondChapterClient();
+      try {
+        await tester.pumpWidget(_slideTestReader(client));
+        await _pumpUntilFound(
+          tester,
+          find.byKey(const ValueKey('source-slide:chapter-1')),
+        );
+        await tester.pumpAndSettle();
+        final pageView = tester.widget<PageView>(find.byType(PageView));
+        final lastCurrentPage =
+            pageView.childrenDelegate.estimatedChildCount! - 2;
+        pageView.controller!.jumpToPage(lastCurrentPage);
+        await tester.pumpAndSettle();
+        await tester.drag(find.byType(PageView), const Offset(-600, 0));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+        expect(client.secondChapterCompleted, isFalse);
+
+        client.completeSecondChapter();
+        await _pumpUntilFound(
+          tester,
+          find.byKey(const ValueKey('source-slide:chapter-2')),
+        );
+        expect(
+          client.requestedChapterIds.where((id) => id == 'chapter-2').length,
+          1,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        client.completeSecondChapter();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
       }
     },
   );
@@ -2089,7 +2514,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 Future<void> _showReaderControls(WidgetTester tester) async {
   final controls = find.byKey(const ValueKey('book-source-bottom-controls'));
   for (var attempt = 0; attempt < 3; attempt++) {
-    await tester.tapAt(const Offset(400, 300));
+    await tester.tapAt(tester.getCenter(find.byType(BookSourceReaderPage)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     if (tester.widget<AnimatedPositioned>(controls).bottom == 16) return;
@@ -2097,15 +2522,32 @@ Future<void> _showReaderControls(WidgetTester tester) async {
   expect(tester.widget<AnimatedPositioned>(controls).bottom, 16);
 }
 
+Finder _sourceBodyText(ReaderAnnotatedTextPage page) => find.descendant(
+  of: find.byWidget(page),
+  matching: find.byElementPredicate((element) {
+    if (element.widget is! RichText) return false;
+    var isBody = false;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is ReaderInlineChapterTitle ||
+          ancestor.widget is ReaderChapterTitlePage) {
+        return false;
+      }
+      if (ancestor.widget is ReaderTextPageContent) {
+        isBody = true;
+        return false;
+      }
+      return true;
+    });
+    return isBody;
+  }),
+);
+
 (String, int, double) _sourceCenterAnchor(WidgetTester tester) {
   final center =
       tester.view.physicalSize.height / tester.view.devicePixelRatio / 2;
   for (final element in find.byType(ReaderAnnotatedTextPage).evaluate()) {
     final page = element.widget as ReaderAnnotatedTextPage;
-    final paragraphs = find.descendant(
-      of: find.byWidget(page),
-      matching: find.byType(RichText),
-    );
+    final paragraphs = _sourceBodyText(page);
     for (final rich in paragraphs.evaluate()) {
       final paragraph = rich.renderObject as RenderParagraph;
       final top = paragraph.localToGlobal(Offset.zero).dy;
@@ -2131,9 +2573,7 @@ double _sourceAnchorY(WidgetTester tester, String chapterId, int sourceOffset) {
         sourceOffset >= page.page.endOffset) {
       continue;
     }
-    final rich = find
-        .descendant(of: find.byWidget(page), matching: find.byType(RichText))
-        .first;
+    final rich = _sourceBodyText(page);
     final paragraph = tester.renderObject<RenderParagraph>(rich);
     return paragraph
         .localToGlobal(
@@ -2168,11 +2608,14 @@ Widget _buildTabletSourceReader(
   BookSourceClient client, {
   BookSourceReadingProgressStore progressStore =
       const BookSourceReadingProgressStore(),
+  PaginationCacheDao? paginationCacheDao,
+  ValueChanged<int>? onPaginationCacheMiss,
 }) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   home: BookSourceReaderPage(
-    paginationCacheDao: _MemoryPaginationCacheDao(),
+    paginationCacheDao: paginationCacheDao ?? _MemoryPaginationCacheDao(),
+    onPaginationCacheMiss: onPaginationCacheMiss,
     replaceRuleService: _replaceRules,
     source: _testSource(),
     book: const BookSourceBook(
@@ -2261,6 +2704,62 @@ class _ConfigurableBookSourceClient extends BookSourceClient {
       title: 'Tablet chapter',
       content: contents[chapterId]!,
       contentType: 'text/plain',
+    );
+  }
+}
+
+Widget _slideTestReader(BookSourceClient client) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: BookSourceReaderPage(
+    paginationCacheDao: _MemoryPaginationCacheDao(),
+    replaceRuleService: _replaceRules,
+    source: _testSource(),
+    book: const BookSourceBook(
+      id: 'book-1',
+      title: 'Horizontal source book',
+      author: 'Author',
+      description: '',
+      categories: [],
+    ),
+    client: client,
+  ),
+);
+
+class _DelayedSecondChapterClient extends _ConfigurableBookSourceClient {
+  _DelayedSecondChapterClient({
+    String secondChapterText = 'Short second chapter.',
+  }) : super({
+         'chapter-1': 'Short first chapter.',
+         'chapter-2': secondChapterText,
+       });
+
+  final Completer<void> _secondChapter = Completer();
+  bool _secondChapterRequested = false;
+
+  bool get secondChapterCompleted => _secondChapter.isCompleted;
+  bool get secondChapterRequested => _secondChapterRequested;
+
+  void completeSecondChapter() {
+    if (!_secondChapter.isCompleted) _secondChapter.complete();
+  }
+
+  @override
+  Future<BookSourceChapterContent> getChapterContent(
+    RegisteredBookSource source, {
+    required String bookId,
+    required String chapterId,
+    Map<String, String> sourceVariables = const {},
+  }) async {
+    if (chapterId == 'chapter-2') {
+      _secondChapterRequested = true;
+      await _secondChapter.future;
+    }
+    return super.getChapterContent(
+      source,
+      bookId: bookId,
+      chapterId: chapterId,
+      sourceVariables: sourceVariables,
     );
   }
 }

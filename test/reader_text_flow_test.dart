@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/core/reader/native_text_paginator.dart';
+import 'package:xxread/core/reader/reader_text_pagination.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -157,4 +160,292 @@ void main() {
     }
     painter.dispose();
   });
+
+  test('shared paginator owns inline chapter title pagination', () {
+    final text = List.generate(12, (index) => 'Line $index').join('\n');
+    const flow = NativeTextFlowStyle(
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+      locale: null,
+      strutStyle: null,
+      textHeightBehavior: readerTextHeightBehavior,
+    );
+    final plain = paginateReaderText(
+      text: text,
+      maxWidth: 500,
+      maxHeight: 100,
+      flowStyle: flow,
+      style: style,
+    );
+    final withTitle = paginateReaderText(
+      text: text,
+      maxWidth: 500,
+      maxHeight: 100,
+      inlineChapterTitleExtent: 60,
+      flowStyle: flow,
+      style: style,
+    );
+
+    expect(withTitle.first.showsInlineChapterTitle, isTrue);
+    expect(
+      withTitle.skip(1).every((page) => !page.showsInlineChapterTitle),
+      isTrue,
+    );
+    expect(withTitle.first.endOffset, lessThan(plain.first.endOffset));
+  });
+
+  test('inline title preserves unpaginated and empty chapter contracts', () {
+    const flow = NativeTextFlowStyle(
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+      locale: null,
+      strutStyle: null,
+      textHeightBehavior: readerTextHeightBehavior,
+    );
+    final continuous = paginateReaderText(
+      text: 'one\ntwo\nthree',
+      maxWidth: 500,
+      maxHeight: 0,
+      inlineChapterTitleExtent: 200,
+      flowStyle: flow,
+      style: style,
+    );
+    final finite = paginateReaderText(
+      text: 'one\ntwo\nthree',
+      maxWidth: 500,
+      maxHeight: 80,
+      inlineChapterTitleExtent: 200,
+      flowStyle: flow,
+      style: style,
+    );
+    final empty = paginateReaderText(
+      text: '',
+      maxWidth: 500,
+      maxHeight: 80,
+      inlineChapterTitleExtent: 40,
+      flowStyle: flow,
+      style: style,
+    );
+
+    expect(continuous, hasLength(1));
+    expect(continuous.single.text, 'one\ntwo\nthree');
+    expect(continuous.single.showsInlineChapterTitle, isTrue);
+    expect(finite.length, greaterThan(1));
+    expect(finite.first.showsInlineChapterTitle, isTrue);
+    expect(empty, hasLength(1));
+    expect(empty.single.showsInlineChapterTitle, isTrue);
+  });
+
+  test('dedicated and inline chapter title modes are mutually exclusive', () {
+    expect(
+      () => paginateReaderText(
+        text: 'body',
+        maxWidth: 500,
+        maxHeight: 100,
+        includeChapterTitlePage: true,
+        inlineChapterTitleExtent: 40,
+        flowStyle: const NativeTextFlowStyle(
+          textDirection: TextDirection.ltr,
+          textScaler: TextScaler.noScaling,
+          locale: null,
+          strutStyle: null,
+          textHeightBehavior: readerTextHeightBehavior,
+        ),
+        style: style,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test(
+    'incremental pagination matches synchronous pagination contracts',
+    () async {
+      const flow = NativeTextFlowStyle(
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+        locale: Locale('zh', 'CN'),
+        strutStyle: null,
+        textHeightBehavior: readerTextHeightBehavior,
+      );
+      final cases =
+          <
+            ({
+              String text,
+              int sourceOffset,
+              int firstLineIndent,
+              int paragraphSpacing,
+              bool includeChapterTitlePage,
+              double? inlineChapterTitleExtent,
+            })
+          >[
+            (
+              text: 'English paragraph wraps across pages. ' * 8,
+              sourceOffset: 0,
+              firstLineIndent: 0,
+              paragraphSpacing: 0,
+              includeChapterTitlePage: false,
+              inlineChapterTitleExtent: null,
+            ),
+            (
+              text: '第一段中文混合 English。\n\n第二段继续分页。' * 6,
+              sourceOffset: 37,
+              firstLineIndent: 2,
+              paragraphSpacing: 1,
+              includeChapterTitlePage: true,
+              inlineChapterTitleExtent: null,
+            ),
+            (
+              text: '  \n\n正文前有空白。\n下一段。   ',
+              sourceOffset: 91,
+              firstLineIndent: 2,
+              paragraphSpacing: 2,
+              includeChapterTitlePage: false,
+              inlineChapterTitleExtent: 24,
+            ),
+            (
+              text: '',
+              sourceOffset: 12,
+              firstLineIndent: 2,
+              paragraphSpacing: 1,
+              includeChapterTitlePage: false,
+              inlineChapterTitleExtent: null,
+            ),
+            (
+              text: ' \n\t\n ',
+              sourceOffset: 5,
+              firstLineIndent: 0,
+              paragraphSpacing: 0,
+              includeChapterTitlePage: false,
+              inlineChapterTitleExtent: null,
+            ),
+          ];
+
+      for (final entry in cases) {
+        final sync = paginateReaderText(
+          text: entry.text,
+          maxWidth: 180,
+          maxHeight: 72,
+          flowStyle: flow,
+          style: style,
+          sourceOffset: entry.sourceOffset,
+          firstLineIndent: entry.firstLineIndent,
+          paragraphSpacing: entry.paragraphSpacing,
+          includeChapterTitlePage: entry.includeChapterTitlePage,
+          inlineChapterTitleExtent: entry.inlineChapterTitleExtent,
+        );
+        final incremental = await paginateReaderTextIncrementally(
+          text: entry.text,
+          maxWidth: 180,
+          maxHeight: 72,
+          flowStyle: flow,
+          style: style,
+          sourceOffset: entry.sourceOffset,
+          firstLineIndent: entry.firstLineIndent,
+          paragraphSpacing: entry.paragraphSpacing,
+          includeChapterTitlePage: entry.includeChapterTitlePage,
+          inlineChapterTitleExtent: entry.inlineChapterTitleExtent,
+          yieldBetweenPages: () async {},
+        );
+
+        expect(_pageSnapshots(incremental), _pageSnapshots(sync));
+      }
+    },
+  );
+
+  test(
+    'incremental pagination yields before the chapter is measured',
+    () async {
+      const flow = NativeTextFlowStyle(
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+        locale: null,
+        strutStyle: null,
+        textHeightBehavior: readerTextHeightBehavior,
+      );
+      final enteredYield = Completer<void>();
+      final resume = Completer<void>();
+      var spanBuilds = 0;
+      final result = paginateReaderTextIncrementally(
+        text: 'A long line of words that needs several pages. ' * 20,
+        maxWidth: 140,
+        maxHeight: 54,
+        flowStyle: flow,
+        style: style,
+        sourceSpanBuilder: (start, end) {
+          spanBuilds++;
+          return TextSpan(text: 'x' * (end - start), style: style);
+        },
+        yieldBetweenPages: () async {
+          if (!enteredYield.isCompleted) {
+            enteredYield.complete();
+            await resume.future;
+          }
+        },
+      );
+
+      await enteredYield.future;
+      expect(spanBuilds, 0);
+      var completed = false;
+      result.whenComplete(() => completed = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse);
+      resume.complete();
+      expect(await result, hasLength(greaterThan(1)));
+    },
+  );
+
+  test(
+    'incremental pagination stops measuring when yielding cancels',
+    () async {
+      const flow = NativeTextFlowStyle(
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+        locale: null,
+        strutStyle: null,
+        textHeightBehavior: readerTextHeightBehavior,
+      );
+      final cancellation = StateError('cancel pagination');
+      var yields = 0;
+      var spanBuilds = 0;
+
+      final result = paginateReaderTextIncrementally(
+        text: 'page content ' * 100,
+        maxWidth: 120,
+        maxHeight: 50,
+        flowStyle: flow,
+        style: style,
+        sourceSpanBuilder: (start, end) {
+          spanBuilds++;
+          return TextSpan(text: 'x' * (end - start), style: style);
+        },
+        yieldBetweenPages: () async {
+          yields++;
+          if (yields == 2) throw cancellation;
+        },
+      );
+
+      await expectLater(result, throwsA(same(cancellation)));
+      final buildsAtCancellation = spanBuilds;
+      await Future<void>.delayed(Duration.zero);
+      expect(yields, 2);
+      expect(buildsAtCancellation, greaterThan(0));
+      expect(spanBuilds, buildsAtCancellation);
+    },
+  );
 }
+
+List<Object?> _pageSnapshots(List<ReaderTextPage> pages) => pages
+    .map(
+      (page) => <Object?>[
+        page.text,
+        page.startOffset,
+        page.endOffset,
+        page.layoutStart,
+        page.layoutEnd,
+        page.displayStart,
+        page.displayEnd,
+        page.isChapterTitle,
+        page.showsInlineChapterTitle,
+      ],
+    )
+    .toList();

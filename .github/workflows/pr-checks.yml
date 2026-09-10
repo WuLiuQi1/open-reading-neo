@@ -211,8 +211,12 @@ jobs:
             'tablet source reader can disable the two-page layout'
             'tablet spread progress tracks the last visible page and restores its left page'
             'next chapter preview is ready even while a farther prefetch is pending'
+            'adjacent chapter pagination waits until the held pointer is released'
+            'unrelated continuous animation does not starve adjacent pagination'
             'prefetched chapter turn does not wait for progress persistence'
             'horizontal slide commits a prefetched chapter only after the animation settles'
+            'horizontal slide requests a frame for an idle boundary commit'
+            'horizontal slide finishes one swipe after a delayed next chapter arrives'
             'horizontal slide lets a new drag take over a cross-chapter settle'
             'tablet forward chapter curl uses prefetched page one at half-page width without refetching'
             'tablet forward chapter curl previews title and body leaves for a short chapter'
@@ -220,10 +224,20 @@ jobs:
             'uses the light reader theme for status bar icon contrast'
             'uses the dark reader theme for status bar icon contrast'
             'system reader theme uses a solid pure-black status bar without glass'
+            'online chapter title settings switch defaults on and updates the shared preference'
+            'online chapter title toggle preserves the current body offset'
+            'online chapter title preference invalidates cached pages and restores inline pages on reopen'
           )
           for test_name in "${reader_tests[@]}"; do
             flutter test test/book_source_reader_page_test.dart \
               --plain-name "$test_name"
+          done
+
+          for page_mode in horizontalSlide coverSlide pageCurl instantPage verticalScroll; do
+            for title_enabled in true false; do
+              flutter test test/book_source_reader_page_test.dart \
+                --plain-name "online chapter title preference is shared in $page_mode enabled=$title_enabled"
+            done
           done
 
           # Discovery tests use animated reveal controllers and shared source

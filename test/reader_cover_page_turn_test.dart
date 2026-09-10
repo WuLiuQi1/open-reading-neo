@@ -175,6 +175,227 @@ void main() {
     expect(controller.debugIsIdle, isTrue);
   });
 
+  testWidgets('a forward neighbour refresh does not cancel the active drag', (
+    tester,
+  ) async {
+    final controller = ReaderCoverPageTurnController();
+    var forward = _snapshot('loading-next');
+    var backward = _snapshot('previous');
+    var originalForwardTurns = 0;
+    var replacementForwardTurns = 0;
+    VoidCallback onTurnForward = () => originalForwardTurns++;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHostState) {
+            updateHost = setHostState;
+            return Center(
+              child: SizedBox(
+                width: 400,
+                height: 700,
+                child: ReaderCoverPageTurn(
+                  controller: controller,
+                  currentPage: _snapshot('current'),
+                  forwardPage: forward,
+                  backwardPage: backward,
+                  onTurnForward: onTurnForward,
+                  onTurnBackward: () {},
+                  paperColor: Colors.white,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(const Offset(200, 350));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.moveBy(const Offset(-150, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(controller.debugTopSheetOffset, lessThan(-100));
+
+    updateHost(() {
+      forward = _snapshot('loaded-next');
+      backward = _snapshot('updated-previous');
+      onTurnForward = () => replacementForwardTurns++;
+    });
+    await tester.pump();
+
+    expect(controller.debugTopSheetOffset, lessThan(-100));
+    expect(find.text('loading-next'), findsOneWidget);
+    expect(find.text('loaded-next'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(originalForwardTurns, 1);
+    expect(replacementForwardTurns, 0);
+    expect(controller.debugIsIdle, isTrue);
+  });
+
+  testWidgets('a disappearing forward neighbour finishes the active drag', (
+    tester,
+  ) async {
+    final controller = ReaderCoverPageTurnController();
+    ReaderPageSnapshot? forward = _snapshot('next');
+    var forwardTurns = 0;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHostState) {
+            updateHost = setHostState;
+            return Center(
+              child: SizedBox(
+                width: 400,
+                height: 700,
+                child: ReaderCoverPageTurn(
+                  controller: controller,
+                  currentPage: _snapshot('current'),
+                  forwardPage: forward,
+                  onTurnForward: () => forwardTurns++,
+                  onTurnBackward: () {},
+                  paperColor: Colors.white,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(const Offset(200, 350));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.moveBy(const Offset(-150, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    updateHost(() => forward = null);
+    await tester.pump();
+    expect(find.text('next'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(forwardTurns, 1);
+    await controller.turnForward();
+    await tester.pumpAndSettle();
+    expect(forwardTurns, 1);
+  });
+
+  testWidgets('an arriving forward neighbour is used after the active drag', (
+    tester,
+  ) async {
+    final controller = ReaderCoverPageTurnController();
+    ReaderPageSnapshot? forward;
+    var forwardTurns = 0;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHostState) {
+            updateHost = setHostState;
+            return Center(
+              child: SizedBox(
+                width: 400,
+                height: 700,
+                child: ReaderCoverPageTurn(
+                  controller: controller,
+                  currentPage: _snapshot('current'),
+                  forwardPage: forward,
+                  onTurnForward: () => forwardTurns++,
+                  onTurnBackward: () {},
+                  paperColor: Colors.white,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(const Offset(200, 350));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.moveBy(const Offset(-200, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    updateHost(() => forward = _snapshot('loaded-next'));
+    await tester.pump();
+    expect(controller.debugTopSheetOffset, greaterThan(-40));
+    expect(find.text('loaded-next'), findsNothing);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(forwardTurns, 0);
+
+    final nextTurn = controller.turnForward();
+    await tester.pumpAndSettle();
+    await nextTurn;
+    expect(forwardTurns, 1);
+  });
+
+  testWidgets('a current page replacement cancels the active drag', (
+    tester,
+  ) async {
+    final controller = ReaderCoverPageTurnController();
+    var current = _snapshot('current');
+    var forwardTurns = 0;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHostState) {
+            updateHost = setHostState;
+            return Center(
+              child: SizedBox(
+                width: 400,
+                height: 700,
+                child: ReaderCoverPageTurn(
+                  controller: controller,
+                  currentPage: current,
+                  forwardPage: _snapshot('next'),
+                  onTurnForward: () => forwardTurns++,
+                  onTurnBackward: () {},
+                  paperColor: Colors.white,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(const Offset(200, 350));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.moveBy(const Offset(-150, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    updateHost(() => current = _snapshot('replacement-current'));
+    await tester.pump();
+    expect(controller.debugTopSheetOffset, 0);
+    expect(controller.debugIsIdle, isTrue);
+    expect(find.text('replacement-current'), findsOneWidget);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(forwardTurns, 0);
+  });
+
   testWidgets('a short slow drag springs back without turning', (tester) async {
     final controller = ReaderCoverPageTurnController();
     var forwardTurns = 0;

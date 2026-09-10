@@ -254,12 +254,18 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
   }
 
   void _schedulePendingSlideChapterCommit() {
-    if (_slideChapterCommitCheckScheduled) return;
+    if (_slideChapterCommitCheckScheduled ||
+        _pendingSlideChapterIndex == null) {
+      return;
+    }
     _slideChapterCommitCheckScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _slideChapterCommitCheckScheduled = false;
       if (mounted) _commitPendingSlideChapter();
     });
+    // ScrollEnd can arrive with no frame scheduled. The chapter handoff
+    // must run without waiting for another gesture to wake the scheduler.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _handleReaderTap(Offset localPosition) {

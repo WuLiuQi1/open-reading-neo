@@ -9,6 +9,7 @@ extension _BookSourcePersistentPagination on _BookSourceReaderPageState {
     _paginationCacheEpoch = PaginationCacheDao.epoch;
     _persistedOnlinePagination.clear();
     _pagedLayouts.clear();
+    _pagedLayoutWarms.clear();
     _verticalLayouts.clear();
     _paginationKey = null;
   }

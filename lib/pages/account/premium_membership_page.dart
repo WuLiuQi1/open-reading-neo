@@ -7,21 +7,17 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/account/account.dart';
-import '../../services/account/apple_purchase_support.dart';
 import '../../utils/localization_extension.dart';
+import '../../utils/page_style_helper.dart';
+import '../../widgets/premium_card_style.dart';
 import '../../widgets/app_brand_icon.dart';
 import '../../widgets/floating_subpage_scaffold.dart';
 import 'premium_policy_page.dart';
 
 class PremiumMembershipPage extends StatefulWidget {
-  const PremiumMembershipPage({
-    super.key,
-    required this.account,
-    this.purchaseSupport,
-  });
+  const PremiumMembershipPage({super.key, required this.account});
 
   final MemberAccountController account;
-  final ApplePurchaseSupport? purchaseSupport;
 
   @override
   State<PremiumMembershipPage> createState() => _PremiumMembershipPageState();
@@ -30,12 +26,10 @@ class PremiumMembershipPage extends StatefulWidget {
 class _PremiumMembershipPageState extends State<PremiumMembershipPage>
     with WidgetsBindingObserver {
   final _redemptionCode = TextEditingController();
-  late final _support = widget.purchaseSupport ?? ApplePurchaseSupport();
   late final _changes = Listenable.merge([
     widget.account,
     widget.account.applePurchase,
   ]);
-  bool _requestingRefund = false;
   String? _message;
   bool _messageIsError = false;
 
@@ -118,34 +112,6 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
     });
   }
 
-  Future<void> _refund() async {
-    setState(() {
-      _requestingRefund = true;
-      _message = null;
-      _messageIsError = false;
-    });
-    try {
-      final outcome = await _support.requestRefund(
-        MemberAccountController.appleProductId,
-      );
-      if (!mounted) return;
-      switch (outcome) {
-        case AppleRefundOutcome.submitted:
-          _showMessage(context.l10n.premiumRefundSubmitted);
-        case AppleRefundOutcome.cancelled:
-          break;
-        case AppleRefundOutcome.notFound:
-          _showMessage(context.l10n.premiumRefundNotFound);
-        case AppleRefundOutcome.unavailable:
-          _showMessage(context.l10n.premiumRefundUnavailable);
-      }
-    } catch (error) {
-      _showFailure(error);
-    } finally {
-      if (mounted) setState(() => _requestingRefund = false);
-    }
-  }
-
   Future<void> _openUrl(
     Uri uri, {
     LaunchMode mode = LaunchMode.inAppBrowserView,
@@ -175,7 +141,7 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
       final account = widget.account;
       final purchase = account.applePurchase;
       final premium = account.hasPremiumAccess;
-      final busy = purchase.loading || account.loading || _requestingRefund;
+      final busy = purchase.loading || account.loading;
       final colors = Theme.of(context).colorScheme;
       final status = account.isAuthenticated
           ? _message ?? _purchaseStatus(context, purchase)
@@ -191,51 +157,8 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 12),
-                    const Center(
-                      child: AppBrandIcon(size: 64, borderRadius: 16),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      l10n.premiumLifetimeTitle,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.premiumLifetimeCaption,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                    if (premium) ...[
-                      const SizedBox(height: 14),
-                      Semantics(
-                        liveRegion: true,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.verified_rounded,
-                              size: 20,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                l10n.premiumPurchaseSuccess,
-                                key: const ValueKey('premium-active'),
-                                style: TextStyle(
-                                  color: colors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 28),
+                    _membershipCard(premium),
+                    const SizedBox(height: 24),
                     _section(l10n.premiumBenefitsTitle, [
                       _benefit(
                         Icons.layers_outlined,
@@ -270,148 +193,162 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                       ],
                     ]),
                     const SizedBox(height: 20),
-                    _section(l10n.premiumBillingTitle, [
-                      if (account.user case final user?) ...[
-                        Text(
-                          user.effectiveName,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user.email,
-                          style: TextStyle(color: colors.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (!account.isAuthenticated)
-                        Text(l10n.premiumSignInRequired)
-                      else if (_applePlatform) ...[
-                        Text(
-                          l10n.premiumBillingBody,
-                          style: const TextStyle(height: 1.5),
-                        ),
-                        if (!premium) ...[
-                          const SizedBox(height: 20),
-                          if (purchase.product case final product?) ...[
-                            Text(
-                              product.price,
-                              key: const ValueKey('premium-store-price'),
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.headlineMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
+                    if (!premium || _applePlatform || status != null)
+                      _section(
+                        premium
+                            ? l10n.premiumAccountBindingTitle
+                            : l10n.premiumBillingTitle,
+                        [
+                          if (!account.isAuthenticated)
+                            Text(l10n.premiumSignInRequired)
+                          else if (_applePlatform) ...[
+                            if (!premium) ...[
+                              if (purchase.product case final product?) ...[
+                                Text(
+                                  product.price,
+                                  key: const ValueKey('premium-store-price'),
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  l10n.premiumLifetimeCaption,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              FilledButton(
+                                key: const ValueKey('account-apple-purchase'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(52),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                onPressed: busy
+                                    ? null
+                                    : () => _perform(
+                                        purchase.product == null
+                                            ? purchase.initialize
+                                            : account.purchaseApplePremium,
+                                        usePurchaseStatus: true,
+                                      ),
+                                child: busy
+                                    ? const CupertinoActivityIndicator()
+                                    : Text(
+                                        purchase.product == null
+                                            ? l10n.accountAppleProductRetry
+                                            : l10n.accountApplePurchase,
+                                        textAlign: TextAlign.center,
+                                      ),
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            TextButton.icon(
+                              key: const ValueKey('account-apple-restore'),
+                              icon: const Icon(Icons.restore_rounded, size: 20),
+                              onPressed: busy
+                                  ? null
+                                  : () => _perform(
+                                      account.restoreApplePremium,
+                                      usePurchaseStatus: true,
+                                    ),
+                              label: Text(
+                                l10n.accountAppleRestore,
+                                textAlign: TextAlign.center,
+                              ),
                             ),
-                            const SizedBox(height: 4),
                             Text(
-                              l10n.premiumLifetimeCaption,
-                              textAlign: TextAlign.center,
+                              l10n.premiumRestoreHelp,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
+                                height: 1.5,
                                 color: colors.onSurfaceVariant,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                          ],
-                          CupertinoButton.filled(
-                            key: const ValueKey('account-apple-purchase'),
-                            onPressed: busy
-                                ? null
-                                : () => _perform(
-                                    purchase.product == null
-                                        ? purchase.initialize
-                                        : account.purchaseApplePremium,
-                                    usePurchaseStatus: true,
-                                  ),
-                            child: busy
-                                ? const CupertinoActivityIndicator()
-                                : Text(
-                                    purchase.product == null
-                                        ? l10n.accountAppleProductRetry
-                                        : l10n.accountApplePurchase,
-                                    textAlign: TextAlign.center,
-                                  ),
-                          ),
-                        ],
-                        const SizedBox(height: 10),
-                        CupertinoButton(
-                          key: const ValueKey('account-apple-restore'),
-                          onPressed: busy
-                              ? null
-                              : () => _perform(
-                                  account.restoreApplePremium,
-                                  usePurchaseStatus: true,
+                            if (!premium) ...[
+                              const SizedBox(height: 16),
+                              Text(
+                                l10n.premiumBillingBody,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  height: 1.6,
+                                  color: colors.onSurfaceVariant,
                                 ),
-                          child: Text(
-                            l10n.accountAppleRestore,
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        Text(
-                          l10n.premiumRestoreHelp,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ] else if (!premium) ...[
-                        TextField(
-                          key: const ValueKey('account-redemption-code'),
-                          controller: _redemptionCode,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: InputDecoration(
-                            labelText: l10n.accountRedemptionCode,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        FilledButton(
-                          key: const ValueKey('account-redeem-premium'),
-                          onPressed: busy ? null : _redeem,
-                          child: Text(l10n.accountRedeemPremium),
-                        ),
-                        if (account.membershipConfig?.purchaseUrl
-                            case final url?) ...[
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () => _openUrl(
-                              Uri.parse(url),
-                              mode: LaunchMode.externalApplication,
+                              ),
+                            ],
+                          ] else if (!premium) ...[
+                            TextField(
+                              key: const ValueKey('account-redemption-code'),
+                              controller: _redemptionCode,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: InputDecoration(
+                                labelText: l10n.accountRedemptionCode,
+                              ),
                             ),
-                            child: Text(l10n.accountSupportAction),
-                          ),
+                            const SizedBox(height: 14),
+                            FilledButton(
+                              key: const ValueKey('account-redeem-premium'),
+                              onPressed: busy ? null : _redeem,
+                              child: Text(l10n.accountRedeemPremium),
+                            ),
+                            if (account.membershipConfig?.purchaseUrl
+                                case final url?) ...[
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () => _openUrl(
+                                  Uri.parse(url),
+                                  mode: LaunchMode.externalApplication,
+                                ),
+                                child: Text(l10n.accountSupportAction),
+                              ),
+                            ],
+                          ],
+                          if (status != null) ...[
+                            const SizedBox(height: 14),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                status,
+                                key: const ValueKey('premium-purchase-status'),
+                                style: TextStyle(
+                                  height: 1.5,
+                                  color:
+                                      _messageIsError ||
+                                          purchase.phase ==
+                                              ApplePurchasePhase.failed
+                                      ? colors.error
+                                      : colors.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                      if (status != null) ...[
-                        const SizedBox(height: 14),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            status,
-                            key: const ValueKey('premium-purchase-status'),
-                            style: TextStyle(
-                              height: 1.5,
-                              color:
-                                  _messageIsError ||
-                                      purchase.phase ==
-                                          ApplePurchasePhase.failed
-                                  ? colors.error
-                                  : colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ]),
-                    const SizedBox(height: 22),
-                    Text(
-                      _applePlatform
-                          ? l10n.premiumPurchaseConsent
-                          : l10n.premiumPurchaseConsentOther,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.5,
-                        color: colors.onSurfaceVariant,
                       ),
-                    ),
+                    const SizedBox(height: 22),
+                    if (!premium)
+                      Text(
+                        _applePlatform
+                            ? l10n.premiumPurchaseConsent
+                            : l10n.premiumPurchaseConsentOther,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
                     const SizedBox(height: 6),
                     Wrap(
                       alignment: WrapAlignment.center,
@@ -436,23 +373,6 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                           ),
                       ],
                     ),
-                    if (_applePlatform) ...[
-                      const SizedBox(height: 8),
-                      const Divider(),
-                      if (premium && _support.supportsNativeRefund)
-                        CupertinoButton(
-                          key: const ValueKey('premium-refund'),
-                          onPressed: busy ? null : _refund,
-                          child: Text(l10n.premiumRefundTitle),
-                        ),
-                      TextButton(
-                        key: const ValueKey('premium-apple-support'),
-                        onPressed: () => _openUrl(
-                          Uri.parse('https://reportaproblem.apple.com/'),
-                        ),
-                        child: Text(l10n.premiumApplePurchaseSupport),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -470,12 +390,133 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
     ),
   );
 
+  Widget _membershipCard(bool premium) {
+    final l10n = context.l10n;
+    final user = widget.account.user;
+    return Container(
+      key: const ValueKey('premium-membership-card'),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: premiumCardGradient,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: premiumGold.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: premiumGold.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppBrandIcon(size: 44, borderRadius: 12),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.premiumLifetimeTitle,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: premiumIvory,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      l10n.premiumLifetimeCaption,
+                      style: TextStyle(
+                        color: premiumIvory.withValues(alpha: 0.76),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (premium) ...[
+            const SizedBox(height: 22),
+            Semantics(
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: premiumGold.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: premiumGold.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.verified_rounded,
+                      size: 18,
+                      color: premiumGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        l10n.premiumPurchaseSuccess,
+                        key: const ValueKey('premium-active'),
+                        style: const TextStyle(
+                          color: premiumIvory,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (user != null) ...[
+            const SizedBox(height: 20),
+            Divider(height: 1, color: premiumIvory.withValues(alpha: 0.16)),
+            const SizedBox(height: 14),
+            Text(
+              user.effectiveName,
+              style: const TextStyle(
+                color: premiumIvory,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              user.email,
+              style: TextStyle(
+                color: premiumIvory.withValues(alpha: 0.68),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _section(String title, List<Widget> children) {
     final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
+        color: PageStyleHelper.palette(context).card,
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.35),
+        ),
+        borderRadius: BorderRadius.circular(22),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -499,8 +540,12 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
   Widget _benefit(IconData icon, String title, String description) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Padding(
-        padding: const EdgeInsets.only(top: 2),
+      Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Icon(
           icon,
           size: 24,

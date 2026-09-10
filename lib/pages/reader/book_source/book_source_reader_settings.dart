@@ -36,8 +36,11 @@ extension _BookSourceReaderSettings on _BookSourceReaderPageState {
     bool? pullBookmarkEnabled,
     bool? tapPageAnimationEnabled,
     bool? tabletTwoPageEnabled,
+    bool? chapterTitlePageEnabled,
   }) async {
     final repaginate =
+        (chapterTitlePageEnabled != null &&
+            chapterTitlePageEnabled != _chapterTitlePageEnabled) ||
         fontSize != null ||
         fontWeight != null ||
         lineHeight != null ||
@@ -56,7 +59,14 @@ extension _BookSourceReaderSettings on _BookSourceReaderPageState {
       _autoWholeBook = false;
     }
     final currentProgress = _currentReadingProgress;
-    final currentTextOffset = _currentTextOffset;
+    final currentPage = _pageMode == BookSourcePageMode.verticalScroll
+        ? _verticalLayouts[_chapterIndex]?.pages.elementAtOrNull(
+            _verticalPageIndex,
+          )
+        : _paginatedPages.elementAtOrNull(_pageIndex);
+    final currentTextOffset = currentPage?.isChapterTitle == true
+        ? null
+        : _currentTextOffset;
     _updateReaderState(() {
       _fontSize = fontSize ?? _fontSize;
       _textBrightness = (textBrightness ?? _textBrightness).clamp(
@@ -91,11 +101,13 @@ extension _BookSourceReaderSettings on _BookSourceReaderPageState {
       _tapPageAnimationEnabled =
           tapPageAnimationEnabled ?? _tapPageAnimationEnabled;
       _tabletTwoPageEnabled = tabletTwoPageEnabled ?? _tabletTwoPageEnabled;
+      _chapterTitlePageEnabled =
+          chapterTitlePageEnabled ?? _chapterTitlePageEnabled;
       if (repaginate) {
         _paginationKey = null;
         _paginatedPages = const [];
         _pagedLayouts.clear();
-        _warmedPagedLayoutIndexes.clear();
+        _pagedLayoutWarms.clear();
         _verticalLayouts.clear();
         _restorePageProgress = currentProgress;
         _restorePagedPosition = true;
@@ -130,7 +142,7 @@ extension _BookSourceReaderSettings on _BookSourceReaderPageState {
         _paginationKey = null;
         _paginatedPages = const [];
         _pagedLayouts.clear();
-        _warmedPagedLayoutIndexes.clear();
+        _pagedLayoutWarms.clear();
         _verticalLayouts.clear();
         _restorePageProgress = currentProgress;
         _restorePagedPosition = true;

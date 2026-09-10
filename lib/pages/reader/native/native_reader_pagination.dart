@@ -59,17 +59,12 @@ List<_ReaderPageData> _paginateChapter(
     double? firstPageHeight,
   }) {
     if (text.isEmpty) return const <_ReaderPageData>[];
-    final effectiveFirstPageHeight = inlineTitlePending
-        ? ((firstPageHeight ?? pageHeight) - inlineTitleExtent).clamp(
-            0.0,
-            double.infinity,
-          )
-        : firstPageHeight;
     final textPages = paginateReaderText(
       text: text,
       maxWidth: maxWidth,
       maxHeight: pageHeight,
-      firstPageHeight: effectiveFirstPageHeight,
+      firstPageHeight: firstPageHeight,
+      inlineChapterTitleExtent: inlineTitlePending ? inlineTitleExtent : null,
       flowStyle: flowStyle,
       style: style,
       sourceOffset: sourceOffset,
@@ -93,7 +88,6 @@ List<_ReaderPageData> _paginateChapter(
         .map(_ReaderPageData.fromTextPage)
         .toList(growable: false);
     if (inlineTitlePending && result.isNotEmpty) {
-      result[0] = result[0].copyWith(showsInlineChapterTitle: true);
       inlineTitlePending = false;
     }
     return result;

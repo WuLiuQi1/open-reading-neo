@@ -28,9 +28,8 @@ extension _BookSourceReaderShell on _BookSourceReaderPageState {
     return BookOpenTransition.buildReaderContentReveal(context, child: body);
   }
 
-  /// 打开动画封面仍在飞行时，把整章排版（`_applyLoadedChapter` 内同步执行，
-  /// 数十毫秒）延后到封面到达静止停留画面之后；已有分页缓存或不在打开
-  /// 转场中时立即返回 false，不引入任何延迟。
+  /// Delay the initial content handoff until the opening cover is stationary.
+  /// Existing layouts and ordinary chapter turns can proceed immediately.
   Future<bool> _deferChapterApplyForOpeningFlight(int index) async {
     if (!mounted || _pagedLayouts[index] != null) return false;
     final listenable = BookOpenTransition.openingCoverHoldListenableOf(context);
@@ -43,7 +42,8 @@ extension _BookSourceReaderShell on _BookSourceReaderPageState {
       if (!completer.isCompleted) completer.complete();
     };
     listenable.addListener(onChanged);
-    await completer.future;
+    await Future.any([completer.future, _paginationDisposed.future]);
+    listenable.removeListener(onChanged);
     return true;
   }
 
@@ -135,7 +135,7 @@ extension _BookSourceReaderShell on _BookSourceReaderPageState {
         );
         if (_pagedViewportSize != paginationViewport) {
           _pagedViewportSize = paginationViewport;
-          _warmedPagedLayoutIndexes.clear();
+          _pagedLayoutWarms.clear();
         }
         _ensurePagination(paginationViewport, content: content);
         _schedulePagedLayoutWarm(_chapterIndex + 1);
@@ -324,7 +324,12 @@ extension _BookSourceReaderShell on _BookSourceReaderPageState {
                   children: [
                     Positioned.fill(
                       child: Listener(
-                        onPointerDown: _handleAutoPointerDown,
+                        onPointerDown: (event) {
+                          _paginationPointers.add(event.pointer);
+                          _handleAutoPointerDown(event);
+                        },
+                        onPointerUp: _releasePaginationPointer,
+                        onPointerCancel: _releasePaginationPointer,
                         onPointerMove: _handleAutoPointerMove,
                         onPointerSignal: (_) => _cancelAutoSweepOrPause(),
                         child: ReaderDesktopInput(

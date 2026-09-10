@@ -118,45 +118,51 @@ class NativeTextPaginator {
     required NativeTextSpanBuilder spanBuilder,
     int sourceOffset = 0,
     double? firstPageHeight,
-  }) {
+  }) => paginatePages(
+    text: text,
+    spanBuilder: spanBuilder,
+    sourceOffset: sourceOffset,
+    firstPageHeight: firstPageHeight,
+  ).toList(growable: false);
+
+  /// Measures pages lazily so callers can yield to the event loop between
+  /// pages without maintaining a second pagination algorithm.
+  Iterable<NativeTextPageRange> paginatePages({
+    required String text,
+    required NativeTextSpanBuilder spanBuilder,
+    int sourceOffset = 0,
+    double? firstPageHeight,
+  }) sync* {
     final resolvedFirstPageHeight = firstPageHeight ?? maxHeight;
     if (text.isEmpty ||
         maxWidth <= 0 ||
         maxHeight <= 0 ||
         resolvedFirstPageHeight <= 0) {
-      return const <NativeTextPageRange>[];
+      return;
     }
 
-    final pages = <NativeTextPageRange>[];
     var pageStart = 0;
+    var pageCount = 0;
     while (pageStart < text.length) {
       final visibleStart = _firstVisiblePageOffset(text, pageStart);
       if (visibleStart >= text.length) {
-        if (pages.isEmpty) {
-          pages.add(
-            NativeTextPageRange(
-              start: pageStart,
-              end: text.length,
-              visibleStart: text.length,
-              visibleEnd: text.length,
-              lineCount: 0,
-            ),
-          );
-        } else {
-          final previous = pages.removeLast();
-          pages.add(
-            NativeTextPageRange(
-              start: previous.start,
-              end: text.length,
-              visibleStart: previous.visibleStart,
-              visibleEnd: previous.visibleEnd,
-              lineCount: previous.lineCount,
-            ),
-          );
-        }
+        // A measured page always claims a whitespace-only tail below, so this
+        // branch is the all-whitespace chapter case.
+        assert(pageStart == 0);
+        yield NativeTextPageRange(
+          start: pageStart,
+          end: text.length,
+          visibleStart: text.length,
+          visibleEnd: text.length,
+          lineCount: 0,
+        );
+        pageStart = text.length;
+        pageCount++;
         break;
       }
-      final pageMaxHeight = pages.isEmpty ? resolvedFirstPageHeight : maxHeight;
+      final pageMaxHeight = pageCount == 0
+          ? resolvedFirstPageHeight
+          : maxHeight;
       final candidates = _lineEndCandidates(
         text: text,
         pageStart: visibleStart,
@@ -200,24 +206,19 @@ class NativeTextPaginator {
       final ownsTrailingWhitespace =
           _firstVisiblePageOffset(text, selected.end) >= text.length;
       final pageEnd = ownsTrailingWhitespace ? text.length : selected.end;
-      pages.add(
-        NativeTextPageRange(
-          start: pageStart,
-          end: pageEnd,
-          visibleStart: visibleStart,
-          visibleEnd: selected.end,
-          lineCount: selected.lineCount,
-        ),
+      yield NativeTextPageRange(
+        start: pageStart,
+        end: pageEnd,
+        visibleStart: visibleStart,
+        visibleEnd: selected.end,
+        lineCount: selected.lineCount,
       );
       pageStart = pageEnd;
+      pageCount++;
     }
 
-    assert(pages.first.start == 0);
-    assert(pages.last.end == text.length);
-    for (var i = 1; i < pages.length; i++) {
-      assert(pages[i - 1].end == pages[i].start);
-    }
-    return pages;
+    assert(pageCount > 0);
+    assert(pageStart == text.length);
   }
 
   List<int> _lineEndCandidates({

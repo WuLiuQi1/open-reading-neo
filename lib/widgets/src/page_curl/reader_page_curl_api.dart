@@ -28,6 +28,15 @@ class ReaderPageCurlController {
       _state?._requestProgrammaticTurn(ReaderPageTurnDirection.backward) ??
       Future<void>.value();
 
+  /// Whether a fold is moving, excluding a completed turn awaiting content.
+  bool get isAnimating {
+    final state = _state;
+    return state != null &&
+        (state._forwardSpringTicker.isActive ||
+            state._backwardSpringTicker.isActive ||
+            state._catchUpTicker.isActive);
+  }
+
   @visibleForTesting
   Offset? get debugTouchPosition {
     final geometry = _state?._geometry;

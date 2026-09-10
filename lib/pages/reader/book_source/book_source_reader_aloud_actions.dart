@@ -313,6 +313,11 @@ extension _BookSourceReaderAloudActions on _BookSourceReaderPageState {
         horizontalMarginLabel: context.l10n.readerHorizontalMarginLabel,
         topMarginLabel: context.l10n.readerTopMarginLabel,
         bottomMarginLabel: context.l10n.readerBottomMarginLabel,
+        chapterTitlePageTitle: context.l10n.readerTxtChapterTitlePageTitle,
+        chapterTitlePageHint: context.l10n.readerTxtChapterTitlePageHint,
+        chapterTitlePageEnabled: _chapterTitlePageEnabled,
+        onChapterTitlePageChanged: (value) =>
+            unawaited(_updateReadingSettings(chapterTitlePageEnabled: value)),
         themeId: _readerThemeId,
         fontSize: _fontSize,
         textBrightness: _textBrightness,

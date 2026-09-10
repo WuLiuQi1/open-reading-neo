@@ -79,7 +79,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(480, 800));
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
-        ReaderSettingsStore.txtChapterTitlePageKey: false,
+        ReaderSettingsStore.chapterTitlePageKey: false,
       });
       final directory = Directory.systemTemp.createTempSync(
         'open-reading-epub-image-precache-',
@@ -147,7 +147,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(480, 800));
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
-        ReaderSettingsStore.txtChapterTitlePageKey: false,
+        ReaderSettingsStore.chapterTitlePageKey: false,
       });
       final directory = Directory.systemTemp.createTempSync(
         'open-reading-epub-transition-',
@@ -298,7 +298,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(480, 800));
     SharedPreferences.setMockInitialValues({
       ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
-      ReaderSettingsStore.txtChapterTitlePageKey: false,
+      ReaderSettingsStore.chapterTitlePageKey: false,
     });
     final directory = Directory.systemTemp.createTempSync(
       'open-reading-epub-front-matter-',
@@ -398,7 +398,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(480, 800));
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
-        ReaderSettingsStore.txtChapterTitlePageKey: false,
+        ReaderSettingsStore.chapterTitlePageKey: false,
       });
       final directory = Directory.systemTemp.createTempSync(
         'open-reading-epub-warming-tail-',
@@ -648,7 +648,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(480, 800));
       SharedPreferences.setMockInitialValues({
         ReaderSettingsStore.pageModeKey: ReaderPageMode.pageCurl.name,
-        ReaderSettingsStore.txtChapterTitlePageKey: false,
+        ReaderSettingsStore.chapterTitlePageKey: false,
       });
       final directory = Directory.systemTemp.createTempSync(
         'open-reading-epub-curl-boundary-',

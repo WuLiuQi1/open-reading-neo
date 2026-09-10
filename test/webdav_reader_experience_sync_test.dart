@@ -329,7 +329,9 @@ void main() {
         ),
       );
       await settingsStore.saveScrollByChapter(true);
-      await settingsStore.saveTxtChapterTitlePageEnabled(false);
+      await settingsStore.save(
+        (await settingsStore.load()).copyWith(chapterTitlePageEnabled: false),
+      );
       await settingsStore.saveTapZones(
         ReaderTapZones.defaults.withAction(0, ReaderTapZoneAction.nextChapter),
       );

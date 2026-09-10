@@ -43,6 +43,7 @@ List<BookSourceTextPage> paginateBookSourceText(
   int firstLineIndent = 0,
   int paragraphSpacing = 0,
   bool includeChapterTitlePage = true,
+  double? inlineChapterTitleExtent,
 }) {
   final flowStyle = NativeTextFlowStyle(
     textDirection: textDirection,
@@ -63,6 +64,7 @@ List<BookSourceTextPage> paginateBookSourceText(
     paragraphSpacing: paragraphSpacing,
     normalizeParagraphBreaks: true,
     includeChapterTitlePage: includeChapterTitlePage,
+    inlineChapterTitleExtent: inlineChapterTitleExtent,
   );
 }
 

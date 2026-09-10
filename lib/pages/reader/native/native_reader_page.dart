@@ -368,7 +368,7 @@ class _NativeReaderPageState extends State<NativeReaderPage>
   ReaderTapZones _tapZones = ReaderTapZones.defaults;
   bool _tapZoneEditorVisible = false;
   bool _tabletTwoPageEnabled = ReaderSettings.defaultTabletTwoPageEnabled;
-  bool _txtChapterTitlePageEnabled = true;
+  bool _chapterTitlePageEnabled = true;
   bool _readerSettingsLoaded = false;
   bool _readerFontReady = true;
   bool _readerSystemUiApplied = false;

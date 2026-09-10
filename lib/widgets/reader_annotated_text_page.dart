@@ -13,6 +13,7 @@ import 'package:xxread/models/book_note.dart';
 import 'package:xxread/utils/localization_extension.dart';
 import 'package:xxread/utils/reader_themes.dart';
 import 'package:xxread/widgets/reader_control_chrome.dart';
+import 'package:xxread/widgets/reader_chapter_title_page.dart';
 import 'package:xxread/widgets/reader_text_page_content.dart';
 
 typedef ReaderTextAnnotationSaveCallback =
@@ -276,7 +277,7 @@ class _ReaderAnnotatedTextPageState extends State<ReaderAnnotatedTextPage> {
 
   @override
   Widget build(BuildContext context) {
-    final text = SelectionArea(
+    final body = SelectionArea(
       contextMenuBuilder: _buildSelectionToolbar,
       child: SelectionListener(
         selectionNotifier: _selectionNotifier,
@@ -289,9 +290,22 @@ class _ReaderAnnotatedTextPageState extends State<ReaderAnnotatedTextPage> {
         ),
       ),
     );
+    if (widget.page.showsInlineChapterTitle) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReaderInlineChapterTitle(
+            title: widget.chapterTitle,
+            bodyStyle: widget.bodyStyle,
+          ),
+          const SizedBox(height: ReaderInlineChapterTitle.spacingAfter),
+          if (widget.fillAvailableSpace) Expanded(child: body) else body,
+        ],
+      );
+    }
     return widget.fillAvailableSpace
-        ? Stack(fit: StackFit.expand, children: [text])
-        : text;
+        ? Stack(fit: StackFit.expand, children: [body])
+        : body;
   }
 }
 

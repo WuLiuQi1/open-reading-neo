@@ -11,14 +11,6 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     if (saveCurrent && _content != null) unawaited(_saveProgress());
     if (!mounted) return;
     final loadSerial = ++_chapterLoadSerial;
-    final prefetched = _prefetchedContent[index];
-    if (prefetched != null && _readableChapterText.containsKey(index)) {
-      if (await _deferChapterApplyForOpeningFlight(index)) {
-        if (!mounted || loadSerial != _chapterLoadSerial) return;
-      }
-      _applyLoadedChapter(index, prefetched, restoreProgress: restoreProgress);
-      return;
-    }
     _updateReaderState(() {
       _loadingContent = true;
       _requestedChapterIndex = index;
@@ -31,6 +23,14 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
       if (await _deferChapterApplyForOpeningFlight(index)) {
         if (!mounted || loadSerial != _chapterLoadSerial) return;
       }
+      while (mounted &&
+          loadSerial == _chapterLoadSerial &&
+          _pageMode != BookSourcePageMode.verticalScroll &&
+          !_pagedViewportSize.isEmpty &&
+          _cachedPagedLayoutFor(index, content, _pagedViewportSize) == null) {
+        await _warmPagedLayout(index);
+      }
+      if (!mounted || loadSerial != _chapterLoadSerial) return;
       _applyLoadedChapter(index, content, restoreProgress: restoreProgress);
     } catch (error) {
       if (!mounted || loadSerial != _chapterLoadSerial) return;
@@ -68,8 +68,8 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     _pagedLayouts.removeWhere(
       (chapterIndex, _) => chapterIndex < index - 1 || chapterIndex > index + 2,
     );
-    _warmedPagedLayoutIndexes.removeWhere(
-      (chapterIndex) => chapterIndex < index - 1 || chapterIndex > index + 2,
+    _pagedLayoutWarms.removeWhere(
+      (chapterIndex, _) => chapterIndex < index - 1 || chapterIndex > index + 2,
     );
     _updateReaderState(() {
       _chapterIndex = index;
@@ -111,19 +111,19 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
         _pagedViewportSize.isEmpty) {
       return null;
     }
-    return _pagedLayoutFor(index, content, _pagedViewportSize);
+    return _cachedPagedLayoutFor(index, content, _pagedViewportSize);
   }
 
   int _slideLeadingPageCount(int chapterIndex) {
     if (chapterIndex <= 0) return 0;
     final previousContent = _prefetchedContent[chapterIndex - 1];
     if (previousContent == null || _pagedViewportSize.isEmpty) return 1;
-    final previousLayout = _pagedLayoutFor(
+    final previousLayout = _cachedPagedLayoutFor(
       chapterIndex - 1,
       previousContent,
       _pagedViewportSize,
     );
-    return previousLayout.pages.length;
+    return previousLayout?.pages.length ?? 1;
   }
 
   void _replaceSlidePageController({required int initialPage}) {
@@ -245,8 +245,7 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     _readableChapterText.removeWhere((index, _) => !retain(index));
     _pagedLayouts.removeWhere((index, _) => !retain(index));
     _verticalLayouts.removeWhere((index, _) => !retain(index));
-    _warmedPagedLayoutIndexes.removeWhere((index) => !retain(index));
-    _queuedPagedLayoutWarms.removeWhere((index) => !retain(index));
+    _pagedLayoutWarms.removeWhere((index, _) => !retain(index));
     _verticalPartKeys.removeWhere((key, _) {
       final separator = key.indexOf(':');
       final chapter = int.tryParse(
@@ -256,52 +255,119 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     });
   }
 
+  void _releasePaginationPointer(PointerEvent event) {
+    _paginationPointers.remove(event.pointer);
+    if (_paginationPointers.isNotEmpty) return;
+    _paginationPointerReleased?.complete();
+    _paginationPointerReleased = null;
+  }
+
+  bool get _pageTurnIsAnimating =>
+      (_pageController.hasClients &&
+          _pageController.position.isScrollingNotifier.value) ||
+      _coverPageTurnController.isAnimating ||
+      _pageCurlController.isAnimating ||
+      _spreadForwardPageCurlController.isAnimating ||
+      _spreadBackwardPageCurlController.isAnimating;
+
+  Future<void> _yieldForPagedLayout() async {
+    // Layout may be queued while a finger is held still, when Flutter has no
+    // transient animation callbacks. Let the gesture finish before measuring.
+    do {
+      while (mounted && _paginationPointers.isNotEmpty) {
+        _paginationPointerReleased ??= Completer<void>();
+        await _paginationPointerReleased!.future;
+      }
+      if (!mounted) return;
+      // One event-loop turn per page keeps input responsive. Waiting on frames
+      // instead of queuing idle scheduler tasks avoids polling while an
+      // animation owns the scheduler.
+      if (_paginationYield == null) {
+        final yielded = Completer<void>();
+        _paginationYield = yielded;
+        _paginationYieldTimer = Timer(Duration.zero, () {
+          _paginationYieldTimer = null;
+          _paginationYield = null;
+          yielded.complete();
+        });
+      }
+      await _paginationYield!.future;
+      while (mounted && _pageTurnIsAnimating) {
+        await SchedulerBinding.instance.endOfFrame;
+      }
+    } while (mounted && _paginationPointers.isNotEmpty);
+  }
+
+  Future<_BookSourcePagedLayout?> _warmPagedLayout(int index) {
+    final content = _prefetchedContent[index];
+    if (!mounted ||
+        content == null ||
+        _pagedViewportSize.isEmpty ||
+        _pageMode == BookSourcePageMode.verticalScroll) {
+      return Future.value();
+    }
+    final viewport = _pagedViewportSize;
+    final cached = _cachedPagedLayoutFor(index, content, viewport);
+    if (cached != null) return Future.value(cached);
+    final existing = _pagedLayoutWarms[index];
+    if (existing != null) return existing;
+    late final Future<_BookSourcePagedLayout?> future;
+    future = Future<void>.value()
+        .then((_) async {
+          if (!mounted) return null;
+          final settled = BookOpenTransition.openingFlightSettledListenableOf(
+            context,
+          );
+          if (settled != null && !settled.value) {
+            final ready = Completer<void>();
+            void onSettled() {
+              if (!settled.value) return;
+              settled.removeListener(onSettled);
+              ready.complete();
+            }
+
+            settled.addListener(onSettled);
+            await Future.any([ready.future, _paginationDisposed.future]);
+            settled.removeListener(onSettled);
+          }
+          if (!mounted || !identical(_pagedLayoutWarms[index], future)) {
+            return null;
+          }
+          final result = await _preparePagedLayoutFor(
+            index,
+            content,
+            viewport,
+            yieldBetweenPages: _yieldForPagedLayout,
+            isCurrent: () =>
+                identical(_pagedLayoutWarms[index], future) &&
+                _pagedViewportSize == viewport &&
+                identical(_prefetchedContent[index], content),
+          );
+          if (result != null && mounted) _updateReaderState(() {});
+          return result;
+        })
+        .whenComplete(() {
+          if (identical(_pagedLayoutWarms[index], future)) {
+            _pagedLayoutWarms.remove(index);
+          }
+        });
+    _pagedLayoutWarms[index] = future;
+    return future;
+  }
+
   void _schedulePagedLayoutWarm(int index) {
     if (!mounted ||
-        _pageMode == BookSourcePageMode.verticalScroll ||
-        index != _chapterIndex + 1 ||
         index < 0 ||
         index >= _chapters.length ||
-        _pagedViewportSize.isEmpty ||
-        _prefetchedContent[index] == null ||
-        _warmedPagedLayoutIndexes.contains(index) ||
-        !_queuedPagedLayoutWarms.add(index)) {
+        (index != _chapterIndex + 1 && index != _chapterIndex - 1)) {
       return;
     }
-    _pagedLayoutWarmTimer?.cancel();
-    final previousWarmIndex = _pagedLayoutWarmTimerIndex;
-    if (previousWarmIndex != null) {
-      _queuedPagedLayoutWarms.remove(previousWarmIndex);
-    }
-    _pagedLayoutWarmTimerIndex = index;
-    _pagedLayoutWarmTimer = Timer(const Duration(milliseconds: 32), () {
-      _pagedLayoutWarmTimer = null;
-      _pagedLayoutWarmTimerIndex = null;
-      _queuedPagedLayoutWarms.remove(index);
-      if (!mounted ||
-          _pageMode == BookSourcePageMode.verticalScroll ||
-          index != _chapterIndex + 1 ||
-          _pagedViewportSize.isEmpty) {
-        return;
-      }
-      // 打开动画（含正文渐显）没播完前不预热整章排版，落定后再重新排队。
-      final settled = BookOpenTransition.openingFlightSettledListenableOf(
-        context,
-      );
-      if (settled != null && !settled.value) {
-        late final VoidCallback onSettled;
-        onSettled = () {
-          settled.removeListener(onSettled);
-          if (mounted) _schedulePagedLayoutWarm(index);
-        };
-        settled.addListener(onSettled);
-        return;
-      }
-      final content = _prefetchedContent[index];
-      if (content == null) return;
-      _pagedLayoutFor(index, content, _pagedViewportSize);
-      _warmedPagedLayoutIndexes.add(index);
-    });
+    unawaited(
+      _warmPagedLayout(index).catchError((Object error) {
+        debugPrint('prepare adjacent chapter failed: $error');
+        return null;
+      }),
+    );
   }
 
   Future<void> _jumpToVerticalChapter(

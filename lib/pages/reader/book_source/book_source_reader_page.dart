@@ -7,6 +7,7 @@ import 'package:xxread/core/reader/reader_pagination_cache_codec.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -252,12 +253,17 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
   final Map<int, String> _readableChapterText = {};
   final Map<int, Future<BookSourceChapterContent>> _continuousContentLoads = {};
   final Map<int, _BookSourcePagedLayout> _pagedLayouts = {};
-  final Set<int> _queuedPagedLayoutWarms = {};
-  final Set<int> _warmedPagedLayoutIndexes = {};
+  final Map<int, Future<_BookSourcePagedLayout?>> _pagedLayoutWarms = {};
+  final Set<int> _paginationPointers = {};
+  Completer<void>? _paginationPointerReleased;
+  final Completer<void> _paginationDisposed = Completer<void>();
+  Timer? _paginationYieldTimer;
+  Completer<void>? _paginationYield;
   final Map<int, _BookSourceVerticalLayout> _verticalLayouts = {};
   final Map<String, GlobalKey> _verticalPartKeys = {};
   Future<void> _progressSaveQueue = Future<void>.value();
   bool _scrollByChapter = false;
+  bool _chapterTitlePageEnabled = true;
   Size _pagedViewportSize = Size.zero;
   Size _verticalViewportSize = Size.zero;
   bool _exitPromptVisible = false;
@@ -266,8 +272,6 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
   Book? _shelfBook;
   Timer? _progressSaveTimer;
   Timer? _controlsTimer;
-  Timer? _pagedLayoutWarmTimer;
-  int? _pagedLayoutWarmTimerIndex;
   final ReadingStatsDao _readingStatsDao = ReadingStatsDao();
   final BookmarkDao _bookmarkDao = BookmarkDao();
   final BookNoteDao _bookNoteDao = BookNoteDao();
@@ -331,6 +335,7 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
     pullBookmarkEnabled: _pullBookmarkEnabled,
     tapPageAnimationEnabled: _tapPageAnimationEnabled,
     tabletTwoPageEnabled: _tabletTwoPageEnabled,
+    chapterTitlePageEnabled: _chapterTitlePageEnabled,
   );
 
   ReaderSafeAreaMetrics get _readerSafeArea => ReaderSafeAreaMetrics(
@@ -463,7 +468,7 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
     _paginationKey = null;
     _paginatedPages = const [];
     _pagedLayouts.clear();
-    _warmedPagedLayoutIndexes.clear();
+    _pagedLayoutWarms.clear();
     _verticalLayouts.clear();
     _restorePagedPosition = true;
   }
@@ -493,10 +498,7 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
 
   @override
   void didHaveMemoryPressure() {
-    _pagedLayoutWarmTimer?.cancel();
-    _pagedLayoutWarmTimer = null;
-    _pagedLayoutWarmTimerIndex = null;
-    _queuedPagedLayoutWarms.clear();
+    _pagedLayoutWarms.clear();
     _trimChapterMemoryCaches(aggressive: true);
   }
 
@@ -539,7 +541,13 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
     _openingLoaderTimer?.cancel();
     _progressSaveTimer?.cancel();
     _controlsTimer?.cancel();
-    _pagedLayoutWarmTimer?.cancel();
+    _pagedLayoutWarms.clear();
+    _paginationDisposed.complete();
+    _paginationYieldTimer?.cancel();
+    _paginationYield?.complete();
+    _paginationYield = null;
+    _paginationPointerReleased?.complete();
+    _paginationPointerReleased = null;
     _readerAloudController?.removeListener(_onReaderAloudChanged);
     _autoPageTurnStartRequest++;
     _autoPageTurnController.removeListener(_onAutoPageTurnChanged);

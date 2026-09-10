@@ -13,7 +13,6 @@ import 'package:xxread/l10n/app_localizations.dart';
 import 'package:xxread/pages/account/premium_membership_page.dart';
 import 'package:xxread/pages/account/premium_policy_page.dart';
 import 'package:xxread/services/account/account.dart';
-import 'package:xxread/services/account/apple_purchase_support.dart';
 import 'package:xxread/widgets/app_brand_icon.dart';
 
 void main() {
@@ -61,29 +60,54 @@ void main() {
     },
   );
 
-  testWidgets('keeps restore and refund available for an active iOS member', (
+  testWidgets(
+    'keeps restore but removes refund actions for an active iOS member',
+    (tester) async {
+      _usePlatform(TargetPlatform.iOS);
+      final store = _FakeAppleStore();
+      final account = _TestAccount(store: store, premium: true);
+      addTearDown(account.dispose);
+      addTearDown(store.close);
+
+      await _pumpPage(tester, account: account);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('premium-active')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('account-apple-restore')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('premium-refund')), findsNothing);
+      expect(find.byKey(const ValueKey('premium-apple-support')), findsNothing);
+      expect(find.text('申请退款'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('account-apple-purchase')),
+        findsNothing,
+      );
+      _resetPlatform();
+    },
+  );
+
+  testWidgets('macOS keeps store actions without refund entry points', (
     tester,
   ) async {
-    _usePlatform(TargetPlatform.iOS);
+    _usePlatform(TargetPlatform.macOS);
+    addTearDown(_resetPlatform);
     final store = _FakeAppleStore();
-    final account = _TestAccount(store: store, premium: true);
+    final account = _TestAccount(store: store);
     addTearDown(account.dispose);
     addTearDown(store.close);
-
-    await _pumpPage(
-      tester,
-      account: account,
-      purchaseSupport: ApplePurchaseSupport(
-        channel: const MethodChannel('test.apple.purchase.support'),
-        platform: TargetPlatform.iOS,
-      ),
-    );
+    await _pumpPage(tester, account: account);
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('premium-active')), findsOneWidget);
+    expect(find.text('¥28.00'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('account-apple-purchase')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('account-apple-restore')), findsOneWidget);
-    expect(find.byKey(const ValueKey('premium-refund')), findsOneWidget);
-    expect(find.byKey(const ValueKey('account-apple-purchase')), findsNothing);
+    expect(find.byKey(const ValueKey('premium-refund')), findsNothing);
+    expect(find.byKey(const ValueKey('premium-apple-support')), findsNothing);
+    expect(find.byKey(const ValueKey('premium-eula-link')), findsOneWidget);
     _resetPlatform();
   });
 
@@ -185,6 +209,23 @@ void main() {
     _resetPlatform();
   });
 
+  testWidgets('active Android membership has no empty purchase panel', (
+    tester,
+  ) async {
+    _usePlatform(TargetPlatform.android);
+    final store = _FakeAppleStore();
+    final account = _TestAccount(store: store, premium: true);
+    addTearDown(account.dispose);
+    addTearDown(store.close);
+    await _pumpPage(tester, account: account);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('premium-active')), findsOneWidget);
+    expect(find.text('购买说明'), findsNothing);
+    expect(find.byKey(const ValueKey('account-redemption-code')), findsNothing);
+    expect(find.byKey(const ValueKey('premium-privacy-link')), findsOneWidget);
+    _resetPlatform();
+  });
+
   testWidgets('reports an Apple purchase that is waiting for approval', (
     tester,
   ) async {
@@ -272,6 +313,42 @@ void main() {
     skip: screenshotDirectory == null,
   );
 
+  for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets(
+      'exports active phone membership in ${mode.name}',
+      (tester) async {
+        _usePlatform(TargetPlatform.iOS);
+        addTearDown(_resetPlatform);
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final store = _FakeAppleStore();
+        final account = _TestAccount(store: store, premium: true);
+        addTearDown(account.dispose);
+        addTearDown(store.close);
+        final previewKey = GlobalKey();
+        await _pumpPage(
+          tester,
+          account: account,
+          previewKey: previewKey,
+          previewFont: true,
+          themeMode: mode,
+        );
+        await tester.pumpAndSettle();
+        await _loadBrandIcon(tester);
+        expect(tester.takeException(), isNull);
+        await _capture(
+          tester,
+          previewKey,
+          '$screenshotDirectory/premium-active-phone-${mode.name}.png',
+        );
+        _resetPlatform();
+      },
+      skip: screenshotDirectory == null,
+    );
+  }
+
   testWidgets(
     'exports the tablet dark membership review image when requested',
     (tester) async {
@@ -309,7 +386,6 @@ void main() {
 Future<void> _pumpPage(
   WidgetTester tester, {
   required MemberAccountController account,
-  ApplePurchaseSupport? purchaseSupport,
   ThemeMode themeMode = ThemeMode.light,
   TextScaler textScaler = TextScaler.noScaling,
   GlobalKey? previewKey,
@@ -329,10 +405,7 @@ Future<void> _pumpPage(
       ),
       home: RepaintBoundary(
         key: previewKey,
-        child: PremiumMembershipPage(
-          account: account,
-          purchaseSupport: purchaseSupport,
-        ),
+        child: PremiumMembershipPage(account: account),
       ),
     ),
   );

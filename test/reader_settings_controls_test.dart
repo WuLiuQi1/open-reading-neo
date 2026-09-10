@@ -28,7 +28,7 @@ void main() {
       bool? pullBookmark;
       bool? tapAnimation;
       bool? tabletTwoPage;
-      bool? txtChapterTitlePage;
+      bool? chapterTitlePage;
       var fontPickerOpened = false;
       final autoPageTurnController = ReaderAutoPageTurnController(
         onAdvance: () async => true,
@@ -105,8 +105,8 @@ void main() {
             horizontalMarginLabel: 'Horizontal margin',
             topMarginLabel: 'Top margin',
             bottomMarginLabel: 'Bottom margin',
-            txtChapterTitlePageTitle: 'Chapter title on its own page',
-            txtChapterTitlePageHint: 'Show the title above body text when off',
+            chapterTitlePageTitle: 'Chapter title on its own page',
+            chapterTitlePageHint: 'Show the title above body text when off',
             themeId: ReaderThemes.day.id,
             fontSize: 19,
             textBrightness: 42,
@@ -123,7 +123,7 @@ void main() {
             pullBookmarkEnabled: false,
             tapPageAnimationEnabled: true,
             tabletTwoPageEnabled: true,
-            txtChapterTitlePageEnabled: true,
+            chapterTitlePageEnabled: true,
             themeLabelFor: (themeId) => themeId,
             onThemeChanged: (_) {},
             onCustomThemeTap: () {},
@@ -147,8 +147,7 @@ void main() {
             onPullBookmarkChanged: (value) => pullBookmark = value,
             onTapPageAnimationChanged: (value) => tapAnimation = value,
             onTabletTwoPageChanged: (value) => tabletTwoPage = value,
-            onTxtChapterTitlePageChanged: (value) =>
-                txtChapterTitlePage = value,
+            onChapterTitlePageChanged: (value) => chapterTitlePage = value,
           ),
         ),
       );
@@ -314,11 +313,11 @@ void main() {
       await tester.tap(find.text('Layout tab'));
       await tester.pumpAndSettle();
       final titlePageSwitch = tester.widget<SwitchListTile>(
-        find.byKey(const ValueKey('reader-txt-chapter-title-page-switch')),
+        find.byKey(const ValueKey('reader-chapter-title-page-switch')),
       );
       expect(titlePageSwitch.value, isTrue);
       titlePageSwitch.onChanged!(false);
-      expect(txtChapterTitlePage, isFalse);
+      expect(chapterTitlePage, isFalse);
 
       await tester.tap(find.text('Theme tab'));
       await tester.pumpAndSettle();

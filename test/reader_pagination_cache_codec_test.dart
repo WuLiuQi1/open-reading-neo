@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:xxread/book_sources/services/book_source_text_paginator.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xxread/core/reader/native_text_paginator.dart';
 import 'package:xxread/core/reader/reader_pagination_cache_codec.dart';
+import 'package:xxread/core/reader/reader_text_pagination.dart';
 
 void main() {
   testWidgets('online compact boundaries restore visible text and offsets', (
@@ -38,6 +40,7 @@ void main() {
               p.displayStart,
               p.displayEnd,
               p.isChapterTitle,
+              p.showsInlineChapterTitle,
             ),
           )
           .toList(),
@@ -50,6 +53,7 @@ void main() {
               p.displayStart,
               p.displayEnd,
               p.isChapterTitle,
+              p.showsInlineChapterTitle,
             ),
           )
           .toList(),
@@ -69,6 +73,82 @@ void main() {
         text: text,
         firstLineIndent: 2,
         paragraphSpacing: 1,
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('text cache restores only a valid first-page inline title', (
+    tester,
+  ) async {
+    final text = List.filled(20, '第一段正文。\n第二段正文。').join('\n');
+    final pages = paginateReaderText(
+      text: text,
+      maxWidth: 180,
+      maxHeight: 160,
+      inlineChapterTitleExtent: 48,
+      flowStyle: const NativeTextFlowStyle(
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+        locale: Locale('zh'),
+        strutStyle: null,
+        textHeightBehavior: null,
+      ),
+      style: const TextStyle(fontSize: 18),
+      firstLineIndent: 2,
+      paragraphSpacing: 1,
+      normalizeParagraphBreaks: true,
+    );
+    final payload = ReaderPaginationCacheCodec.encodeTextPages(pages);
+    final restored = ReaderPaginationCacheCodec.restoreTextPages(
+      payload,
+      text: text,
+      firstLineIndent: 2,
+      paragraphSpacing: 1,
+    );
+
+    expect(restored, isNotNull);
+    expect(restored!.first.showsInlineChapterTitle, isTrue);
+    expect(
+      restored.skip(1).every((page) => !page.showsInlineChapterTitle),
+      isTrue,
+    );
+
+    final misplaced = Uint8List.fromList(payload);
+    final data = ByteData.sublistView(misplaced);
+    data.setInt32(12, data.getInt32(12, Endian.little) & ~2, Endian.little);
+    data.setInt32(52, data.getInt32(52, Endian.little) | 2, Endian.little);
+    expect(
+      ReaderPaginationCacheCodec.restoreTextPages(
+        misplaced,
+        text: text,
+        firstLineIndent: 2,
+        paragraphSpacing: 1,
+      ),
+      isNull,
+    );
+
+    final titleAndInline = ReaderPaginationCacheCodec.encode(const [
+      ReaderPaginationCachePage(
+        isChapterTitle: true,
+        showsInlineChapterTitle: true,
+        imageBlockIndex: null,
+        layoutSourceStart: -1,
+        layoutSourceEnd: -1,
+        layoutStart: 0,
+        layoutEnd: 0,
+        displayStart: 0,
+        displayEnd: 0,
+        sourceStart: 0,
+        sourceEnd: 0,
+      ),
+    ]);
+    expect(
+      ReaderPaginationCacheCodec.restoreTextPages(
+        titleAndInline,
+        text: '',
+        firstLineIndent: 0,
+        paragraphSpacing: 0,
       ),
       isNull,
     );

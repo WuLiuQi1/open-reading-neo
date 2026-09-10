@@ -9,9 +9,123 @@ import 'package:xxread/l10n/app_localizations.dart';
 import 'package:xxread/models/book_note.dart';
 import 'package:xxread/utils/reader_themes.dart';
 import 'package:xxread/widgets/reader_annotated_text_page.dart';
+import 'package:xxread/widgets/reader_chapter_title_page.dart';
 import 'package:xxread/widgets/reader_tap_observer.dart';
 
 void main() {
+  testWidgets('inline chapter title is outside selectable body coordinates', (
+    tester,
+  ) async {
+    const bodyStyle = TextStyle(fontSize: 20, height: 1.6);
+    const flowStyle = NativeTextFlowStyle(
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+      locale: Locale('zh'),
+      strutStyle: null,
+      textHeightBehavior: readerTextHeightBehavior,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 260,
+            child: ReaderAnnotatedTextPage(
+              page: const ReaderTextPage(
+                text: '正文',
+                showsInlineChapterTitle: true,
+              ),
+              sourceText: '正文',
+              chapterId: 'chapter-1',
+              chapterTitle: '第一章',
+              chapterIndex: 0,
+              pageIndex: 0,
+              bookId: 1,
+              format: BookFormat.txt,
+              renderer: ReaderRendererType.flutterNative,
+              palette: ReaderThemes.green,
+              bodyStyle: bodyStyle,
+              flowStyle: flowStyle,
+              annotations: const [],
+              onSaveTextAnnotation: (_, _) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final title = find.byType(ReaderInlineChapterTitle);
+    final body = find.descendant(
+      of: find.byType(SelectionArea),
+      matching: find.byType(RichText),
+    );
+    expect(title, findsOneWidget);
+    expect(
+      find.ancestor(of: title, matching: find.byType(SelectionArea)),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(of: body, matching: find.byType(SelectionArea)),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(of: body, matching: find.byType(Expanded)),
+      findsOneWidget,
+    );
+    expect(tester.getTopLeft(title).dy, lessThan(tester.getTopLeft(body).dy));
+  });
+
+  testWidgets('inline chapter title uses natural height in scrolling layout', (
+    tester,
+  ) async {
+    const bodyStyle = TextStyle(fontSize: 20, height: 1.6);
+    const flowStyle = NativeTextFlowStyle(
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+      locale: Locale('zh'),
+      strutStyle: null,
+      textHeightBehavior: readerTextHeightBehavior,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderAnnotatedTextPage(
+            page: const ReaderTextPage(
+              text: '正文',
+              showsInlineChapterTitle: true,
+            ),
+            sourceText: '正文',
+            chapterId: 'chapter-1',
+            chapterTitle: '第一章',
+            chapterIndex: 0,
+            pageIndex: 0,
+            bookId: 1,
+            format: BookFormat.txt,
+            renderer: ReaderRendererType.flutterNative,
+            palette: ReaderThemes.green,
+            bodyStyle: bodyStyle,
+            flowStyle: flowStyle,
+            annotations: const [],
+            onSaveTextAnnotation: (_, _) async {},
+            fillAvailableSpace: false,
+          ),
+        ),
+      ),
+    );
+
+    final body = find.descendant(
+      of: find.byType(SelectionArea),
+      matching: find.byType(RichText),
+    );
+    expect(find.byType(ReaderInlineChapterTitle), findsOneWidget);
+    expect(
+      find.ancestor(of: body, matching: find.byType(Expanded)),
+      findsNothing,
+    );
+  });
+
   testWidgets(
     'selection toolbar follows the reader palette and saves highlight',
     (tester) async {

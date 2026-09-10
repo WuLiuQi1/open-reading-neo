@@ -135,11 +135,20 @@ extension _BookSourceReaderCurlRendering on _BookSourceReaderPageState {
         final usesNextChapter =
             nextSpreadStart >= _pageCount &&
             nextChapterIndex < _chapters.length;
+        bool chapterPrepared(int index) {
+          final content = _prefetchedContent[index];
+          if (content == null) return false;
+          if (_cachedPagedLayoutFor(index, content, adjacentViewport) != null) {
+            return true;
+          }
+          _schedulePagedLayoutWarm(index);
+          return false;
+        }
+
         final previousChapterCached =
-            usesPreviousChapter &&
-            _prefetchedContent[previousChapterIndex] != null;
+            usesPreviousChapter && chapterPrepared(previousChapterIndex);
         final nextChapterCached =
-            usesNextChapter && _prefetchedContent[nextChapterIndex] != null;
+            usesNextChapter && chapterPrepared(nextChapterIndex);
         final previousChapterLeftData = previousChapterCached
             ? _adjacentPageData(
                 previousChapterIndex,

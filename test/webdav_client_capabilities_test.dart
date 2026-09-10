@@ -46,6 +46,14 @@ void main() {
     expect(adapter.deleted, isTrue);
   });
 
+  test('probe accepts ETags supplied only by DAV properties', () async {
+    final adapter = _DavAdapter(propertyEtag: true);
+    await _client(adapter).verifyMutableWritePreconditions();
+    expect(adapter.preconditions, ['If-None-Match', 'If-Match']);
+    expect(adapter.propertyQueries, 2);
+    expect(adapter.deleted, isTrue);
+  });
+
   for (final ignored in ['If-None-Match', 'If-Match']) {
     test('ignored $ignored names the failing capability', () async {
       final adapter = _DavAdapter(ignored: ignored);
@@ -122,12 +130,15 @@ class _DavAdapter implements HttpClientAdapter {
     this.getStatus = 200,
     this.optionsStatus = 200,
     this.timeout = false,
+    this.propertyEtag = false,
   });
   final int rejection;
   final String? ignored;
   final int getStatus;
   final int optionsStatus;
   final bool timeout;
+  final bool propertyEtag;
+  int propertyQueries = 0;
   final preconditions = <String>[];
   bool exists = false;
   bool deleted = false;
@@ -152,6 +163,19 @@ class _DavAdapter implements HttpClientAdapter {
     }
     if (options.method == 'GET') {
       return ResponseBody.fromString(content, getStatus);
+    }
+    if (options.method == 'HEAD') return ResponseBody.fromString('', 200);
+    if (options.method == 'PROPFIND') {
+      propertyQueries++;
+      expect(options.headers['Depth'], '0');
+      return ResponseBody.fromString(
+        '<d:multistatus xmlns:d="DAV:"><d:response>'
+        '<d:href>${options.uri.path}</d:href><d:propstat><d:prop>'
+        '<d:getetag>&quot;v1&quot;</d:getetag></d:prop>'
+        '<d:status>HTTP/1.1 200 OK</d:status></d:propstat>'
+        '</d:response></d:multistatus>',
+        207,
+      );
     }
     if (options.method == 'PUT') {
       final bytes = <int>[];
@@ -179,7 +203,7 @@ class _DavAdapter implements HttpClientAdapter {
         '',
         201,
         headers: {
-          'etag': ['"v1"'],
+          if (!propertyEtag) 'etag': ['"v1"'],
         },
       );
     }

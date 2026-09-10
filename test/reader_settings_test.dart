@@ -56,10 +56,7 @@ void main() {
     expect(settings.dimTextInDarkMode, isTrue);
     expect(settings.letterSpacing, ReaderSettings.defaultLetterSpacing);
     expect(settings.textAlignment, ReaderTextAlignment.natural);
-    expect(
-      await const ReaderSettingsStore().loadTxtChapterTitlePageEnabled(),
-      isTrue,
-    );
+    expect(settings.chapterTitlePageEnabled, isTrue);
   });
 
   test('maps text brightness relative to the active reader theme', () {
@@ -135,15 +132,33 @@ void main() {
     },
   );
 
-  test('persists the TXT chapter title page preference', () async {
-    SharedPreferences.setMockInitialValues({});
+  test(
+    'shares chapter title preference through the complete settings model',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      const store = ReaderSettingsStore();
+
+      await store.save(
+        (await store.load()).copyWith(chapterTitlePageEnabled: false),
+      );
+
+      expect((await store.load()).chapterTitlePageEnabled, isFalse);
+      await store.save((await store.load()).copyWith(fontSize: 24));
+      expect((await store.load()).chapterTitlePageEnabled, isFalse);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(ReaderSettingsStore.chapterTitlePageKey), isFalse);
+    },
+  );
+
+  test('reads the existing title preference without resetting it', () async {
+    SharedPreferences.setMockInitialValues({
+      'native_reader_txt_chapter_title_page_enabled': false,
+    });
     const store = ReaderSettingsStore();
-
-    await store.saveTxtChapterTitlePageEnabled(false);
-
-    expect(await store.loadTxtChapterTitlePageEnabled(), isFalse);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(ReaderSettingsStore.txtChapterTitlePageKey), isFalse);
+    final settings = await store.load();
+    expect(settings.chapterTitlePageEnabled, isFalse);
+    await store.save(settings.copyWith(fontSize: 21));
+    expect((await store.load()).chapterTitlePageEnabled, isFalse);
   });
 
   test('persists one settings model for every reader entry', () async {

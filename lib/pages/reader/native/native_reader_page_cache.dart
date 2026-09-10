@@ -69,9 +69,7 @@ extension _NativeReaderPageCache on _NativeReaderPageState {
         normalizeParagraphBreaks: _normalizesParagraphBreaks(
           widget.book.format,
         ),
-        showDedicatedChapterTitlePage:
-            widget.book.format.toLowerCase() != 'txt' ||
-            _txtChapterTitlePageEnabled,
+        showDedicatedChapterTitlePage: _chapterTitlePageEnabled,
         preserveEpubFont: _readerFontProfile.isPlatformDefault,
       ),
     );
@@ -215,7 +213,7 @@ extension _NativeReaderPageCache on _NativeReaderPageState {
     extra:
         '${_pageMode == NativePageMode.verticalScroll ? _verticalChrome.paginationSignature : _readerSafeArea.paginationSignature}:'
         '${_readerFontProfile.cacheSignature}:'
-        '${widget.book.format.toLowerCase() == 'txt' ? _txtChapterTitlePageEnabled : true}:'
+        '$_chapterTitlePageEnabled:'
         '${_replaceRules.rulesSignature}',
-  ).cacheKey('native-line-v10');
+  ).cacheKey('native-line-v11');
 }

@@ -10,7 +10,8 @@
       "promotionalText": "把自己的书籍整理成随身书库，用合适的字体、主题和翻页方式，保持每天阅读的习惯。",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=zh-CN",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=zh-CN"
     },
     "en-US": {
       "name": "Open Reading - 开元阅读",
@@ -20,7 +21,8 @@
       "promotionalText": "Bring your own books into a personal library. Find a reading style that suits you and keep track of your progress.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "zh-Hant": {
       "name": "Open Reading - 開元閱讀",
@@ -30,7 +32,8 @@
       "promotionalText": "匯入自己的 TXT、EPUB，在手機、平板與電腦上整理書架、調整排版，享受本機優先的專注閱讀。",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=zh-CN",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=zh-CN"
     },
     "ja": {
       "name": "Open Reading - 开元阅读",
@@ -40,7 +43,8 @@
       "promotionalText": "手持ちの TXT や EPUB を読み込み、本棚と進捗を整理。スマートフォン、タブレット、パソコンで、自分好みの読書環境を整えられます。",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "ko": {
       "name": "Open Reading - 开元阅读",
@@ -50,7 +54,8 @@
       "promotionalText": "내 TXT와 EPUB을 불러와 책장과 진행률을 정리하세요. 휴대폰, 태블릿, 컴퓨터에서 취향에 맞는 로컬 중심 독서 환경을 만들 수 있습니다.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "de-DE": {
       "name": "Open Reading - 开元阅读",
@@ -60,7 +65,8 @@
       "promotionalText": "Deine TXT- und EPUB-Bücher an einem ruhigen Ort: lokal lesen, Fortschritt behalten und das Lesegefühl passend einstellen.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "fr-FR": {
       "name": "Open Reading - 开元阅读",
@@ -70,7 +76,8 @@
       "promotionalText": "Réunissez vos fichiers TXT et EPUB dans un espace calme : lecture locale, progression suivie et affichage adapté à vos habitudes.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "es-ES": {
       "name": "Open Reading - 开元阅读",
@@ -80,7 +87,8 @@
       "promotionalText": "Reúne tus archivos TXT y EPUB en un espacio tranquilo: lectura local, progreso guardado y una experiencia adaptada a ti.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     },
     "pt-BR": {
       "name": "Open Reading - 开元阅读",
@@ -90,7 +98,8 @@
       "promotionalText": "Reúna seus arquivos TXT e EPUB em um espaço tranquilo: leitura local, progresso salvo e uma experiência ajustada ao seu jeito.",
       "supportUrl": "https://github.com/miloquinn/open-reading/issues",
       "marketingUrl": "https://open.xxread.top/",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "https://open.xxread.top/privacy?lang=en",
+      "privacyChoicesUrl": "https://open.xxread.top/privacy-choices?lang=en"
     }
   },
   "copyright": "2026 Wangtao Xie"

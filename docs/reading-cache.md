@@ -12,7 +12,7 @@ Local and online readers share bounded cache storage policies and the same SQLit
 
 ## Identity and invalidation
 
-Local identities combine the book identity, actual file modification time and size, encoding, and edit revision. Online content retains existing source configuration, variables, and authentication revision isolation. Online pagination additionally hashes source/book/chapter identity and the resulting readable text. Layout fingerprints include engine version, font profile, viewport, spacing, direction, and replacement rules.
+Local identities combine the book identity, actual file modification time and size, encoding, and edit revision. Online content retains existing source configuration, variables, and authentication revision isolation. Online pagination additionally hashes source/book/chapter identity and the resulting readable text. Layout fingerprints include engine version, font profile, viewport, spacing, direction, replacement rules, and the shared chapter-title preference. Online headings also participate in layout identity because an inline heading changes the first body page height.
 
 Changing text invalidates its derived pagination. Changing layout preserves parsed content. The DAO uses global clear epochs and per-identity revision tokens so delayed writes cannot revive cleared entries or supersede a newer revision. Compatible v22 local pagination rows migrate into the local namespace; incompatible derived cache formats are rebuilt.
 
@@ -42,3 +42,21 @@ Usage combines owned file bytes and available serialized/memory byte counters, n
 ## Regression coverage
 
 Tests cover byte limits, grouped eviction, protected/late-created resources, hot-read scan throttling, rapid write growth, clear/write races, version races, migration, corrupt payloads, local and online reopen hits, layout/content/source separation, external TXT edits with unchanged database metadata, and download reuse. Stateful reader tests use isolated filesystem roots and drain asynchronous cache work before the next case; they retain all rendering and navigation assertions.
+
+## Shared chapter-title layout
+
+`ReaderSettings.chapterTitlePageEnabled` controls local and online flowing-text readers in every page mode. `ReaderSettingsSheet` requires the preference and callback, preventing an entry point from silently omitting the switch. The historical preferences key `native_reader_txt_chapter_title_page_enabled` and WebDAV record `txt_chapter_title_page` remain unchanged so upgrades and older sync peers retain the selected value.
+
+`paginateReaderText` owns dedicated title pages and inline title metadata/first-page height accounting. `ReaderAnnotatedTextPage` renders inline headings outside the selectable body, preserving canonical source offsets for annotations, search, narration and reading positions. The pagination codec persists the same title metadata for both entry points. Continuous scrolling uses an entire viewport for dedicated titles and an unpaginated inline heading when disabled.
+
+File parsing, EPUB images/styles and network loading remain source adapters. The title option lays out titles that the adapter has separated from body text; embedded EPUB/HTML headings remain document content and are not duplicated. TXT continuation segments do not repeat chapter headings.
+
+Regression coverage includes online toggle persistence in all five page modes, body offset preservation, title-policy cache invalidation/reopening, local title pages, inline annotation offsets, invalid cache flags and old settings/sync identifiers.
+
+## Online chapter preparation
+
+The next chapter's content request starts while the current chapter is being read, ahead of farther look-ahead requests. Adjacent page previews read prepared layouts only. They never measure a whole chapter from a widget build.
+
+Synchronous current-page layout and asynchronous chapter preparation share `NativeTextPaginator.paginatePages` and the same text projection. Preparation yields between pages, waits for active pointer gestures and animation frames to finish, and reuses one pending layout per chapter. On-demand chapter navigation awaits that same preparation; it does not start another synchronous layout. Content, layout settings, viewport, and cache-epoch changes discard obsolete results before publication. Disposing the reader cancels its pending yield timer and releases its waiters.
+
+Horizontal chapter handoff explicitly requests the frame needed to commit after scrolling settles. Cover turns retain their participating snapshots and callbacks until completion, so a newly prepared adjacent page cannot cancel an in-progress gesture. A delayed source response finishes the pending chapter turn without requiring a second swipe.

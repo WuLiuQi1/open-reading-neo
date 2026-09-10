@@ -654,7 +654,9 @@ void main() {
       expect(find.text('Ranking'), findsWidgets);
       expect(find.text('Channel Book 1'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('bookSourceDiscoverScope-reading-source')));
+      await tester.tap(
+        find.byKey(const Key('bookSourceDiscoverScope-reading-source')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Ranking'), findsWidgets);

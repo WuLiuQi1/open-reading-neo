@@ -199,6 +199,10 @@ export function validateMetadata(metadata, { forApply = false } = {}) {
   }
   if (typeof metadata.bundleId !== 'string' || !metadata.bundleId) errors.push('bundleId is required');
   if (typeof metadata.version !== 'string' || !metadata.version) errors.push('version is required');
+  requireString(errors, metadata, 'copyright', 'metadata', { optional: true });
+  if (typeof metadata.copyright === 'string' && characterLength(metadata.copyright) > 200) {
+    errors.push('copyright exceeds 200 characters');
+  }
   if (!metadata.localizations || typeof metadata.localizations !== 'object' || Array.isArray(metadata.localizations)) {
     errors.push('localizations must be an object');
     return { valid: false, errors, pending };
@@ -264,6 +268,7 @@ export function metadataPreview(metadata, validation = validateMetadata(metadata
     mode: 'dry-run',
     bundleId: metadata.bundleId,
     version: metadata.version,
+    ...(metadata.copyright === undefined ? {} : { copyright: metadata.copyright }),
     localizations: Object.fromEntries(Object.entries(metadata.localizations).map(([locale, value]) => [
       locale,
       { sync: buildLocalizationAttributes(value), manualCheck: Object.fromEntries(MANUAL_LOCALIZATION_FIELDS.map((field) => [field, value[field]])) },
@@ -343,6 +348,25 @@ export async function applyMetadata(metadata, { env = process.env, fetchImpl = g
     throw new Error(`Version ${metadata.version} is locked in state ${version.attributes?.appStoreState ?? 'UNKNOWN'}`);
   }
 
+  const versionChanges = [];
+  if (metadata.copyright !== undefined) {
+    if (version.attributes?.copyright === metadata.copyright) {
+      versionChanges.push({ field: 'copyright', action: 'unchanged' });
+    } else {
+      await request(`/appStoreVersions/${encodeURIComponent(version.id)}`, {
+        method: 'PATCH',
+        body: {
+          data: {
+            type: 'appStoreVersions',
+            id: version.id,
+            attributes: { copyright: metadata.copyright },
+          },
+        },
+      });
+      versionChanges.push({ field: 'copyright', action: 'updated' });
+    }
+  }
+
   const existingResponse = await request(`/appStoreVersions/${encodeURIComponent(version.id)}/appStoreVersionLocalizations?limit=200`);
   if (existingResponse.links?.next) {
     throw new Error('Localization list exceeds the 200-item first-page limit; refusing an incomplete apply');
@@ -381,6 +405,7 @@ export async function applyMetadata(metadata, { env = process.env, fetchImpl = g
     mode: 'applied',
     bundleId: metadata.bundleId,
     version: metadata.version,
+    ...(metadata.copyright === undefined ? {} : { versionChanges }),
     changes,
     manualCheckRequired: MANUAL_LOCALIZATION_FIELDS,
     paginationLimited: false,

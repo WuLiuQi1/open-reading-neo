@@ -87,6 +87,18 @@ test('metadata defaults to local-only dry run and does not need credentials', as
   assert.deepEqual(result.manualCheckRequired, ['name', 'subtitle', 'privacyPolicyUrl']);
 });
 
+test('metadata validates and previews optional copyright', async () => {
+  const metadata = validMetadata({ copyright: '2026 Wangtao Xie' });
+  assert.equal(validateMetadata(metadata).valid, true);
+  assert.equal(validateMetadata(validMetadata({ copyright: 'x'.repeat(201) })).errors.some((error) => /copyright exceeds 200/.test(error)), true);
+
+  const directory = await mkdtemp(join(tmpdir(), 'open-reading-copyright-'));
+  const file = join(directory, 'metadata.json');
+  await writeFile(file, JSON.stringify(metadata));
+  const result = await main(['metadata', '--file', file], { env: {} });
+  assert.equal(result.copyright, '2026 Wangtao Xie');
+});
+
 test('apply uses global fetch when no fetch dependency is supplied', async () => {
   const env = await keyEnvironment();
   const { calls, fetchImpl } = makeApplyFetch();
@@ -217,15 +229,21 @@ test('status reads the expected bundle, iOS versions, builds, and IAP product ID
   assert.equal(calls.some((url) => url.includes('filter%5BbundleId%5D=com.niki.xxread')), true);
 });
 
-function makeApplyFetch({ state = 'PREPARE_FOR_SUBMISSION', returnedBundle = BUNDLE_ID, localizationNext = false } = {}) {
+function makeApplyFetch({
+  state = 'PREPARE_FOR_SUBMISSION',
+  returnedBundle = BUNDLE_ID,
+  localizationNext = false,
+  existingCopyright = '2025 Existing Owner',
+} = {}) {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
     const parsed = new URL(url);
     if (parsed.pathname === '/v1/apps') return jsonResponse({ data: [{ type: 'apps', id: 'app-1', attributes: { bundleId: returnedBundle } }] });
     if (parsed.pathname === '/v1/apps/app-1/appStoreVersions') {
-      return jsonResponse({ data: [{ type: 'appStoreVersions', id: 'version-1', attributes: { versionString: '2.6.4', platform: 'IOS', appStoreState: state } }] });
+      return jsonResponse({ data: [{ type: 'appStoreVersions', id: 'version-1', attributes: { versionString: '2.6.4', platform: 'IOS', appStoreState: state, copyright: existingCopyright } }] });
     }
+    if (parsed.pathname === '/v1/appStoreVersions/version-1' && options.method === 'PATCH') return jsonResponse({ data: {} });
     if (parsed.pathname === '/v1/appStoreVersions/version-1/appStoreVersionLocalizations') {
       return jsonResponse({
         data: [{ type: 'appStoreVersionLocalizations', id: 'loc-zh', attributes: { locale: 'zh-Hans', description: '旧描述' } }],
@@ -273,6 +291,30 @@ test('apply sends minimal PATCH fields and never writes app-info-only fields', a
   assert.equal('subtitle' in body.data.attributes, false);
   assert.equal('privacyPolicyUrl' in body.data.attributes, false);
   assert.equal(body.data.attributes.description, '阅读工具');
+});
+
+test('apply PATCHes configured copyright on the existing editable iOS version', async () => {
+  const env = await keyEnvironment();
+  const { calls, fetchImpl } = makeApplyFetch();
+  const result = await applyMetadata(validMetadata({ copyright: '2026 Wangtao Xie' }), { env, fetchImpl });
+  const patch = calls.find((call) => new URL(call.url).pathname === '/v1/appStoreVersions/version-1' && call.options.method === 'PATCH');
+  assert.ok(patch);
+  assert.deepEqual(JSON.parse(patch.options.body), {
+    data: {
+      type: 'appStoreVersions',
+      id: 'version-1',
+      attributes: { copyright: '2026 Wangtao Xie' },
+    },
+  });
+  assert.deepEqual(result.versionChanges, [{ field: 'copyright', action: 'updated' }]);
+});
+
+test('apply without copyright does not overwrite the existing version copyright', async () => {
+  const env = await keyEnvironment();
+  const { calls, fetchImpl } = makeApplyFetch({ existingCopyright: '2026 Existing Owner' });
+  const result = await applyMetadata(validMetadata(), { env, fetchImpl });
+  assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/appStoreVersions/version-1' && call.options.method === 'PATCH'), false);
+  assert.equal('versionChanges' in result, false);
 });
 
 test('apply POST includes only version-localization fields and relationship', async () => {

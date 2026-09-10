@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../services/core/app_settings_service.dart';
+import '../../../services/core/advanced_feature_access.dart';
 import '../../models/registered_book_source.dart';
 import '../../services/book_download_cancellation.dart';
 import '../../caching/book_source_chapter_cache.dart';
@@ -69,13 +69,14 @@ class ReadingSourceBackend implements ReadingSourceBackendPort {
     this._chapterCache = const BookSourceChapterCache(),
     Future<bool> Function()? additionalProtocolsEnabled,
   }) : _additionalProtocolsEnabled =
-           additionalProtocolsEnabled ?? _loadAdditionalProtocolsEnabled;
+           additionalProtocolsEnabled ??
+           AdvancedFeatureAccess.additionalProtocolsEnabled;
 
   static const _cacheAuthRevisionPrefix =
       'reading_source_chapter_cache_auth_revision_v1:';
   // Bump when rule semantics change so persisted catalogs and content are
-  // reparsed. Revision 2 includes the OnlyOne and JS-followed-by-## fixes.
-  static const _ruleEngineRevision = 2;
+  // reparsed. Revision 3 includes the Yiove template, Java, and catalog fixes.
+  static const _ruleEngineRevision = 3;
 
   final SourceRuntime Function() _runtime;
   final BookSourceChapterCache _chapterCache;
@@ -302,14 +303,9 @@ class ReadingSourceBackend implements ReadingSourceBackendPort {
   Future<void> _ensureEnabled() async {
     if (!await _additionalProtocolsEnabled()) {
       throw const BookSourceProtocolException(
-        'Additional source protocols are disabled in advanced settings.',
+        'This source is unavailable for the current account or settings.',
       );
     }
-  }
-
-  static Future<bool> _loadAdditionalProtocolsEnabled() async {
-    final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(additionalSourceProtocolsPreferenceKey) == true;
   }
 }
 

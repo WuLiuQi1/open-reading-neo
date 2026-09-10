@@ -24,6 +24,10 @@ class SourceRuleEngine implements SourceRuleSelectorPort {
   SourceRuleScript get _scripts => SourceRuleScript(
     selectors: this,
     scriptEvaluatorProvider: scriptEvaluatorProvider,
+    interpolateScript: (document, context, script) =>
+        _interpolation(document).interpolate(script, context),
+    interpolateScriptAsync: (document, context, script) =>
+        _interpolation(document).interpolateAsync(script, context),
   );
 
   @override

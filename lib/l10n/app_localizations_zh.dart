@@ -339,8 +339,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookSourcesProtocolGroupAdditional => '其他协议书源';
 
   @override
-  String get bookSourcesAdvancedFeatureRequired =>
-      '请先在“高级功能”中开启“更多书源协议”，再导入该书源。';
+  String get bookSourcesAdvancedFeatureRequired => '当前账号或设置暂不支持此书源。';
 
   @override
   String get bookSourcesNoWorkingSources => '没有书源通过实际搜索检测，本次未导入任何书源。';
@@ -2646,11 +2645,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firstHomeSupportPaperSemanticLabel => '开元阅读开发者的自愿支持说明';
 
   @override
-  String get settingsSupportDevelopmentCardTitle => '支持高级功能';
+  String get settingsSupportDevelopmentCardTitle => '支持开发';
 
   @override
-  String get settingsSupportDevelopmentCardSubtitle =>
-      '当前所有功能免费。支持完全自愿，用于持续开发。';
+  String get settingsSupportDevelopmentCardSubtitle => '捐赠完全自愿，用于支持持续开发。';
 
   @override
   String get settingsAccountGuestTitle => '登录开元阅读';
@@ -2803,23 +2801,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountSignOut => '退出登录';
 
   @override
-  String get accountSupportTitle => '支持高级功能';
+  String get accountSupportTitle => '高级会员';
 
   @override
-  String get accountSupportFreeTitle => '当前所有功能免费';
+  String get accountSupportFreeSubtitle => '基础阅读功能可免费使用。';
 
   @override
-  String get accountSupportFreeSubtitle => '支持完全自愿，不会解锁 WebDAV 或其他功能。';
+  String get accountSupportAction => '开通高级会员';
 
   @override
-  String get accountSupportPurchaseNotice =>
-      '高级版目前仅用于学习并跑通购买流程，暂时没有实际高级功能。购买高级版与捐赠几乎没有区别；如果你愿意，可以购买高级版支持一下项目。';
-
-  @override
-  String get accountSupportAction => '立即支持';
-
-  @override
-  String get accountSupporterBadge => '支持者';
+  String get accountSupporterBadge => '高级会员';
 
   @override
   String get accountPasswordLengthHint => '至少 12 个字符';
@@ -2873,7 +2864,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAiSaveAndEnable => '保存并启用';
 
   @override
-  String get settingsAboutTagline => '开源、跨平台、专注阅读';
+  String get settingsAboutTagline => '跨平台，专注阅读';
 
   @override
   String get settingsVersionLabel => '版本';
@@ -5708,7 +5699,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '正文修改会更新下方位置的 TXT。升级前的上传副本会保留，但不再跟随正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '自动识别 ORSP 和 通用书源，预览后再导入。';
+  String get bookSourcesImportIntro => '自动识别书源，预览确认后导入。';
 
   @override
   String get bookSourcesImportInputStep => '选择书源';
@@ -5889,6 +5880,144 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceApplyFailed => '未能保存整理结果，请重试';
+
+  @override
+  String get settingsQqGroup => 'QQ 群';
+
+  @override
+  String get settingsOpenSourceTitle => '开源说明';
+
+  @override
+  String get settingsOpenSourceDetails =>
+      '除高级功能外，其余功能全部开源。开源部分遵循 AGPL-3.0 协议，具体范围以 GitHub 仓库为准。';
+
+  @override
+  String get premiumLifetimeTitle => '永久高级会员';
+
+  @override
+  String get premiumLifetimeCaption => '一次购买 · 无自动续费';
+
+  @override
+  String get premiumBenefitsTitle => '会员权益';
+
+  @override
+  String get premiumProtocolsBenefit => '导入和使用更多兼容的书源协议。';
+
+  @override
+  String get premiumPrivateNetworkBenefit => '访问你信任的本机、局域网或私有网络书源。';
+
+  @override
+  String get premiumSourceNotice => '会员不提供书籍内容或书源地址，第三方服务可能另行收费。';
+
+  @override
+  String get premiumSetupHint => '解锁后，可在“设置 → 高级功能”中按需开启。';
+
+  @override
+  String get premiumBillingTitle => '购买说明';
+
+  @override
+  String get premiumBillingBody =>
+      '这是一次性购买的非消耗型商品，不是订阅，不会自动续费。实际价格以 App Store 显示为准，付款由 Apple 处理。';
+
+  @override
+  String get premiumRestoreHelp =>
+      '重新安装或更换设备后，请使用购买时的 Apple 账号及绑定的开元阅读账号恢复购买。恢复购买不会再次收费。';
+
+  @override
+  String get premiumMembershipTerms => '会员服务条款';
+
+  @override
+  String get premiumPrivacyPolicy => '隐私政策';
+
+  @override
+  String get premiumAppleEula => 'Apple 标准许可协议';
+
+  @override
+  String get premiumPurchaseConsent => '购买前，请阅读会员服务条款、隐私政策及 Apple 标准许可协议。';
+
+  @override
+  String get premiumAccountBindingTitle => '账号与权益';
+
+  @override
+  String get premiumAccountBindingBody =>
+      '购买验证后，会员权益绑定当前开元阅读账号，并在支持的平台间同步。设置入口会随会员状态显示；退出登录或权益被撤销后，高级功能将停用。请在购买前确认当前账号。';
+
+  @override
+  String get premiumRefundTitle => '申请退款';
+
+  @override
+  String get premiumRefundTerms =>
+      'App Store 购买的退款由 Apple 按适用规则审核处理。提交申请不代表退款已获批准；退款或撤销完成后，相应会员权益将失效。';
+
+  @override
+  String get premiumPrivacyPurchaseTitle => '购买与验证数据';
+
+  @override
+  String get premiumPrivacyPurchaseBody =>
+      'Apple 处理付款信息。应用会将商品标识和 Apple 签名的交易验证数据发送至开元阅读账号服务，用于验证购买、绑定和恢复会员权益。开发者不会从这项购买流程获得你的银行卡完整号码或 Apple 账号密码。';
+
+  @override
+  String get premiumPrivacyAccountTitle => '账号服务';
+
+  @override
+  String get premiumPrivacyAccountBody =>
+      '账号资料及会员权益记录由开元阅读账号服务处理，用于登录、安全验证和跨设备权益同步。支持与隐私问题可通过官网提供的联系方式反馈。';
+
+  @override
+  String get premiumPurchaseSuccess => '高级会员已解锁';
+
+  @override
+  String get premiumTestPurchaseVerified => '测试购买已验证，不会开通正式会员';
+
+  @override
+  String get premiumPurchaseRevoked => '此购买的会员权益已撤销';
+
+  @override
+  String get premiumRestoreSuccess => '购买已恢复，会员权益已同步';
+
+  @override
+  String get premiumRestoreEmpty => '未找到可恢复的购买。请确认 Apple 账号，或检查购买时绑定的开元阅读账号。';
+
+  @override
+  String get premiumPurchaseCanceled => '购买已取消';
+
+  @override
+  String get premiumPendingApproval => '正在等待 Apple 批准。批准并验证后会自动解锁。';
+
+  @override
+  String get premiumVerifying => '正在验证购买…';
+
+  @override
+  String get premiumRestoring => '正在恢复购买…';
+
+  @override
+  String get premiumRefundSubmitted => '退款申请已提交至 Apple，等待审核';
+
+  @override
+  String get premiumRefundNotFound =>
+      '此 Apple 账号下没有可申请退款的会员购买。你也可以前往 Apple 购买支持查看记录。';
+
+  @override
+  String get premiumApplePurchaseSupport => 'Apple 购买支持';
+
+  @override
+  String get premiumLinkFailed => '暂时无法打开链接，请稍后重试。';
+
+  @override
+  String get premiumSignInRequired => '请先登录开元阅读账号，再购买或恢复会员。';
+
+  @override
+  String get premiumRefundUnavailable => '暂时无法打开 Apple 退款界面，请通过 Apple 购买支持继续。';
+
+  @override
+  String get premiumOperationFailed => '操作暂未完成，请稍后重试。';
+
+  @override
+  String get premiumPurchaseConsentOther => '开通前，请阅读会员服务条款与隐私政策。';
+
+  @override
+  String get premiumBillingBodyOther =>
+      '可通过当前提供的开通或兑换方式解锁会员。价格与支付方式以购买渠道展示为准，会员权益经验证后绑定当前开元阅读账号。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -6226,8 +6355,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get bookSourcesProtocolGroupAdditional => '其他協議書源';
 
   @override
-  String get bookSourcesAdvancedFeatureRequired =>
-      '請先在「進階功能」中開啟「更多書源協議」，再匯入該書源。';
+  String get bookSourcesAdvancedFeatureRequired => '目前的帳號或設定暫不支援此書源。';
 
   @override
   String get bookSourcesNoWorkingSources => '沒有書源通過實際搜尋檢測，本次未匯入任何書源。';
@@ -8493,11 +8621,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get firstHomeSupportPaperSemanticLabel => '開元閱讀開發者的自願支持說明';
 
   @override
-  String get settingsSupportDevelopmentCardTitle => '支持進階功能';
+  String get settingsSupportDevelopmentCardTitle => '支持開發';
 
   @override
-  String get settingsSupportDevelopmentCardSubtitle =>
-      '目前所有功能免費。支持完全自願，用於持續開發。';
+  String get settingsSupportDevelopmentCardSubtitle => '捐贈完全自願，用於支持持續開發。';
 
   @override
   String get settingsAccountGuestTitle => '登入開元閱讀';
@@ -8650,23 +8777,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get accountSignOut => '登出';
 
   @override
-  String get accountSupportTitle => '支持進階功能';
+  String get accountSupportTitle => '高級會員';
 
   @override
-  String get accountSupportFreeTitle => '目前所有功能免費';
+  String get accountSupportFreeSubtitle => '基本閱讀功能可免費使用。';
 
   @override
-  String get accountSupportFreeSubtitle => '支持完全自願，不會解鎖 WebDAV 或其他功能。';
+  String get accountSupportAction => '開通高級會員';
 
   @override
-  String get accountSupportPurchaseNotice =>
-      '高級版目前僅用於學習並跑通購買流程，暫時沒有實際高級功能。購買高級版與捐贈幾乎沒有區別；如果你願意，可以購買高級版支持一下專案。';
-
-  @override
-  String get accountSupportAction => '立即支持';
-
-  @override
-  String get accountSupporterBadge => '支持者';
+  String get accountSupporterBadge => '高級會員';
 
   @override
   String get accountPasswordLengthHint => '至少 12 個字元';
@@ -8720,7 +8840,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get settingsAiSaveAndEnable => '儲存並啟用';
 
   @override
-  String get settingsAboutTagline => '開源、跨平台、專注閱讀';
+  String get settingsAboutTagline => '跨平台，專注閱讀';
 
   @override
   String get settingsVersionLabel => '版本';
@@ -11475,7 +11595,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '正文修改會更新下方位置的 TXT。升級前的上傳副本會保留，但不再跟隨正文修改。';
 
   @override
-  String get bookSourcesImportIntro => '自動識別 ORSP 和 通用書源，預覽後再匯入。';
+  String get bookSourcesImportIntro => '自動識別書源，預覽確認後匯入。';
 
   @override
   String get bookSourcesImportInputStep => '選擇書源';
@@ -11657,4 +11777,142 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get bookSourcesMaintenanceApplyFailed => '未能儲存整理結果，請重試';
+
+  @override
+  String get settingsQqGroup => 'QQ 群';
+
+  @override
+  String get settingsOpenSourceTitle => '開源說明';
+
+  @override
+  String get settingsOpenSourceDetails =>
+      '除進階功能外，其餘功能全部開源。開源部分遵循 AGPL-3.0 授權條款，具體範圍以 GitHub 儲存庫為準。';
+
+  @override
+  String get premiumLifetimeTitle => '永久高級會員';
+
+  @override
+  String get premiumLifetimeCaption => '一次購買 · 無自動續費';
+
+  @override
+  String get premiumBenefitsTitle => '會員權益';
+
+  @override
+  String get premiumProtocolsBenefit => '匯入及使用更多相容的書源協議。';
+
+  @override
+  String get premiumPrivateNetworkBenefit => '存取你信任的本機、區域網路或私人網路書源。';
+
+  @override
+  String get premiumSourceNotice => '會員不提供書籍內容或書源網址，第三方服務可能另行收費。';
+
+  @override
+  String get premiumSetupHint => '解鎖後，可在「設定 → 高級功能」中按需開啟。';
+
+  @override
+  String get premiumBillingTitle => '購買說明';
+
+  @override
+  String get premiumBillingBody =>
+      '這是一次性購買的非消耗型商品，並非訂閱，不會自動續費。實際價格以 App Store 顯示為準，付款由 Apple 處理。';
+
+  @override
+  String get premiumRestoreHelp =>
+      '重新安裝或更換裝置後，請使用購買時的 Apple 帳號及綁定的開元閱讀帳號恢復購買。恢復購買不會再次收費。';
+
+  @override
+  String get premiumMembershipTerms => '會員服務條款';
+
+  @override
+  String get premiumPrivacyPolicy => '隱私政策';
+
+  @override
+  String get premiumAppleEula => 'Apple 標準授權協議';
+
+  @override
+  String get premiumPurchaseConsent => '購買前，請閱讀會員服務條款、隱私政策及 Apple 標準授權協議。';
+
+  @override
+  String get premiumAccountBindingTitle => '帳號與權益';
+
+  @override
+  String get premiumAccountBindingBody =>
+      '購買驗證後，會員權益綁定目前的開元閱讀帳號，並在支援的平台間同步。設定入口會隨會員狀態顯示；登出或權益被撤銷後，高級功能將停用。請在購買前確認目前的帳號。';
+
+  @override
+  String get premiumRefundTitle => '申請退款';
+
+  @override
+  String get premiumRefundTerms =>
+      'App Store 購買的退款由 Apple 依適用規則審核處理。提交申請不代表退款已獲批准；退款或撤銷完成後，相應會員權益將失效。';
+
+  @override
+  String get premiumPrivacyPurchaseTitle => '購買與驗證資料';
+
+  @override
+  String get premiumPrivacyPurchaseBody =>
+      'Apple 處理付款資訊。應用程式會將商品識別碼和 Apple 簽署的交易驗證資料傳送至開元閱讀帳號服務，用於驗證購買、綁定及恢復會員權益。開發者不會從此購買流程取得你的銀行卡完整號碼或 Apple 帳號密碼。';
+
+  @override
+  String get premiumPrivacyAccountTitle => '帳號服務';
+
+  @override
+  String get premiumPrivacyAccountBody =>
+      '帳號資料及會員權益紀錄由開元閱讀帳號服務處理，用於登入、安全驗證及跨裝置權益同步。支援與隱私問題可透過官網提供的聯絡方式反映。';
+
+  @override
+  String get premiumPurchaseSuccess => '高級會員已解鎖';
+
+  @override
+  String get premiumTestPurchaseVerified => '測試購買已驗證，不會開通正式會員';
+
+  @override
+  String get premiumPurchaseRevoked => '此購買的會員權益已撤銷';
+
+  @override
+  String get premiumRestoreSuccess => '購買已恢復，會員權益已同步';
+
+  @override
+  String get premiumRestoreEmpty => '找不到可恢復的購買。請確認 Apple 帳號，或檢查購買時綁定的開元閱讀帳號。';
+
+  @override
+  String get premiumPurchaseCanceled => '購買已取消';
+
+  @override
+  String get premiumPendingApproval => '正在等待 Apple 核准。核准並驗證後會自動解鎖。';
+
+  @override
+  String get premiumVerifying => '正在驗證購買…';
+
+  @override
+  String get premiumRestoring => '正在恢復購買…';
+
+  @override
+  String get premiumRefundSubmitted => '退款申請已提交至 Apple，等待審核';
+
+  @override
+  String get premiumRefundNotFound =>
+      '此 Apple 帳號下沒有可申請退款的會員購買。你也可以前往 Apple 購買支援查看紀錄。';
+
+  @override
+  String get premiumApplePurchaseSupport => 'Apple 購買支援';
+
+  @override
+  String get premiumLinkFailed => '暫時無法開啟連結，請稍後重試。';
+
+  @override
+  String get premiumSignInRequired => '請先登入開元閱讀帳號，再購買或恢復會員。';
+
+  @override
+  String get premiumRefundUnavailable => '暫時無法開啟 Apple 退款畫面，請透過 Apple 購買支援繼續。';
+
+  @override
+  String get premiumOperationFailed => '操作暫未完成，請稍後重試。';
+
+  @override
+  String get premiumPurchaseConsentOther => '開通前，請閱讀會員服務條款與隱私政策。';
+
+  @override
+  String get premiumBillingBodyOther =>
+      '可透過目前提供的開通或兌換方式解鎖會員。價格與付款方式以購買管道顯示為準，會員權益經驗證後綁定目前的開元閱讀帳號。';
 }

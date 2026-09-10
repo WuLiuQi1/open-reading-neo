@@ -275,6 +275,7 @@ class BookSourceManagementController extends ChangeNotifier {
     await _runMutation(
       BookSourceManagementMutation.remove,
       () => _registry.remove(id),
+      refreshGroups: true,
     );
   }
 
@@ -293,9 +294,15 @@ class BookSourceManagementController extends ChangeNotifier {
     try {
       final sources = await _registry.removeAll(selected);
       if (!_isCurrentMutation(revision)) return;
+      final groups = await _registry.loadGroups();
+      if (!_isCurrentMutation(revision)) return;
       _emit(
         _state.copyWith(
           sources: sources,
+          groupOrder: groups,
+          selectedGroup: groups.contains(_state.selectedGroup)
+              ? _state.selectedGroup
+              : null,
           mutation: null,
           selectedSourceIds: const {},
           selectionMode: false,
@@ -492,8 +499,9 @@ class BookSourceManagementController extends ChangeNotifier {
 
   Future<bool> _runMutation(
     BookSourceManagementMutation mutation,
-    Future<List<RegisteredBookSource>> Function() operation,
-  ) async {
+    Future<List<RegisteredBookSource>> Function() operation, {
+    bool refreshGroups = false,
+  }) async {
     _loadRevision++;
     _healthRevision++;
     final revision = ++_mutationRevision;
@@ -503,7 +511,18 @@ class BookSourceManagementController extends ChangeNotifier {
     try {
       final sources = await operation();
       if (!_isCurrentMutation(revision)) return false;
-      _emit(_state.copyWith(sources: sources, mutation: null));
+      final groups = refreshGroups ? await _registry.loadGroups() : null;
+      if (!_isCurrentMutation(revision)) return false;
+      _emit(
+        _state.copyWith(
+          sources: sources,
+          groupOrder: groups,
+          selectedGroup: groups == null || groups.contains(_state.selectedGroup)
+              ? _state.selectedGroup
+              : null,
+          mutation: null,
+        ),
+      );
       return true;
     } on Object catch (error) {
       if (!_isCurrentMutation(revision)) return false;

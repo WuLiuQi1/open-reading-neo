@@ -16,6 +16,8 @@ import 'package:xxread/pages/book_sources/widgets/book_source_management_source_
 import 'package:xxread/pages/book_sources/widgets/book_source_cleanup_review_sheet.dart';
 import 'package:xxread/services/core/app_settings_service.dart';
 
+import 'support/premium_account.dart';
+
 void main() {
   setUp(() async {
     await BookSourceRegistry.resetForTesting();
@@ -113,7 +115,9 @@ void main() {
     tester,
   ) async {
     unmountPage(tester);
-    final settings = AppSettingsNotifier();
+    final account = PremiumTestAccount();
+    addTearDown(account.dispose);
+    final settings = AppSettingsNotifier(account: account);
     addTearDown(settings.dispose);
 
     await tester.pumpWidget(

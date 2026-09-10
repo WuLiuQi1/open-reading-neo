@@ -16,6 +16,8 @@ import 'package:xxread/pages/home/home_mobile_chrome.dart';
 import 'package:xxread/pages/home/home_shell_page.dart';
 import 'package:xxread/pages/home/widgets/home_bounce_navigation_item.dart';
 import 'package:xxread/pages/home/widgets/home_tablet_toolbar.dart';
+import 'package:xxread/pages/home/widgets/home_tablet_top_backdrop.dart';
+import 'package:xxread/services/library/download_task_controller.dart';
 import 'package:xxread/pages/settings/settings_page.dart';
 import 'package:xxread/services/ai/ai_chat_history_store.dart';
 import 'package:xxread/services/core/theme_notifier.dart';
@@ -155,7 +157,7 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   testWidgets(
-    'touch window breakpoints preserve desktop rail and narrow mode',
+    'wide touch and desktop windows use top navigation while phones stay compact',
     (tester) async {
       Future<void> verify(
         Size size,
@@ -213,8 +215,38 @@ void main() {
       await verify(
         const Size(1366, 1024),
         TargetPlatform.macOS,
+        true,
+        NavigationType.bottom,
+      );
+      await verify(
+        const Size(900, 450),
+        TargetPlatform.macOS,
+        true,
+        NavigationType.bottom,
+      );
+      await verify(
+        const Size(600, 900),
+        TargetPlatform.macOS,
+        true,
+        NavigationType.bottom,
+      );
+      await verify(
+        const Size(599, 900),
+        TargetPlatform.macOS,
         false,
-        NavigationType.rail,
+        NavigationType.bottom,
+      );
+      await verify(
+        const Size(1280, 720),
+        TargetPlatform.windows,
+        true,
+        NavigationType.bottom,
+      );
+      await verify(
+        const Size(1280, 720),
+        TargetPlatform.linux,
+        true,
+        NavigationType.bottom,
       );
       debugDefaultTargetPlatformOverride = null;
     },
@@ -260,6 +292,8 @@ void main() {
       true,
     );
     final boundaryKey = GlobalKey();
+    final downloads = _DownloadActivity();
+    addTearDown(downloads.dispose);
 
     Future<void> pumpSize(
       Size size, {
@@ -275,6 +309,9 @@ void main() {
             ChangeNotifierProvider.value(value: theme),
             ChangeNotifierProvider.value(value: webDav),
             ChangeNotifierProvider.value(value: account),
+            ChangeNotifierProvider<DownloadTaskController>.value(
+              value: downloads,
+            ),
           ],
           child: MaterialApp(
             locale: const Locale('zh'),
@@ -425,6 +462,34 @@ void main() {
       isTrue,
     );
     expect(tester.takeException(), isNull);
+    // Chapter progress notifications must not rebuild the shell while the
+    // download activity flag is unchanged; start/finish still update its icon.
+    final backdropFinder = find.byType(HomeTabletTopBackdrop);
+    final downloadIcon = find.descendant(
+      of: toolbar,
+      matching: find.byIcon(Icons.downloading_rounded),
+    );
+    final inactiveColor = tester.widget<Icon>(downloadIcon).color;
+    final inactiveBackdrop = tester.widget<HomeTabletTopBackdrop>(
+      backdropFinder,
+    );
+    downloads.reportActivity(true);
+    await tester.pump();
+    final activeBackdrop = tester.widget<HomeTabletTopBackdrop>(backdropFinder);
+    expect(activeBackdrop, isNot(same(inactiveBackdrop)));
+    expect(tester.widget<Icon>(downloadIcon).color, isNot(inactiveColor));
+    for (var progress = 0; progress < 3; progress++) {
+      downloads.reportActivity(true);
+      await tester.pump();
+      expect(
+        tester.widget<HomeTabletTopBackdrop>(backdropFinder),
+        same(activeBackdrop),
+      );
+    }
+    downloads.reportActivity(false);
+    await tester.pump();
+    expect(tester.widget<Icon>(downloadIcon).color, inactiveColor);
+
     final libraryGrid = tester.widget<GridView>(
       find.byKey(const ValueKey('library-cover-grid')),
     );
@@ -607,7 +672,42 @@ void main() {
           .ignoring,
       isFalse,
     );
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    await pumpSize(const Size(1366, 900));
+    await tester.tap(nav(HomeNavigationDestination.home));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 700)),
+    );
+    await tester.pump();
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(HomeTabletTopBackdrop), findsOneWidget);
+    expect(
+      tester.getTopLeft(nav(HomeNavigationDestination.home)).dy,
+      lessThan(100),
+    );
+    expect(
+      tester.getCenter(find.byType(HomeTabletToolbar)).dy,
+      closeTo(tester.getCenter(nav(HomeNavigationDestination.home)).dy, 0.1),
+    );
+    expect(tester.getTopLeft(continueCard).dx, 111);
+    expect(tester.getBottomRight(rhythmCard).dx, 1366 - 111);
+
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });
+}
+
+class _DownloadActivity extends DownloadTaskController {
+  bool _active = false;
+
+  @override
+  bool get hasActiveTasks => _active;
+
+  void reportActivity(bool active) {
+    _active = active;
+    notifyListeners();
+  }
 }

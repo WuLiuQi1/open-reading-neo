@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_js/flutter_js.dart';
 
@@ -9,12 +10,17 @@ import 'source_script_bootstrap.dart';
 import 'source_script_contract.dart';
 import 'source_script_host_api.dart';
 import 'source_script_state.dart';
+import 'source_javascriptcore_runtime.dart';
 
 export 'source_script_contract.dart';
 
 class QuickJsSourceScriptEvaluator implements SourceScriptEvaluator {
   QuickJsSourceScriptEvaluator({JavascriptRuntime? runtime})
-    : _runtime = runtime ?? getJavascriptRuntime(xhr: false),
+    : _runtime =
+          runtime ??
+          (Platform.isIOS || Platform.isMacOS
+              ? SourceJavaScriptCoreRuntime()
+              : getJavascriptRuntime(xhr: false)),
       _host = SourceScriptHostApi() {
     _runtime.onMessage(sourceScriptHostChannel, _host.handle);
   }
@@ -22,6 +28,7 @@ class QuickJsSourceScriptEvaluator implements SourceScriptEvaluator {
   final JavascriptRuntime _runtime;
   final SourceScriptHostApi _host;
   Future<void> _evaluationTail = Future<void>.value();
+  bool _disposed = false;
 
   @override
   Object? evaluate(String script, SourceScriptContext context) {
@@ -109,6 +116,7 @@ class QuickJsSourceScriptEvaluator implements SourceScriptEvaluator {
     Map<String, SourceScriptNetworkResult> networkResponses, [
     Map<String, SourceScriptInteractionResult> interactionResponses = const {},
   ]) {
+    if (_disposed) throw StateError('The source script evaluator is disposed.');
     final state = _host.beginInvocation(
       context,
       networkResponses,
@@ -196,7 +204,11 @@ class QuickJsSourceScriptEvaluator implements SourceScriptEvaluator {
   }
 
   @override
-  void dispose() => _runtime.dispose();
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _runtime.dispose();
+  }
 }
 
 class _SourceNetworkNeeded implements Exception {

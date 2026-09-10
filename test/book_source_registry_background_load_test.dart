@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
 import 'package:xxread/book_sources/source_engine/source_config.dart';
-import 'package:xxread/services/core/app_settings_service.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 
 void main() {
   setUp(() async {
@@ -83,6 +83,9 @@ void main() {
 
       final preferences = await SharedPreferences.getInstance();
       await preferences.setBool(additionalSourceProtocolsPreferenceKey, true);
+      expect(await AdvancedFeatureAccess.additionalProtocolsEnabled(), isFalse);
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
       expect(
         (await registry.loadRunnableInBackground()).map(_record),
         [reading, orsp].map(_record),

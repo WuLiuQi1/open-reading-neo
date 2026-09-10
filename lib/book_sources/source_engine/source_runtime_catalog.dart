@@ -13,6 +13,7 @@ import 'source_runtime_login.dart';
 import 'source_runtime_requests.dart';
 import 'source_runtime_rules.dart';
 import 'source_runtime_state.dart';
+import 'rules/source_rule_parser.dart' show splitSourceScriptRule;
 
 class SourceRuntimeCatalog {
   SourceRuntimeCatalog({
@@ -440,6 +441,7 @@ class SourceRuntimeCatalog {
     for (final groupName in const ['ruleSearch', 'ruleExplore']) {
       final rule = source.rule(groupName);
       final bookUrlRule = _rules.optionalRule(rule, 'bookUrl');
+      if (splitSourceScriptRule(bookUrlRule) != null) continue;
       final templateMatch = RegExp(
         r'\{\{\s*\$\.\.?([A-Za-z_]\w*)\s*\}\}',
       ).firstMatch(bookUrlRule);
@@ -650,6 +652,7 @@ Map<String, Object?> runtimeRuleStateFor(
   for (final groupName in const ['ruleSearch', 'ruleExplore']) {
     final rule = source.rule(groupName);
     final bookUrlRule = rules.optionalRule(rule, 'bookUrl');
+    if (splitSourceScriptRule(bookUrlRule) != null) continue;
     final templateMatch = RegExp(
       r'\{\{\s*\$\.\.?([A-Za-z_]\w*)\s*\}\}',
     ).firstMatch(bookUrlRule);

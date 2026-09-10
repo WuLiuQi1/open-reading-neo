@@ -16,6 +16,34 @@ List<Object?> evaluateSourceJsonPath(
   String path, {
   bool listMode = false,
 }) {
+  // Legado AnalyzeByJSonPath expands {$.path} inside literal metadata and
+  // chapter URLs before evaluating a standalone path.
+  if (path.contains(r'{$.')) {
+    final output = StringBuffer();
+    var offset = 0;
+    while (true) {
+      final start = path.indexOf(r'{$.', offset);
+      if (start < 0) break;
+      final parts = splitSourceRuleTopLevel(
+        path.substring(start),
+        '}',
+        limit: 2,
+      );
+      if (parts.length != 2) break;
+      output.write(path.substring(offset, start));
+      final values = evaluateSourceJsonPath(
+        root,
+        parts.first.substring(1),
+        listMode: true,
+      );
+      output.write(values.map((value) => value?.toString() ?? '').join('\n'));
+      offset = start + parts.first.length + 1;
+    }
+    if (offset > 0) {
+      output.write(path.substring(offset));
+      return [output.toString()];
+    }
+  }
   final matches = _evaluateSourceJsonPathMatches(root, path);
   if (listMode && matches.length == 1 && matches.first is List) {
     return List<Object?>.from(matches.first as List);
@@ -75,7 +103,11 @@ bool _usesJsonPathSyntax(String path) {
 }
 
 String normalizeLegacySourceJsonPath(String input) {
-  return input.replaceAllMapped(RegExp(r'\[\?\((.*?)\)\]'), (match) {
+  // Jayway accepts the legacy root-array spelling $.[*].
+  final normalized = input.startsWith(r'$.[')
+      ? r'$' + input.substring(2)
+      : input;
+  return normalized.replaceAllMapped(RegExp(r'\[\?\((.*?)\)\]'), (match) {
     return '[?${match.group(1)}]';
   });
 }

@@ -10,8 +10,19 @@ the library, open it, adjust fonts/themes and page-turning preferences, and add
 bookmarks or notes. Reading statistics are available in the app.
 
 Optional account features support Sign in with Apple and other sign-in methods.
-The lifetime in-app purchase uses StoreKit and server-side transaction
-verification. Restore Purchases is available on the account membership screen.
+The lifetime non-consumable in-app purchase (com.niki.xxread.premium.lifetime)
+uses StoreKit 2 and server-side transaction verification. It unlocks additional
+compatible source protocols and trusted local/private-network sources. These
+features become available under Settings > Advanced Features and require the
+member to enable them. Non-members do not see the advanced settings section.
+The membership screen describes both benefits before purchase, displays the
+App Store price, and provides readable membership terms, privacy information,
+and the Apple standard EULA. The purchase is one-time and does not auto-renew.
+Restore Purchases remains available to signed-in users, including active members,
+and explicitly synchronizes with the App Store before server verification.
+Please use the same Apple Account and linked Open Reading account to restore.
+Active members on iOS can open the system refund request sheet; Apple decides
+whether to approve the request. A submitted request is not treated as a refund.
 Provide a dedicated review account to test account functionality; do not use
 the developer's personal credentials.
 

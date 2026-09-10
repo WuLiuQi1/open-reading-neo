@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +15,8 @@ import '../../widgets/floating_subpage_scaffold.dart';
 import '../../widgets/qr_code_view.dart';
 import '../../widgets/side_toast.dart';
 import 'avatar_crop_page.dart';
+import 'premium_membership_page.dart';
+import 'premium_policy_page.dart';
 
 part 'parts/account_auth_part.dart';
 part 'parts/account_membership_part.dart';
@@ -335,11 +336,26 @@ class _AccountPageState extends State<AccountPage> {
       body: account.initialized
           ? ListView(
               padding: floatingSubpagePadding(context, bottom: 40),
-              children: account.mfaRequired
-                  ? _buildMfaChallenge(account)
-                  : user == null
-                  ? _buildSignedOut(account)
-                  : _buildSignedIn(account, user),
+              children: [
+                if (account.mfaRequired)
+                  ..._buildMfaChallenge(account)
+                else if (user == null)
+                  ..._buildSignedOut(account)
+                else
+                  ..._buildSignedIn(account, user),
+                const SizedBox(height: 16),
+                TextButton(
+                  key: const ValueKey('account-privacy-link'),
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => const PremiumPolicyPage(
+                        policy: PremiumPolicy.privacy,
+                      ),
+                    ),
+                  ),
+                  child: Text(context.l10n.premiumPrivacyPolicy),
+                ),
+              ],
             )
           : const Center(child: CircularProgressIndicator()),
     );
@@ -454,7 +470,11 @@ class _AccountPageState extends State<AccountPage> {
 
   Future<void> _openSupport() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => const _AccountSupportPage()),
+      MaterialPageRoute(
+        builder: (_) => PremiumMembershipPage(
+          account: context.read<MemberAccountController>(),
+        ),
+      ),
     );
   }
 

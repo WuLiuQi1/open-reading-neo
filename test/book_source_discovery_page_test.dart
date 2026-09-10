@@ -11,7 +11,7 @@ import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/services/book_source_client.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
-import 'package:xxread/services/core/app_settings_service.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 import 'package:xxread/book_sources/services/book_download_cancellation.dart';
 import 'package:xxread/book_sources/services/book_source_shelf_service.dart';
 import 'package:xxread/l10n/app_localizations.dart';
@@ -245,6 +245,8 @@ void main() {
         protocol: BookSourceProtocolKind.readingSource,
       ),
     ];
+    AdvancedFeatureAccess.premiumUnlocked = true;
+    addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
     SharedPreferences.setMockInitialValues({
       additionalSourceProtocolsPreferenceKey: true,
       'open_reading_book_sources_v1': jsonEncode(

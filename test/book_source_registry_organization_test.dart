@@ -114,6 +114,77 @@ void main() {
       expect((await restored.load()).single.id, 'source');
     },
   );
+
+  test(
+    'removing the last source clears groups and persists the empty state',
+    () async {
+      final storage = _MemoryRegistryStorage();
+      final registry = BookSourceRegistry(storage: storage);
+      await registry.upsert(_source(groups: const ['有成员']));
+      await registry.createGroup('空分组');
+
+      expect(await registry.remove('source'), isEmpty);
+      expect(await registry.loadGroups(), isEmpty);
+
+      final restored = BookSourceRegistry(
+        storage: _MemoryRegistryStorage(storage.raw),
+      );
+      expect(await restored.load(), isEmpty);
+      expect(await restored.loadGroups(), isEmpty);
+    },
+  );
+
+  test(
+    'bulk removing every source clears the complete group directory',
+    () async {
+      final registry = BookSourceRegistry(storage: _MemoryRegistryStorage());
+      await registry.upsertAll([
+        _source(id: 'a', groups: const ['甲']),
+        _source(id: 'b', groups: const ['乙']),
+      ]);
+      await registry.createGroup('空分组');
+
+      expect(await registry.removeAll(const ['a', 'b']), isEmpty);
+      expect(await registry.loadGroups(), isEmpty);
+    },
+  );
+
+  test(
+    'partial and ineffective removals preserve the explicit group directory',
+    () async {
+      final registry = BookSourceRegistry(storage: _MemoryRegistryStorage());
+      await registry.upsertAll([
+        _source(id: 'a', groups: const ['甲']),
+        _source(id: 'b', groups: const ['乙']),
+      ]);
+      await registry.createGroup('空分组');
+      final groups = await registry.loadGroups();
+
+      await registry.remove('missing');
+      expect(await registry.loadGroups(), groups);
+
+      await registry.removeAll(const ['missing']);
+      expect(await registry.loadGroups(), groups);
+
+      await registry.removeAll(const ['a']);
+      expect((await registry.load()).map((source) => source.id), ['b']);
+      expect(await registry.loadGroups(), groups);
+    },
+  );
+
+  test(
+    'ineffective removal does not clear manually created empty groups',
+    () async {
+      final registry = BookSourceRegistry(storage: _MemoryRegistryStorage());
+      await registry.createGroup('稍后添加');
+
+      await registry.remove('missing');
+      await registry.removeAll(const ['also-missing']);
+
+      expect(await registry.load(), isEmpty);
+      expect(await registry.loadGroups(), ['稍后添加']);
+    },
+  );
 }
 
 RegisteredBookSource _source({

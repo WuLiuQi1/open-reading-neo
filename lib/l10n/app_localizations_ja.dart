@@ -343,7 +343,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bookSourcesAdvancedFeatureRequired =>
-      '高度な機能で追加のブックソースプロトコルを有効にしてからインポートしてください。';
+      '現在のアカウントまたは設定では、このソースを利用できません。';
 
   @override
   String get bookSourcesNoWorkingSources =>
@@ -2674,11 +2674,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firstHomeSupportPaperSemanticLabel => '開元閲読の開発者からの任意支援についての手紙';
 
   @override
-  String get settingsSupportDevelopmentCardTitle => '高度な機能を支援';
+  String get settingsSupportDevelopmentCardTitle => '開発を支援';
 
   @override
-  String get settingsSupportDevelopmentCardSubtitle =>
-      '現在すべての機能が無料です。支援は任意で、継続的な開発に使われます。';
+  String get settingsSupportDevelopmentCardSubtitle => '寄付は任意で、継続的な開発を支援します。';
 
   @override
   String get settingsAccountGuestTitle => '開元閲読にログイン';
@@ -2832,24 +2831,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountSignOut => 'ログアウト';
 
   @override
-  String get accountSupportTitle => '高度な機能を支援';
+  String get accountSupportTitle => 'プレミアム会員';
 
   @override
-  String get accountSupportFreeTitle => '現在すべての機能が無料です';
+  String get accountSupportFreeSubtitle => '基本的な読書機能は無料で利用できます。';
 
   @override
-  String get accountSupportFreeSubtitle =>
-      '支援は任意で、WebDAV やその他の機能を解放するものではありません。';
+  String get accountSupportAction => 'プレミアムを購入';
 
   @override
-  String get accountSupportPurchaseNotice =>
-      'プレミアム版は現在、購入フローの学習と検証を目的としたもので、実際のプレミアム機能はまだありません。プレミアム版の購入は、実質的には寄付とほぼ同じです。プロジェクトを支援していただける場合は、プレミアム版をご購入ください。';
-
-  @override
-  String get accountSupportAction => '今すぐ支援';
-
-  @override
-  String get accountSupporterBadge => 'サポーター';
+  String get accountSupporterBadge => 'プレミアム会員';
 
   @override
   String get accountPasswordLengthHint => '12 文字以上';
@@ -2907,7 +2898,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsAiSaveAndEnable => '保存して有効化';
 
   @override
-  String get settingsAboutTagline => 'オープンソース・クロスプラットフォーム・読書に集中';
+  String get settingsAboutTagline => 'クロスプラットフォーム・読書に集中';
 
   @override
   String get settingsVersionLabel => 'バージョン';
@@ -5794,8 +5785,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '本文の編集は以下の場所のTXTに反映されます。アップグレード前のコピーは保持されますが、その後の編集は反映されません。';
 
   @override
-  String get bookSourcesImportIntro =>
-      'ORSP と 汎用書籍ソースを自動判別します。確認してからインポートしてください。';
+  String get bookSourcesImportIntro => 'ソースを自動認識します。確認してからインポートしてください。';
 
   @override
   String get bookSourcesImportInputStep => '書源を選択';
@@ -5982,4 +5972,147 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bookSourcesMaintenanceApplyFailed => '変更を保存できませんでした。再試行してください';
+
+  @override
+  String get settingsQqGroup => 'QQ グループ';
+
+  @override
+  String get settingsOpenSourceTitle => 'オープンソースについて';
+
+  @override
+  String get settingsOpenSourceDetails =>
+      '高度な機能を除き、すべての機能はオープンソースです。公開コードには AGPL-3.0 が適用されます。公開範囲は GitHub リポジトリをご確認ください。';
+
+  @override
+  String get premiumLifetimeTitle => '永久プレミアム';
+
+  @override
+  String get premiumLifetimeCaption => '買い切り · 自動更新なし';
+
+  @override
+  String get premiumBenefitsTitle => 'プレミアムの機能';
+
+  @override
+  String get premiumProtocolsBenefit => '追加の互換ソース形式をインポートして利用できます。';
+
+  @override
+  String get premiumPrivateNetworkBenefit =>
+      '信頼できる端末内・ローカルネットワーク・プライベートネットワークのソースにアクセスできます。';
+
+  @override
+  String get premiumSourceNotice =>
+      '書籍やソースのURLは含まれません。第三者のサービスには別途料金が発生する場合があります。';
+
+  @override
+  String get premiumSetupHint => '購入後、「設定 → 高度な機能」で必要な機能を有効にしてください。';
+
+  @override
+  String get premiumBillingTitle => '購入について';
+
+  @override
+  String get premiumBillingBody =>
+      '消費型ではない買い切り商品です。サブスクリプションや自動更新はありません。価格はApp Storeの表示に従い、支払いはAppleが処理します。';
+
+  @override
+  String get premiumRestoreHelp =>
+      '再インストールや機種変更後は、購入時のApple Accountと連携済みのOpen Readingアカウントで購入を復元してください。復元による再課金はありません。';
+
+  @override
+  String get premiumMembershipTerms => '会員サービス規約';
+
+  @override
+  String get premiumPrivacyPolicy => 'プライバシーポリシー';
+
+  @override
+  String get premiumAppleEula => 'Apple標準使用許諾契約';
+
+  @override
+  String get premiumPurchaseConsent =>
+      '購入前に会員サービス規約、プライバシーポリシー、Apple標準使用許諾契約をご確認ください。';
+
+  @override
+  String get premiumAccountBindingTitle => 'アカウントと利用権';
+
+  @override
+  String get premiumAccountBindingBody =>
+      '購入の検証後、プレミアムは現在のOpen Readingアカウントに連携され、対応プラットフォーム間で同期されます。ログアウトや利用権の取消しにより高度な機能は無効になります。購入前にアカウントをご確認ください。';
+
+  @override
+  String get premiumRefundTitle => '返金をリクエスト';
+
+  @override
+  String get premiumRefundTerms =>
+      'App Storeの返金はAppleが適用ルールに基づいて審査・処理します。申請の送信は承認を意味しません。返金・取消しされた購入の利用権は無効になります。';
+
+  @override
+  String get premiumPrivacyPurchaseTitle => '購入の検証データ';
+
+  @override
+  String get premiumPrivacyPurchaseBody =>
+      '支払い情報はAppleが処理します。購入の検証と利用権の連携・復元のため、商品IDとApple署名付き取引検証データをOpen Readingのアカウントサービスに送信します。この購入処理で開発者がカード番号全体やApple Accountのパスワードを受け取ることはありません。';
+
+  @override
+  String get premiumPrivacyAccountTitle => 'アカウントサービス';
+
+  @override
+  String get premiumPrivacyAccountBody =>
+      'ログイン、安全性の検証、端末間の利用権同期のため、Open Readingのアカウントサービスがアカウント情報と会員記録を処理します。サポートやプライバシーに関するお問い合わせは公式サイトの連絡先をご利用ください。';
+
+  @override
+  String get premiumPurchaseSuccess => 'プレミアムを有効にしました';
+
+  @override
+  String get premiumTestPurchaseVerified => 'テスト購入を検証しました。正式なプレミアムは有効になりません。';
+
+  @override
+  String get premiumPurchaseRevoked => 'この購入によるプレミアム利用権は取り消されました。';
+
+  @override
+  String get premiumRestoreSuccess => '購入を復元し、利用権を同期しました';
+
+  @override
+  String get premiumRestoreEmpty =>
+      '復元できる購入が見つかりませんでした。購入時のApple Accountと連携済みのOpen Readingアカウントをご確認ください。';
+
+  @override
+  String get premiumPurchaseCanceled => '購入をキャンセルしました';
+
+  @override
+  String get premiumPendingApproval => 'Appleの承認を待っています。承認と検証が完了すると有効になります。';
+
+  @override
+  String get premiumVerifying => '購入を検証中…';
+
+  @override
+  String get premiumRestoring => '購入を復元中…';
+
+  @override
+  String get premiumRefundSubmitted => '返金リクエストをAppleに送信しました。審査をお待ちください。';
+
+  @override
+  String get premiumRefundNotFound =>
+      'このApple Accountに返金対象の購入が見つかりませんでした。Appleの購入サポートで履歴をご確認ください。';
+
+  @override
+  String get premiumApplePurchaseSupport => 'Appleの購入サポート';
+
+  @override
+  String get premiumLinkFailed => 'リンクを開けませんでした。後でもう一度お試しください。';
+
+  @override
+  String get premiumSignInRequired => '購入や復元の前にOpen Readingにログインしてください。';
+
+  @override
+  String get premiumRefundUnavailable =>
+      'Apple の返金画面を開けません。Apple の購入サポートをご利用ください。';
+
+  @override
+  String get premiumOperationFailed => '操作を完了できませんでした。しばらくしてから再試行してください。';
+
+  @override
+  String get premiumPurchaseConsentOther => '開通前に会員サービス規約とプライバシーポリシーをご確認ください。';
+
+  @override
+  String get premiumBillingBodyOther =>
+      '利用可能な購入または引き換え方法でプレミアムを開通できます。価格と支払い方法は購入先の表示をご確認ください。検証済みの会員特典は現在の Open Reading アカウントに紐づきます。';
 }

@@ -341,7 +341,15 @@ extension SourceRuntimeCatalogReading on SourceRuntimeReading {
     final href = anchor?.attributes['href']?.trim() ?? '';
     if (href.isEmpty) return '';
     try {
-      return resolveSourceRequestUrl(document.baseUri, href);
+      final resolved = resolveSourceRequestUrl(document.baseUri, href);
+      final target = Uri.parse(_networkTarget(resolved));
+      // Custom chapter attributes often coexist with a JavaScript placeholder
+      // href. Only remember a fallback that can actually be requested.
+      if (!target.hasAuthority ||
+          (target.scheme != 'http' && target.scheme != 'https')) {
+        return '';
+      }
+      return resolved;
     } on FormatException {
       return '';
     } on BookSourceProtocolException catch (error) {

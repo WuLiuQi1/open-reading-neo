@@ -158,3 +158,19 @@ Apple 依据：[SDK 要求](https://developer.apple.com/news/upcoming-requiremen
 [API 密钥](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)、
 [构建号](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)、
 [隐私 API 声明](https://developer.apple.com/documentation/technotes/tn3183-adding-required-reason-api-entries-to-your-privacy-manifest)。
+
+
+## 2026-09-10 会员购买页补全
+
+- 购买页明确列出更多书源协议、内网书源两项权益，说明自行提供内容及开通后在设置中按需开启。
+- 商品仍为一次性非消耗型；价格直接使用 StoreKit 返回的本地化价格，无订阅或自动续费。
+- 保留 `in_app_purchase` 的 StoreKit 2 交易处理，恢复操作新增原生 `AppStore.sync()`，只由用户点按触发。
+- iOS 退款调用 `Transaction.beginRefundRequest(in:)`；显示提交结果，不把提交视为获批。
+- 会员条款、隐私说明可离线阅读；Apple 标准 EULA 与购买支持使用系统内置浏览器打开。
+- 条款可发布文本位于 `marketing/app-store/membership-terms.zh-Hans.md`，与本轮应用内条款保持一致。
+- 旧支持卡、独立购买按钮及不再使用的泛化权益文案已删除。
+
+这轮没有发布官网页面或提交 App Store。公开隐私政策 URL 仍需上线并在 App Store Connect 填写；
+应用内可读说明不替代公开 URL、真实保留/删除规则及隐私申报。原有账号自助删除、服务端
+App Store Server Notifications V2 退款/撤销同步仍需完成；客户端回到前台刷新会员状态不替代服务端通知。
+购买、恢复、退款及多账号绑定仍需使用真实沙盒 / TestFlight 候选包验证。

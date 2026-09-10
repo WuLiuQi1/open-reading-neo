@@ -166,12 +166,26 @@ const sourceScriptJavaCompatibility = r'''
     return list;
   }
   function __HashMap(value) { return __javaMap(typeof value === 'number' ? {} : value); }
+  const __Arrays = {
+    copyOfRange: (value, from, to) => {
+      const values = Array.from(value || []);
+      const start = Number(from);
+      const end = Number(to);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > values.length) {
+        throw new RangeError('Arrays.copyOfRange index out of bounds');
+      }
+      if (start > end) throw new RangeError('Arrays.copyOfRange from is greater than to');
+      const copy = values.slice(start, end);
+      while (copy.length < end - start) copy.push(0);
+      return copy;
+    }
+  };
   const __javaImports = {
     String: __JavaString, Base64: __Base64,
     SecretKeySpec: __SecretKeySpec, IvParameterSpec: __IvParameterSpec,
     Cipher: __Cipher, Mac: __Mac, MessageDigest: __MessageDigest,
     URLEncoder: __urlEncoder, URLDecoder: __urlDecoder,
-    ArrayList: __ArrayList, HashMap: __HashMap
+    ArrayList: __ArrayList, HashMap: __HashMap, Arrays: __Arrays
   };
   const __javaClasses = {
     'java.lang.String': __JavaString,
@@ -182,6 +196,7 @@ const sourceScriptJavaCompatibility = r'''
     'java.util.ArrayList': __ArrayList,
     'java.util.HashMap': __HashMap,
     'java.util.LinkedHashMap': __HashMap,
+    'java.util.Arrays': __Arrays,
     'java.security.MessageDigest': __MessageDigest,
     'javax.crypto.Cipher': __Cipher,
     'javax.crypto.Mac': __Mac,

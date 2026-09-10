@@ -22,6 +22,7 @@ class MemberAccountController extends ChangeNotifier {
     MemberAccountSummaryCache? summaryCache,
     PendingDeviceAuthorizationStore? pendingAuthorizationStore,
     AccountAuthCallbackBridge? authCallbackBridge,
+    ApplePurchaseStore? appleStore,
   }) : _api = api ?? MemberAccountApiClient(),
        _avatarCache = avatarCache ?? AccountAvatarCache.instance,
        _summaryCache = summaryCache ?? const MemberAccountSummaryCache(),
@@ -30,15 +31,25 @@ class MemberAccountController extends ChangeNotifier {
        _authCallbackBridge = authCallbackBridge ?? AccountAuthCallbackBridge() {
     _applePurchase = ApplePremiumPurchaseService(
       productId: appleProductId,
-      verify: (purchase) => _api.submitApplePurchase(
-        productId: purchase.productID,
-        verificationData: purchase.verificationData.serverVerificationData,
-      ),
-      onMembership: (membership) {
+      store: appleStore,
+      accountIdProvider: () => _user?.id,
+      verify: (purchase) async {
+        final accountId = _user?.id;
+        if (accountId == null) {
+          throw const MemberAccountException('请先登录账号');
+        }
+        final membership = await _api.submitApplePurchase(
+          productId: purchase.productID,
+          verificationData: purchase.verificationData.serverVerificationData,
+        );
+        if (_user?.id != accountId) {
+          throw const MemberAccountException('账号已切换，请重新验证购买');
+        }
         _membership = membership;
         _updateSummaryFromAccount();
         unawaited(_persistSummary());
         notifyListeners();
+        return membership;
       },
     );
   }
@@ -81,6 +92,11 @@ class MemberAccountController extends ChangeNotifier {
       _authConfig?.providers ?? const MemberAuthProviders();
   MemberMembershipConfig? get membershipConfig => _membershipConfig;
   MemberMembership? get membership => _membership;
+
+  /// Premium access is only valid for the currently authenticated account and
+  /// the server-fetched membership value. Cached summaries are presentation
+  /// data and must never grant access.
+  bool get hasPremiumAccess => _user != null && _membership?.premium == true;
   MemberAccountSummary? get summary => _summary;
   MemberReferral? get referral => _referral;
   MemberMfaStatus? get mfaStatus => _mfaStatus;
@@ -527,6 +543,7 @@ class MemberAccountController extends ChangeNotifier {
       _membership = null;
       _referral = null;
       _mfaStatus = null;
+      notifyListeners();
       await _clearSummary();
     }
   });
@@ -557,15 +574,22 @@ class MemberAccountController extends ChangeNotifier {
       _summary = null;
       _referral = null;
       _mfaStatus = null;
+      notifyListeners();
       return;
     }
     _acceptAuthenticatedSession(session);
   }
 
   void _acceptAuthenticatedSession(MemberSession session) {
+    final accountChanged = _user?.id != session.user.id;
+    if (accountChanged) {
+      _membership = null;
+      _summary = null;
+    }
     _pendingSession = null;
     _user = session.user;
     _updateSummaryFromAccount();
+    if (accountChanged) notifyListeners();
   }
 
   void _updateSummaryFromAccount() {
@@ -616,8 +640,17 @@ class MemberAccountController extends ChangeNotifier {
   }
 
   Future<void> _loadMembershipValue() async {
-    _membership = await _api.membership();
+    try {
+      _membership = await _api.membership();
+    } catch (error) {
+      // A failed refresh must not preserve the previous account's grant.
+      _membership = null;
+      _updateSummaryFromAccount();
+      notifyListeners();
+      rethrow;
+    }
     _updateSummaryFromAccount();
+    notifyListeners();
   }
 
   Future<void> _loadReferralValue() async {

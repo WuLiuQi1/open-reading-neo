@@ -107,7 +107,18 @@ void main(List<String> arguments) async {
           provider.ChangeNotifierProvider(
             create: (_) => BookSourceMaintenanceCoordinator(),
           ),
-          provider.ChangeNotifierProvider(create: (_) => AppSettingsNotifier()),
+          provider.ChangeNotifierProvider(
+            create: (_) => MemberAccountController()..initialize(),
+          ),
+          provider.ChangeNotifierProvider(
+            lazy: false,
+            create: (context) => AppSettingsNotifier(
+              account: provider.Provider.of<MemberAccountController>(
+                context,
+                listen: false,
+              ),
+            ),
+          ),
           provider.ChangeNotifierProvider(
             create: (_) => ReplaceRuleService()..load(),
           ),
@@ -134,9 +145,6 @@ void main(List<String> arguments) async {
                 listen: false,
               ),
             ),
-          ),
-          provider.ChangeNotifierProvider(
-            create: (_) => MemberAccountController()..initialize(),
           ),
         ],
         child: XxReadApp(

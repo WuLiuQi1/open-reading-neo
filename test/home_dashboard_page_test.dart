@@ -81,6 +81,7 @@ void main() {
   testWidgets('首页只保留继续阅读、阅读节奏和最近阅读', (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 740));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
     Widget buildApp(Size size) {
       return MaterialApp(
@@ -126,7 +127,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('首页'), findsOneWidget);
+    expect(find.text('首页'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('home-dashboard-wide-layout')),
+      findsOneWidget,
+    );
     expect(find.text('今日阅读计划'), findsNothing);
     expect(find.textContaining('AI'), findsNothing);
     expect(tester.takeException(), isNull);

@@ -51,7 +51,6 @@ import 'package:xxread/widgets/update_check_gate.dart';
 
 import 'custom_fonts_page.dart';
 
-part 'parts/settings_community_marks_part.dart';
 part 'parts/settings_appearance_part.dart';
 part 'parts/settings_about_part.dart';
 part 'parts/settings_layout_part.dart';

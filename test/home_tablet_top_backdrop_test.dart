@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -103,42 +104,47 @@ void main() {
   testWidgets('averages 1dp stripes without sparse-sampling artifacts', (
     tester,
   ) async {
-    final verticalStripes = await _renderBackdrop(
-      tester,
-      blurEnabled: true,
-      pattern: _BackdropPattern.fineVerticalStripes,
-    );
-    final horizontalStripes = await _renderBackdrop(
-      tester,
-      blurEnabled: true,
-      pattern: _BackdropPattern.fineHorizontalStripes,
-    );
-
-    final horizontalSamples = [
-      for (var x = 100; x <= 120; x++) _luminance(verticalStripes.pixel(x, 62)),
-    ];
-    final verticalSamples = [
-      for (var y = 54; y <= 70; y++)
-        _luminance(horizontalStripes.pixel(120, y)),
-    ];
-
-    for (final samples in [horizontalSamples, verticalSamples]) {
-      expect(
-        samples,
-        everyElement(inInclusiveRange(112.0, 144.0)),
-        reason:
-            'A real Gaussian convolution should average alternating 1dp '
-            'stripes to their middle tone.',
+    for (final dpr in [1.0, 2.0, 3.0]) {
+      final verticalStripes = await _renderBackdrop(
+        tester,
+        blurEnabled: true,
+        devicePixelRatio: dpr,
+        pattern: _BackdropPattern.fineVerticalStripes,
       );
-      final darkest = samples.reduce((a, b) => a < b ? a : b);
-      final lightest = samples.reduce((a, b) => a > b ? a : b);
-      expect(
-        lightest - darkest,
-        lessThanOrEqualTo(5),
-        reason:
-            'Adjacent pixels must not lock onto alternating stripe phases. '
-            'Large oscillation indicates sparse nearest-neighbour taps.',
+      final horizontalStripes = await _renderBackdrop(
+        tester,
+        blurEnabled: true,
+        devicePixelRatio: dpr,
+        pattern: _BackdropPattern.fineHorizontalStripes,
       );
+
+      final horizontalSamples = [
+        for (var x = 100; x <= 120; x++)
+          _luminance(verticalStripes.pixel(x, 62)),
+      ];
+      final verticalSamples = [
+        for (var y = 54; y <= 70; y++)
+          _luminance(horizontalStripes.pixel(120, y)),
+      ];
+
+      for (final samples in [horizontalSamples, verticalSamples]) {
+        expect(
+          samples,
+          everyElement(inInclusiveRange(112.0, 144.0)),
+          reason:
+              'A real Gaussian convolution should average alternating 1dp '
+              'stripes to their middle tone.',
+        );
+        final darkest = samples.reduce((a, b) => a < b ? a : b);
+        final lightest = samples.reduce((a, b) => a > b ? a : b);
+        expect(
+          lightest - darkest,
+          lessThanOrEqualTo(5),
+          reason:
+              'Adjacent pixels must not lock onto alternating stripe phases. '
+              'Large oscillation indicates sparse nearest-neighbour taps.',
+        );
+      }
     }
   });
 
@@ -174,6 +180,39 @@ void main() {
             'The edge spread at logical y=${sampleRows[row]} must stay within '
             '2dp across DPR 1, 2, and 3. Actual: $logicalSpreads.',
       );
+    }
+  });
+
+  testWidgets('clamps both texture axes on dense displays', (tester) async {
+    for (final dpr in [1.0, 2.0, 3.0]) {
+      for (final pattern in [
+        _BackdropPattern.verticalEdge,
+        _BackdropPattern.horizontalEdge,
+      ]) {
+        final pixels = await _renderBackdrop(
+          tester,
+          blurEnabled: true,
+          pattern: pattern,
+          devicePixelRatio: dpr,
+        );
+        final edgePoints = pattern == _BackdropPattern.verticalEdge
+            ? const [Offset(0, 24), Offset(319, 24)]
+            : const [Offset(120, 0), Offset(120, 167)];
+        expect(
+          _colorDistance(
+            pixels.pixel(edgePoints[0].dx.toInt(), edgePoints[0].dy.toInt()),
+            _dark,
+          ),
+          lessThanOrEqualTo(2),
+        );
+        expect(
+          _colorDistance(
+            pixels.pixel(edgePoints[1].dx.toInt(), edgePoints[1].dy.toInt()),
+            _light,
+          ),
+          lessThanOrEqualTo(2),
+        );
+      }
     }
   });
 
@@ -229,6 +268,7 @@ const _light = Color(0xFFF8F8F8);
 
 enum _BackdropPattern {
   verticalEdge,
+  horizontalEdge,
   checker,
   fineVerticalStripes,
   fineHorizontalStripes,
@@ -267,9 +307,19 @@ Future<_PixelBuffer> _renderBackdrop(
     );
   }
 
-  return (await tester.runAsync(
+  final pixels = (await tester.runAsync(
     () => _capture(boundaryKey, pixelRatio: devicePixelRatio),
   ))!;
+  final output = Platform.environment['TABLET_BLUR_PIXELS_DIR'];
+  if (output != null) {
+    await tester.runAsync(() async {
+      await Directory(output).create(recursive: true);
+      await File(
+        '$output/${pattern.name}-$devicePixelRatio-$blurEnabled.rgba',
+      ).writeAsBytes(pixels.bytes);
+    });
+  }
+  return pixels;
 }
 
 Future<_PixelBuffer> _capture(
@@ -283,7 +333,7 @@ Future<_PixelBuffer> _capture(
   image.dispose();
   return _PixelBuffer(
     data!.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-    (_sceneSize.width * pixelRatio).round(),
+    (boundary.size.width * pixelRatio).round(),
     pixelRatio,
   );
 }
@@ -443,6 +493,17 @@ class _BackdropPainter extends CustomPainter {
       paint.color = _light;
       canvas.drawRect(
         Rect.fromLTWH(_edgeX.toDouble(), 0, size.width - _edgeX, size.height),
+        paint,
+      );
+      return;
+    }
+
+    if (pattern == _BackdropPattern.horizontalEdge) {
+      paint.color = _dark;
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height / 2), paint);
+      paint.color = _light;
+      canvas.drawRect(
+        Rect.fromLTWH(0, size.height / 2, size.width, size.height / 2),
         paint,
       );
       return;

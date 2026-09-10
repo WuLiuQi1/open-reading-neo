@@ -142,6 +142,33 @@ void main() {
       },
     );
 
+    test('routes Mihomo IPv6 FakeDNS through the system client', () async {
+      final pinned = Dio()
+        ..httpClientAdapter = _SequenceAdapter([200], body: 'wrong-client');
+      final system = Dio()
+        ..httpClientAdapter = _SequenceAdapter([200], body: 'reachable');
+      final transport = SourceHttpTransport(
+        dio: pinned,
+        systemDio: system,
+        networkPolicy: BookSourceNetworkPolicy(
+          allowSyntheticDns: true,
+          lookup: (_) async => [InternetAddress('fdfe:dcba:9876::21b')],
+        ),
+      );
+      addTearDown(transport.close);
+
+      final response = await transport.send(
+        SourceRequestTemplate.parse(
+          'https://books.test/channel',
+          baseUri: Uri.parse('https://books.test'),
+        ),
+      );
+
+      expect(response.body, 'reachable');
+      expect((pinned.httpClientAdapter as _SequenceAdapter).requests, 0);
+      expect((system.httpClientAdapter as _SequenceAdapter).requests, 1);
+    });
+
     test(
       'falls back to the Android browser bridge after both Dart GET clients fail',
       () async {

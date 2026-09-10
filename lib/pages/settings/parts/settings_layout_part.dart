@@ -120,8 +120,10 @@ extension _SettingsLayoutPart on _SettingsPageState {
                 children: [
                   _buildDataServicesSection(l10n, webDavSync),
                   const SizedBox(height: 20),
-                  _buildAdvancedSettingsSection(l10n, appSettings),
-                  const SizedBox(height: 20),
+                  if (appSettings.advancedFeaturesUnlocked) ...[
+                    _buildAdvancedSettingsSection(l10n, appSettings),
+                    const SizedBox(height: 20),
+                  ],
                   _buildSupportSettingsSection(l10n),
                   const SizedBox(height: 20),
                   _buildAboutCard(),
@@ -165,8 +167,10 @@ extension _SettingsLayoutPart on _SettingsPageState {
       const SizedBox(height: 20),
       _buildGeneralSettingsSection(l10n, appSettings),
       const SizedBox(height: 20),
-      _buildAdvancedSettingsSection(l10n, appSettings),
-      const SizedBox(height: 20),
+      if (appSettings.advancedFeaturesUnlocked) ...[
+        _buildAdvancedSettingsSection(l10n, appSettings),
+        const SizedBox(height: 20),
+      ],
       _buildSupportSettingsSection(l10n),
       const SizedBox(height: 20),
       _buildAboutCard(),
@@ -356,6 +360,7 @@ extension _SettingsLayoutPart on _SettingsPageState {
           value: appSettings.additionalSourceProtocolsEnabled,
           onChanged: appSettings.setAdditionalSourceProtocolsEnabled,
           icon: Icons.extension_outlined,
+          persistPageSettings: false,
         ),
         _buildSwitchSetting(
           title: l10n.settingsPrivateBookSourceNetworkTitle,

@@ -6,7 +6,8 @@ extension _SettingsAboutPart on _SettingsPageState {
     final scheme = Theme.of(context).colorScheme;
     final palette = PageStyleHelper.palette(context);
     return Container(
-      padding: const EdgeInsets.all(20),
+      key: const ValueKey('settings-about-card'),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: BorderRadius.circular(18),
@@ -18,7 +19,7 @@ extension _SettingsAboutPart on _SettingsPageState {
           Row(
             children: [
               AppBrandIcon(
-                size: 48,
+                size: 44,
                 borderRadius: 12,
                 border: Border.all(
                   color: scheme.primary.withValues(alpha: 0.22),
@@ -46,165 +47,184 @@ extension _SettingsAboutPart on _SettingsPageState {
                   ],
                 ),
               ),
+              IconButton(
+                key: const ValueKey('settings-open-source-info'),
+                tooltip: l10n.settingsOpenSourceTitle,
+                onPressed: _showOpenSourceDetails,
+                icon: const Icon(Icons.info_outline_rounded, size: 20),
+                color: scheme.onSurfaceVariant,
+              ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           const Divider(height: 1),
           const SizedBox(height: 14),
           _buildAboutLine(l10n.settingsVersionLabel, _appVersion),
-          _buildAboutLine(l10n.settingsLicenseLabel, 'AGPL-3.0'),
-          const SizedBox(height: 8),
-          _buildOpenSourceLicensesLink(),
-          const SizedBox(height: 10),
-          _buildChangelogLink(),
-          const SizedBox(height: 14),
-          _buildCommunityButton(
-            onPressed: _checkForUpdates,
-            backgroundColor: scheme.primary,
-            foregroundColor: scheme.onPrimary,
-            icon: _isCheckingForUpdates
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: scheme.onPrimary,
-                    ),
-                  )
-                : const Icon(Icons.system_update_alt_rounded),
+          const SizedBox(height: 4),
+          _buildAboutNavigationLink(
+            key: const ValueKey('settings-open-source-licenses-link'),
+            title: l10n.openSourceLicensesTitle,
+            icon: Icons.balance_outlined,
+            onTap: _openSourceLicenses,
+          ),
+          _buildAboutNavigationLink(
+            key: const ValueKey('settings-changelog-link'),
+            title: l10n.changelogHistoryTitle,
+            icon: Icons.history_rounded,
+            onTap: _openChangelogHistory,
+          ),
+          _buildAboutNavigationLink(
+            key: const ValueKey('settings-check-updates-link'),
             title: l10n.updateCheckNow,
-            subtitle: l10n.updateCheckNowSubtitle,
+            icon: Icons.system_update_alt_rounded,
+            onTap: _isCheckingForUpdates ? null : _checkForUpdates,
+            trailing: _isCheckingForUpdates
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
           ),
-          const SizedBox(height: 10),
-          _buildCommunityButton(
-            onPressed: _openOfficialWebsite,
-            backgroundColor: const Color(0xFF2D6A4F),
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.language_rounded),
-            title: l10n.settingsOfficialWebsite,
-            subtitle: l10n.settingsOfficialWebsiteSubtitle,
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stack =
+                  constraints.maxWidth <
+                  240 * MediaQuery.textScalerOf(context).scale(1);
+              final width = stack
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 8) / 2;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _buildProjectButton(
+                      key: const ValueKey('settings-github-link'),
+                      onPressed: _openGithubRepo,
+                      backgroundColor: const Color(0xFF181717),
+                      icon: Image.asset(
+                        'assets/icons/brand_github.png',
+                        excludeFromSemantics: true,
+                      ),
+                      title: 'GitHub',
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _buildProjectButton(
+                      key: const ValueKey('settings-website-link'),
+                      onPressed: _openOfficialWebsite,
+                      backgroundColor: const Color(0xFF2D6A4F),
+                      icon: const AppBrandIcon(size: 20, borderRadius: 4),
+                      title: l10n.settingsOfficialWebsite,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 10),
-          _buildCommunityButton(
-            onPressed: _openGithubRepo,
-            backgroundColor: const Color(0xFF181717),
-            foregroundColor: Colors.white,
-            icon: const _GithubMark(),
-            title: 'GitHub',
-            subtitle: l10n.settingsViewSourceSubtitle,
-          ),
-          const SizedBox(height: 10),
-          _buildCommunityButton(
-            onPressed: _openTelegramChannel,
-            backgroundColor: const Color(0xFF229ED9),
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.send_rounded),
-            title: l10n.settingsTelegramChannel,
-            subtitle: l10n.settingsTelegramSubtitle,
-          ),
-          const SizedBox(height: 10),
-          _buildCommunityButton(
-            onPressed: _openQqChannel,
-            backgroundColor: const Color(0xFF12B7F5),
-            foregroundColor: Colors.white,
-            icon: const _QqMark(),
-            title: l10n.settingsQqChannel,
-            subtitle: l10n.settingsQqChannelSubtitle,
-          ),
-          const SizedBox(height: 10),
-          _buildCommunityButton(
-            onPressed: _openQqGroup,
-            backgroundColor: const Color(0xFF1677FF),
-            foregroundColor: Colors.white,
-            icon: const _QqMark(),
-            title: l10n.settingsJoinQqGroup,
-            subtitle: '1003560209',
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _buildCommunityButton(
+                key: const ValueKey('settings-qq-group-link'),
+                onPressed: _openQqGroup,
+                icon: Image.asset(
+                  'assets/icons/brand_qq.png',
+                  excludeFromSemantics: true,
+                ),
+                title: l10n.settingsQqGroup,
+              ),
+              _buildCommunityButton(
+                key: const ValueKey('settings-qq-channel-link'),
+                onPressed: _openQqChannel,
+                icon: Image.asset(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? 'assets/icons/brand_qq_channel_dark.png'
+                      : 'assets/icons/brand_qq_channel.png',
+                  excludeFromSemantics: true,
+                ),
+                title: l10n.settingsQqChannel,
+              ),
+              _buildCommunityButton(
+                key: const ValueKey('settings-telegram-link'),
+                onPressed: _openTelegramChannel,
+                icon: Image.asset(
+                  'assets/icons/brand_telegram.png',
+                  cacheWidth: 64,
+                  excludeFromSemantics: true,
+                ),
+                title: l10n.settingsTelegramChannel,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChangelogLink() {
+  void _showOpenSourceDetails() {
     final l10n = context.l10n;
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.58),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        key: const ValueKey('settings-changelog-link'),
-        onTap: _openChangelogHistory,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.changelogHistoryTitle,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      l10n.changelogHistorySubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
-            ],
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.settingsOpenSourceTitle),
+        content: Text(l10n.settingsOpenSourceDetails),
+        scrollable: true,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(
+              MaterialLocalizations.of(dialogContext).closeButtonLabel,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildOpenSourceLicensesLink() {
-    final l10n = context.l10n;
+  Widget _buildAboutNavigationLink({
+    required Key key,
+    required String title,
+    required IconData icon,
+    required VoidCallback? onTap,
+    Widget? trailing,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.58),
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
-        key: const ValueKey('settings-open-source-licenses-link'),
-        onTap: _openSourceLicenses,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.openSourceLicensesTitle,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      l10n.openSourceLicensesSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+        key: key,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
-            ],
+                const SizedBox(width: 8),
+                trailing ??
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ],
+            ),
           ),
         ),
       ),
@@ -225,71 +245,64 @@ extension _SettingsAboutPart on _SettingsPageState {
     );
   }
 
-  Widget _buildCommunityButton({
+  Widget _buildProjectButton({
+    required Key key,
     required VoidCallback onPressed,
     required Color backgroundColor,
-    required Color foregroundColor,
     required Widget icon,
     required String title,
-    required String subtitle,
   }) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: double.infinity,
-        minHeight: 60,
+    return FilledButton(
+      key: key,
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: backgroundColor,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
-      child: FilledButton(
-        onPressed: onPressed,
-        style:
-            FilledButton.styleFrom(
-              backgroundColor: backgroundColor,
-              foregroundColor: foregroundColor,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              elevation: 0,
-            ).copyWith(
-              overlayColor: WidgetStatePropertyAll(
-                foregroundColor.withValues(alpha: 0.12),
-              ),
-            ),
-        child: Row(
-          children: [
-            SizedBox(width: 24, height: 24, child: icon),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.1,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      color: foregroundColor.withValues(alpha: 0.72),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_outward_rounded,
-              size: 19,
-              color: foregroundColor.withValues(alpha: 0.78),
-            ),
-          ],
-        ),
+      child: Row(
+        children: [
+          SizedBox(width: 20, height: 20, child: icon),
+          const SizedBox(width: 8),
+          Expanded(child: Text(title)),
+          const SizedBox(width: 4),
+          const Icon(Icons.arrow_outward_rounded, size: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommunityButton({
+    required Key key,
+    required VoidCallback onPressed,
+    required Widget icon,
+    required String title,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return OutlinedButton(
+      key: key,
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        side: BorderSide(color: PageStyleHelper.palette(context).border),
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        visualDensity: VisualDensity.standard,
+        textStyle: Theme.of(context).textTheme.labelMedium,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 16, height: 16, child: icon),
+          const SizedBox(width: 4),
+          Flexible(child: Text(title)),
+        ],
       ),
     );
   }

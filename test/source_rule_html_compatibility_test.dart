@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/source_engine/rules/source_rule_html.dart';
 import 'package:xxread/book_sources/source_engine/source_config.dart';
 import 'package:xxread/book_sources/source_engine/scripting/source_script_contract.dart';
@@ -94,6 +95,25 @@ void main() {
     );
 
     expect(result, ['first.jpg']);
+  });
+
+  test('numeric terminal segments follow Legado attribute semantics', () {
+    final document = html_parser.parse(
+      '<table><tbody><tr><td>无分类</td></tr><tr 0="玄幻"><td>有分类</td></tr></tbody></table>',
+    );
+    final rows = document.querySelectorAll('tr');
+
+    expect(evaluateSourceHtmlRule([rows.first], '0', listMode: false), isEmpty);
+    expect(evaluateSourceHtmlRule([rows.last], '0', listMode: false), ['玄幻']);
+  });
+
+  test('invalid CSS outside the terminal attribute fallback still fails', () {
+    final document = html_parser.parse('<div>正文</div>');
+
+    expect(
+      () => evaluateSourceHtmlRule([document.body!], 'div[', listMode: false),
+      throwsA(isA<BookSourceProtocolException>()),
+    );
   });
 
   test(

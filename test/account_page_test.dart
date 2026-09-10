@@ -142,6 +142,15 @@ void main() {
     await tester.pump();
     expect(find.text('支持高级功能'), findsNothing);
     expect(find.text('当前所有功能免费'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('account-privacy-link')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey('account-privacy-link')));
+    await tester.pumpAndSettle();
+    expect(find.text('隐私政策'), findsOneWidget);
+    expect(find.text('购买与验证数据'), findsOneWidget);
   });
 
   testWidgets('premium member receives the exclusive account card', (
@@ -181,7 +190,7 @@ void main() {
       find.byKey(const ValueKey('settings-account-premium-badge')),
       findsOneWidget,
     );
-    expect(find.text('支持者'), findsOneWidget);
+    expect(find.text('高级会员'), findsOneWidget);
     expect(find.text('永久高级版已解锁'), findsOneWidget);
     expect(find.text('PREMIUM'), findsOneWidget);
     final avatar = tester.widget<Container>(
@@ -306,17 +315,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('account-support')));
       await tester.pumpAndSettle();
-      expect(find.text('当前所有功能免费'), findsOneWidget);
-      expect(
-        find.text(
-          '高级版目前仅用于学习并跑通购买流程，暂时没有实际高级功能。购买高级版与捐赠几乎没有区别；如果你愿意，可以购买高级版支持一下项目。',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('account-premium-purchase-notice')),
-        findsOneWidget,
-      );
+      expect(find.text('永久高级会员'), findsOneWidget);
+      expect(find.text('更多书源协议'), findsOneWidget);
+      expect(find.text('允许内网书源'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('account-redemption-code')),
         findsOneWidget,

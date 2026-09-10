@@ -11,14 +11,16 @@ import '../../book_sources/networking/book_source_network_policy.dart';
 import '../../models/home_navigation_destination.dart';
 import '../../utils/font_catalog_helper.dart';
 import '../../utils/page_transitions.dart';
+import '../account/member_account_controller.dart';
+import 'advanced_feature_access.dart';
 import 'custom_font_service.dart';
 import 'display_refresh_rate_controller.dart';
 import 'online_font_service.dart';
 
-const String additionalSourceProtocolsPreferenceKey =
-    'additional_source_protocols_v1';
-const String privateBookSourceNetworkPreferenceKey =
-    'private_book_source_network_v1';
+export 'advanced_feature_access.dart'
+    show
+        additionalSourceProtocolsPreferenceKey,
+        privateBookSourceNetworkPreferenceKey;
 
 enum LibraryLayoutMode { card, grid }
 
@@ -69,6 +71,7 @@ class AppSettingsNotifier extends ChangeNotifier {
       LibraryBookOpenAnimation.minimalFade;
   LibraryBookOpenAnimationPace _libraryBookOpenAnimationPace =
       LibraryBookOpenAnimationPace.fast;
+  final MemberAccountController? _account;
   bool _additionalSourceProtocolsEnabled = false;
   bool _privateBookSourceNetworkEnabled = false;
   bool _powerSavingMode = false;
@@ -81,6 +84,7 @@ class AppSettingsNotifier extends ChangeNotifier {
   bool _isDisposed = false;
 
   AppSettingsNotifier({
+    this._account,
     CustomFontService? customFontService,
     OnlineFontService? onlineFontService,
     DisplayRefreshRateController? displayRefreshRateController,
@@ -88,6 +92,8 @@ class AppSettingsNotifier extends ChangeNotifier {
        _onlineFontService = onlineFontService ?? OnlineFontService(),
        _displayRefreshRateController =
            displayRefreshRateController ?? DisplayRefreshRateController() {
+    _account?.addListener(_handleMembershipChanged);
+    _syncAdvancedFeatureAccess();
     _loadSettings();
   }
 
@@ -125,9 +131,23 @@ class AppSettingsNotifier extends ChangeNotifier {
       _libraryBookOpenAnimation;
   LibraryBookOpenAnimationPace get libraryBookOpenAnimationPace =>
       _libraryBookOpenAnimationPace;
+  bool get advancedFeaturesUnlocked => _account?.hasPremiumAccess ?? false;
   bool get additionalSourceProtocolsEnabled =>
-      _additionalSourceProtocolsEnabled;
-  bool get privateBookSourceNetworkEnabled => _privateBookSourceNetworkEnabled;
+      advancedFeaturesUnlocked && _additionalSourceProtocolsEnabled;
+  bool get privateBookSourceNetworkEnabled =>
+      advancedFeaturesUnlocked && _privateBookSourceNetworkEnabled;
+
+  void _syncAdvancedFeatureAccess() {
+    AdvancedFeatureAccess.premiumUnlocked = advancedFeaturesUnlocked;
+    BookSourceNetworkPolicy.preferredPrivateNetwork =
+        privateBookSourceNetworkEnabled;
+  }
+
+  void _handleMembershipChanged() {
+    _syncAdvancedFeatureAccess();
+    notifyListeners();
+  }
+
   bool get powerSavingMode => _powerSavingMode;
 
   /// 用户自定义导入的字体列表（在线字体不在此列）。
@@ -290,6 +310,7 @@ class AppSettingsNotifier extends ChangeNotifier {
     await _customFontService.initialize();
     await _onlineFontService.initialize();
     final prefs = await SharedPreferences.getInstance();
+    if (_isDisposed) return;
     final storedLocale =
         prefs.getString(_keyAppLocale) ?? prefs.getString(_keyLegacyLocale);
     _applyLocaleCode(storedLocale ?? 'system', notify: false);
@@ -365,8 +386,7 @@ class AppSettingsNotifier extends ChangeNotifier {
         prefs.getBool(additionalSourceProtocolsPreferenceKey) ?? false;
     _privateBookSourceNetworkEnabled =
         prefs.getBool(privateBookSourceNetworkPreferenceKey) ?? false;
-    BookSourceNetworkPolicy.preferredPrivateNetwork =
-        _privateBookSourceNetworkEnabled;
+    _syncAdvancedFeatureAccess();
     _powerSavingMode =
         prefs.getBool(DisplayRefreshRateController.preferenceKey) ?? false;
     await _restoreSelectedFonts(prefs);
@@ -636,6 +656,7 @@ class AppSettingsNotifier extends ChangeNotifier {
   }
 
   Future<void> setAdditionalSourceProtocolsEnabled(bool value) async {
+    if (value && !advancedFeaturesUnlocked) return;
     if (_additionalSourceProtocolsEnabled == value) return;
     _additionalSourceProtocolsEnabled = value;
     notifyListeners();
@@ -644,9 +665,10 @@ class AppSettingsNotifier extends ChangeNotifier {
   }
 
   Future<void> setPrivateBookSourceNetworkEnabled(bool value) async {
+    if (value && !advancedFeaturesUnlocked) return;
     if (_privateBookSourceNetworkEnabled == value) return;
     _privateBookSourceNetworkEnabled = value;
-    BookSourceNetworkPolicy.preferredPrivateNetwork = value;
+    _syncAdvancedFeatureAccess();
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(privateBookSourceNetworkPreferenceKey, value);
@@ -711,6 +733,7 @@ class AppSettingsNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _account?.removeListener(_handleMembershipChanged);
     _isDisposed = true;
     _onlineFontProgressTimer?.cancel();
     _onlineFontProgressNotifier.dispose();

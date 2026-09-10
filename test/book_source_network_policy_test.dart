@@ -185,7 +185,91 @@ void main() {
       ),
       isFalse,
     );
+    expect(BookSourceNetworkPolicy.isSyntheticDnsAddress(address), isTrue);
   });
+
+  test('Mihomo IPv6 synthetic DNS range is separately opt-in', () async {
+    final synthetic = InternetAddress('fdfe:dcba:9876::21b');
+
+    expect(BookSourceNetworkPolicy.isBlockedAddress(synthetic), isTrue);
+    expect(
+      BookSourceNetworkPolicy.isBlockedAddress(
+        synthetic,
+        allowSyntheticDns: true,
+      ),
+      isFalse,
+    );
+    expect(BookSourceNetworkPolicy.isSyntheticDnsAddress(synthetic), isTrue);
+
+    final strictPolicy = BookSourceNetworkPolicy(
+      lookup: (_) async => [InternetAddress('198.18.2.30'), synthetic],
+    );
+    await expectLater(
+      strictPolicy.validate(Uri.parse('https://source.example/api')),
+      throwsA(isA<BookSourceProtocolException>()),
+    );
+
+    final optedInPolicy = BookSourceNetworkPolicy(
+      allowSyntheticDns: true,
+      lookup: (_) async => [InternetAddress('198.18.2.30'), synthetic],
+    );
+    await expectLater(
+      optedInPolicy.validate(Uri.parse('https://source.example/api')),
+      completes,
+    );
+  });
+
+  test('IPv6 synthetic DNS opt-in stays within the exact Mihomo /64', () {
+    for (final address in [
+      'fdfe:dcba:9875:ffff:ffff:ffff:ffff:ffff',
+      'fdfe:dcba:9876:1::1',
+      'fdfe:dcba:9877::1',
+      'fd00::1',
+      'fc00::1',
+      'fe80::1',
+    ]) {
+      final parsed = InternetAddress(address);
+      expect(
+        BookSourceNetworkPolicy.isBlockedAddress(
+          parsed,
+          allowSyntheticDns: true,
+        ),
+        isTrue,
+        reason: address,
+      );
+      expect(
+        BookSourceNetworkPolicy.isSyntheticDnsAddress(parsed),
+        isFalse,
+        reason: address,
+      );
+    }
+  });
+
+  test(
+    'IPv4-mapped synthetic DNS keeps the IPv4 policy and routing marker',
+    () {
+      final synthetic = InternetAddress('::ffff:198.18.0.7');
+      final private = InternetAddress('::ffff:192.168.1.7');
+
+      expect(BookSourceNetworkPolicy.isBlockedAddress(synthetic), isTrue);
+      expect(
+        BookSourceNetworkPolicy.isBlockedAddress(
+          synthetic,
+          allowSyntheticDns: true,
+        ),
+        isFalse,
+      );
+      expect(BookSourceNetworkPolicy.isSyntheticDnsAddress(synthetic), isTrue);
+      expect(
+        BookSourceNetworkPolicy.isBlockedAddress(
+          private,
+          allowSyntheticDns: true,
+        ),
+        isTrue,
+      );
+      expect(BookSourceNetworkPolicy.isSyntheticDnsAddress(private), isFalse);
+    },
+  );
 
   test(
     'private mode still rejects unspecified and multicast targets',

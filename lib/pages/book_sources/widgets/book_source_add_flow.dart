@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../book_sources/services/book_source_import_analyzer.dart';
+import '../../../services/core/advanced_feature_access.dart';
 import '../../../utils/localization_extension.dart';
 import '../controllers/book_source_add_controller.dart';
 import 'book_source_add_panel.dart';
@@ -97,10 +98,15 @@ class _BookSourceAddFlowState extends State<BookSourceAddFlow> {
     if (!_responsibilityAccepted || _controller.state.loading) return;
     final analysis = _controller.state.analysis;
     if (analysis == null) return;
-    if (analysis.kind == BookSourceImportKind.additional &&
-        !widget.additionalProtocolsEnabled) {
-      _controller.setError(context.l10n.bookSourcesAdvancedFeatureRequired);
-      return;
+    if (analysis.kind == BookSourceImportKind.additional) {
+      final enabled =
+          widget.additionalProtocolsEnabled &&
+          await AdvancedFeatureAccess.additionalProtocolsEnabled();
+      if (!mounted || _controller.state.loading) return;
+      if (!enabled) {
+        _controller.setError(context.l10n.bookSourcesAdvancedFeatureRequired);
+        return;
+      }
     }
     final result = await _controller.commit();
     if (mounted && result != null) Navigator.pop(context, result);

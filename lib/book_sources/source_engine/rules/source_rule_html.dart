@@ -63,6 +63,13 @@ List<Object?>? sourceHtmlTerminalValue(
     'textNodes' => nodes.map(sourceDirectTextNodes).toList(),
     'html' => nodes.map(_sourceCleanHtml).toList(),
     'all' => [nodes.map((node) => node.outerHtml).join()],
+    _ when _isNumericHtmlAttributeName(segment) =>
+      singleValue
+          ? _sourceAttributeValues(
+              nodes,
+              segment,
+            ).take(1).toList(growable: false)
+          : _sourceAttributeValues(nodes, segment).toList(growable: false),
     _
         when sourceHtmlAttributeNames.contains(segment.toLowerCase()) ||
             nodes.any((node) => node.attributes.containsKey(segment)) =>
@@ -72,6 +79,9 @@ List<Object?>? sourceHtmlTerminalValue(
     _ => null,
   };
 }
+
+bool _isNumericHtmlAttributeName(String value) =>
+    RegExp(r'^[0-9][A-Za-z0-9_.:-]*$').hasMatch(value);
 
 String _sourceCleanHtml(Element node) {
   final clone = node.clone(true);

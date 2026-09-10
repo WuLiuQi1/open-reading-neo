@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/services/book_source_import_analyzer.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
@@ -12,6 +13,7 @@ import 'package:xxread/l10n/app_localizations.dart';
 import 'package:xxread/pages/book_sources/controllers/book_source_add_controller.dart';
 import 'package:xxread/pages/book_sources/widgets/book_source_add_flow.dart';
 import 'package:xxread/pages/book_sources/widgets/book_source_add_panel.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 
 void main() {
   testWidgets('editing the address invalidates the previous preview', (
@@ -40,9 +42,7 @@ void main() {
       final analyzer = _Analyzer();
       await _open(tester, analyzer: analyzer);
       expect(
-        find.text(
-          'Automatically detects ORSP and Reading Source sources. Review before importing.',
-        ),
+        find.text('Automatically detects sources. Review before importing.'),
         findsOneWidget,
       );
       await _start(tester);
@@ -256,6 +256,92 @@ void main() {
     },
   );
 
+  testWidgets(
+    'additional source commit rechecks membership after the dialog opens',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        additionalSourceProtocolsPreferenceKey: true,
+      });
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
+      final analyzer = _Analyzer();
+      final controller = _CommitController(analyzer);
+      await _open(tester, controller: controller);
+      await _start(tester);
+      final importer = SourceImportService();
+      addTearDown(importer.close);
+      analyzer.pending.complete(
+        BookSourceImportAnalysis.additional(
+          importer.parseDecoded({
+            'bookSourceName': 'Reading Source example',
+            'bookSourceUrl': 'https://books.example',
+            'searchUrl': '/search?q={{key}}',
+            'ruleSearch': {'bookList': '.book'},
+            'ruleToc': {'chapterList': '.chapter'},
+            'ruleContent': {'content': '#content@text'},
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      AdvancedFeatureAccess.premiumUnlocked = false;
+      await tester.tap(find.byKey(const Key('bookSourceConnectButton')));
+      await tester.pumpAndSettle();
+      expect(controller.commits, 0);
+      expect(
+        find.text(
+          'This source is unavailable for the current account or settings.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('verified membership can commit an additional source', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      additionalSourceProtocolsPreferenceKey: true,
+    });
+    AdvancedFeatureAccess.premiumUnlocked = true;
+    addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
+    final analyzer = _Analyzer();
+    final controller = _CommitController(analyzer);
+    await _open(tester, controller: controller);
+    await _start(tester);
+    final importer = SourceImportService();
+    addTearDown(importer.close);
+    analyzer.pending.complete(
+      BookSourceImportAnalysis.additional(
+        importer.parseDecoded({
+          'bookSourceName': 'Reading Source example',
+          'bookSourceUrl': 'https://books.example',
+          'searchUrl': '/search?q={{key}}',
+          'ruleSearch': {'bookList': '.book'},
+          'ruleToc': {'chapterList': '.chapter'},
+          'ruleContent': {'content': '#content@text'},
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(await AdvancedFeatureAccess.additionalProtocolsEnabled(), isTrue);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('bookSourceConnectButton')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(const Key('bookSourceConnectButton')));
+    await tester.pump();
+    expect(controller.commits, 1);
+    expect(find.byType(BookSourceAddFlow), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('timeout shows a recovery message without opening error details', (
     tester,
   ) async {
@@ -335,6 +421,7 @@ Future<void> _open(
   WidgetTester tester, {
   _Analyzer? analyzer,
   _Registry? registry,
+  BookSourceAddController? controller,
   bool additionalProtocolsEnabled = true,
   Future<FilePickerResult?> Function()? pickFile,
 }) async {
@@ -364,10 +451,12 @@ Future<void> _open(
                     sheet: false,
                     additionalProtocolsEnabled: additionalProtocolsEnabled,
                     pickFile: pickFile,
-                    createController: () => BookSourceAddController(
-                      analyzer: analyzer ?? _Analyzer(),
-                      registry: registry ?? _Registry(),
-                    ),
+                    createController: () =>
+                        controller ??
+                        BookSourceAddController(
+                          analyzer: analyzer ?? _Analyzer(),
+                          registry: registry ?? _Registry(),
+                        ),
                   ),
                 ),
               ),
@@ -438,5 +527,18 @@ class _Registry extends BookSourceRegistry {
   Future<List<RegisteredBookSource>> upsert(RegisteredBookSource source) {
     writes++;
     return pending.future;
+  }
+}
+
+class _CommitController extends BookSourceAddController {
+  _CommitController(BookSourceImportAnalyzer analyzer)
+    : super(analyzer: analyzer);
+
+  int commits = 0;
+
+  @override
+  Future<BookSourceAddCommitResult?> commit() async {
+    commits++;
+    return null;
   }
 }

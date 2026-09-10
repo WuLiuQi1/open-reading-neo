@@ -25,6 +25,7 @@
 		D3E4F5A61F00000100DD0001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D3E4F5A51F00000100DD0001 /* PrivacyInfo.xcprivacy */; };
 		E4F5A6B71F00000100EE0001 /* IOSFrameRateController.m in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B51F00000100EE0001 /* IOSFrameRateController.m */; };
 		F5A6B7C81F00000100F50001 /* ReaderAloudMediaBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A6B7C71F00000100F50001 /* ReaderAloudMediaBridge.swift */; };
+		A7B8C9D01F00000100A70001 /* ApplePurchaseSupportBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B8C9CF1F00000100A70001 /* ApplePurchaseSupportBridge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +89,7 @@
 		E4F5A6B51F00000100EE0001 /* IOSFrameRateController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IOSFrameRateController.m; sourceTree = "<group>"; };
 		E4F5A6B61F00000100EE0001 /* IOSFrameRateController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IOSFrameRateController.h; sourceTree = "<group>"; };
 		F5A6B7C71F00000100F50001 /* ReaderAloudMediaBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ReaderAloudMediaBridge.swift; sourceTree = "<group>"; };
+		A7B8C9CF1F00000100A70001 /* ApplePurchaseSupportBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ApplePurchaseSupportBridge.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -177,6 +179,7 @@
 				C2D3E4F31F00000100CC0001 /* IncomingBookBridge.swift */,
 				C2D3E4F41F00000100CC0001 /* SceneDelegate.swift */,
 				F5A6B7C71F00000100F50001 /* ReaderAloudMediaBridge.swift */,
+				A7B8C9CF1F00000100A70001 /* ApplePurchaseSupportBridge.swift */,
 				E4F5A6B51F00000100EE0001 /* IOSFrameRateController.m */,
 				E4F5A6B61F00000100EE0001 /* IOSFrameRateController.h */,
 				D3E4F5A51F00000100DD0001 /* PrivacyInfo.xcprivacy */,
@@ -439,6 +442,7 @@
 				C2D3E4F61F00000100CC0001 /* SceneDelegate.swift in Sources */,
 				E4F5A6B71F00000100EE0001 /* IOSFrameRateController.m in Sources */,
 				F5A6B7C81F00000100F50001 /* ReaderAloudMediaBridge.swift in Sources */,
+				A7B8C9D01F00000100A70001 /* ApplePurchaseSupportBridge.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

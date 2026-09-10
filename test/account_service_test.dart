@@ -5,10 +5,299 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/services/account/account.dart';
 
 void main() {
+  test('Apple purchase requires login and binds the member UUID', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = _AccountAppleStore();
+    final controller = MemberAccountController(
+      appleStore: store,
+      api: _client(
+        _RouteAdapter((options) {
+          return switch (options.uri.path) {
+            '/api/v1/auth/password/login' => _json(
+              _session(
+                access: 'access',
+                refresh: 'refresh',
+                userId: _memberAccountId,
+              ),
+            ),
+            '/api/v1/membership' => _json({
+              'premium': false,
+              'features': {},
+              'entitlements': [],
+            }),
+            '/api/v1/membership/referral' => _json({
+              'invite_code': 'TEST',
+              'invite_url': 'https://example.test/invite',
+            }),
+            _ => _json({}),
+          };
+        }),
+        _MemoryTokenStore(),
+      ),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(store.close);
+
+    await expectLater(
+      controller.purchaseApplePremium(),
+      throwsA(isA<MemberAccountException>()),
+    );
+    expect(store.purchaseParam, isNull);
+
+    await controller.loginPassword('reader@example.com', 'password');
+    await controller.purchaseApplePremium();
+
+    expect(store.purchaseParam?.applicationUserName, _memberAccountId);
+  });
+
+  test(
+    'sandbox verification finishes StoreKit without granting access',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = _AccountAppleStore();
+      final controller = MemberAccountController(
+        appleStore: store,
+        api: _client(
+          _RouteAdapter((options) {
+            return switch (options.uri.path) {
+              '/api/v1/auth/password/login' => _json(
+                _session(
+                  access: 'access',
+                  refresh: 'refresh',
+                  userId: _memberAccountId,
+                ),
+              ),
+              '/api/v1/membership' => _json({
+                'premium': false,
+                'features': {},
+                'entitlements': [],
+              }),
+              '/api/v1/membership/referral' => _json({
+                'invite_code': 'TEST',
+                'invite_url': 'https://example.test/invite',
+              }),
+              '/api/v1/membership/apple/purchase' => _json({
+                'premium': false,
+                'test_purchase': true,
+                'features': {},
+                'entitlements': [],
+              }),
+              _ => _json({}),
+            };
+          }),
+          _MemoryTokenStore(),
+        ),
+      );
+      addTearDown(controller.dispose);
+      addTearDown(store.close);
+      await controller.loginPassword('reader@example.com', 'password');
+      await controller.purchaseApplePremium();
+
+      store.emit();
+      await pumpEventQueue();
+
+      expect(controller.hasPremiumAccess, isFalse);
+      expect(controller.membership?.testPurchase, isTrue);
+      expect(store.completed, 1);
+      expect(controller.applePurchase.phase, ApplePurchasePhase.testVerified);
+    },
+  );
+
+  for (final aggregatePremium in [false, true]) {
+    test(
+      'revoked Apple response preserves aggregate premium=$aggregatePremium',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final store = _AccountAppleStore();
+        final controller = MemberAccountController(
+          appleStore: store,
+          api: _client(
+            _RouteAdapter((options) {
+              return switch (options.uri.path) {
+                '/api/v1/auth/password/login' => _json(
+                  _session(
+                    access: 'access',
+                    refresh: 'refresh',
+                    userId: _memberAccountId,
+                  ),
+                ),
+                '/api/v1/membership' => _json({
+                  'premium': false,
+                  'features': {},
+                  'entitlements': [],
+                }),
+                '/api/v1/membership/referral' => _json({
+                  'invite_code': 'TEST',
+                  'invite_url': 'https://example.test/invite',
+                }),
+                '/api/v1/membership/apple/purchase' => _json({
+                  'premium': aggregatePremium,
+                  'purchase_status': 'revoked',
+                  'features': {},
+                  'entitlements': aggregatePremium
+                      ? [
+                          {
+                            'feature_key': 'premium',
+                            'source': 'card',
+                            'status': 'active',
+                            'granted_at': '2026-08-04T00:00:00Z',
+                            'expires_at': null,
+                          },
+                        ]
+                      : [],
+                }),
+                _ => _json({}),
+              };
+            }),
+            _MemoryTokenStore(),
+          ),
+        );
+        addTearDown(controller.dispose);
+        addTearDown(store.close);
+        await controller.loginPassword('reader@example.com', 'password');
+        await controller.purchaseApplePremium();
+
+        store.emit();
+        await pumpEventQueue();
+
+        expect(controller.hasPremiumAccess, aggregatePremium);
+        expect(controller.membership?.purchaseStatus, 'revoked');
+        expect(store.completed, 1);
+        expect(controller.applePurchase.phase, ApplePurchasePhase.revoked);
+      },
+    );
+  }
+
+  test(
+    'account switch announces revoked access before slow membership lookup',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      var switched = false;
+      final lookupStarted = Completer<void>();
+      final lookupResponse = Completer<ResponseBody>();
+      final controller = MemberAccountController(
+        api: _client(
+          _AsyncRouteAdapter((options) async {
+            switch (options.uri.path) {
+              case '/api/v1/auth/password/login':
+                return _json(
+                  _session(
+                    access: 'access',
+                    refresh: 'refresh',
+                    userId: switched ? 'b' : 'a',
+                  ),
+                );
+              case '/api/v1/membership':
+                if (switched) {
+                  lookupStarted.complete();
+                  return lookupResponse.future;
+                }
+                return _json({
+                  'premium': true,
+                  'features': {},
+                  'entitlements': [],
+                });
+              case '/api/v1/membership/referral':
+                return _json({
+                  'invite_code': 'TEST',
+                  'invite_url': 'https://example.test/invite',
+                });
+              default:
+                return _json({});
+            }
+          }),
+          _MemoryTokenStore(),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await controller.loginPassword('a@example.com', 'password');
+      final accessEvents = <bool>[];
+      controller.addListener(
+        () => accessEvents.add(controller.hasPremiumAccess),
+      );
+      switched = true;
+      final login = controller.loginPassword('b@example.com', 'password');
+      await lookupStarted.future.timeout(const Duration(seconds: 5));
+      expect(controller.hasPremiumAccess, isFalse);
+      expect(accessEvents.last, isFalse);
+      lookupResponse.complete(
+        _json({'premium': false, 'features': {}, 'entitlements': []}),
+      );
+      await login;
+    },
+  );
+
+  for (final transition in ['same account', 'switch account', 'logout']) {
+    test('StoreKit redelivery verifies atomically across $transition', () async {
+      SharedPreferences.setMockInitialValues({});
+      var userId = 'account-a';
+      final verificationStarted = Completer<void>();
+      final verificationResponse = Completer<ResponseBody>();
+      final store = _AccountAppleStore();
+      final controller = MemberAccountController(
+        appleStore: store,
+        api: _client(
+          _AsyncRouteAdapter((options) async {
+            switch (options.uri.path) {
+              case '/api/v1/auth/password/login':
+                return _json(
+                  _session(
+                    access: 'access',
+                    refresh: 'refresh',
+                    userId: userId,
+                  ),
+                );
+              case '/api/v1/membership':
+                return _json({
+                  'premium': false,
+                  'features': {},
+                  'entitlements': [],
+                });
+              case '/api/v1/membership/referral':
+                return _json({
+                  'invite_code': 'TEST',
+                  'invite_url': 'https://example.test/invite',
+                });
+              case '/api/v1/membership/apple/purchase':
+                verificationStarted.complete();
+                return verificationResponse.future;
+              default:
+                return _json({});
+            }
+          }),
+          _MemoryTokenStore(),
+        ),
+      );
+      addTearDown(controller.dispose);
+      addTearDown(store.close);
+      await controller.loginPassword('reader@example.com', 'password');
+      await controller.applePurchase.initialize();
+      // Replay an unfinished transaction without a purchase/restore button tap.
+      store.emit();
+      await verificationStarted.future.timeout(const Duration(seconds: 5));
+      if (transition == 'switch account') {
+        userId = 'account-b';
+        await controller.loginPassword('other@example.com', 'password');
+      } else if (transition == 'logout') {
+        await controller.logout();
+      }
+      verificationResponse.complete(
+        _json({'premium': true, 'features': {}, 'entitlements': []}),
+      );
+      await pumpEventQueue();
+      expect(controller.hasPremiumAccess, transition == 'same account');
+      expect(store.completed, transition == 'same account' ? 1 : 0);
+      if (transition != 'same account') {
+        expect(controller.applePurchase.error, isNotNull);
+      }
+    });
+  }
+
   test('account summary cache restores the settings card identity', () async {
     SharedPreferences.setMockInitialValues({});
     const cache = MemberAccountSummaryCache();
@@ -262,6 +551,118 @@ void main() {
         'https://open.xxread.top/support',
       );
       expect(controller.error, isNull);
+    },
+  );
+
+  test(
+    'premium access requires live membership and is revoked on logout',
+    () async {
+      final storage = _MemoryTokenStore();
+      final adapter = _RouteAdapter((options) {
+        return switch (options.uri.path) {
+          '/api/v1/auth/password/login' => _json(
+            _session(access: 'access-1', refresh: 'refresh-1'),
+          ),
+          '/api/v1/membership' => _json({
+            'premium': true,
+            'features': <String, bool>{},
+            'entitlements': <Object>[],
+          }),
+          '/api/v1/auth/logout' => _json({}),
+          _ => throw StateError('Unexpected route ${options.uri.path}'),
+        };
+      });
+      final controller = MemberAccountController(
+        api: _client(adapter, storage),
+      );
+
+      expect(controller.hasPremiumAccess, isFalse);
+      await controller.loginPassword('reader@example.com', 'secret');
+      expect(controller.hasPremiumAccess, isTrue);
+
+      await controller.logout();
+      expect(controller.hasPremiumAccess, isFalse);
+      expect(controller.membership, isNull);
+    },
+  );
+
+  test('cached premium never authorizes an anonymous controller', () async {
+    SharedPreferences.setMockInitialValues({
+      MemberAccountSummaryCache.storageKey: jsonEncode({
+        'user_id': 'cached-user',
+        'username': 'cached',
+        'effective_name': 'Cached',
+        'premium': true,
+      }),
+    });
+    final controller = MemberAccountController(
+      api: _client(
+        _RouteAdapter((options) => throw StateError('offline')),
+        _MemoryTokenStore(),
+      ),
+    );
+    await expectLater(
+      controller.initialize(),
+      throwsA(isA<MemberAccountException>()),
+    );
+    expect(controller.hasPremiumAccess, isFalse);
+  });
+
+  test('membership refresh revocation removes premium access', () async {
+    var premium = true;
+    final adapter = _RouteAdapter((options) {
+      return switch (options.uri.path) {
+        '/api/v1/auth/password/login' => _json(
+          _session(access: 'access-1', refresh: 'refresh-1'),
+        ),
+        '/api/v1/membership' => _json({
+          'premium': premium,
+          'features': <String, bool>{},
+          'entitlements': <Object>[],
+        }),
+        _ => throw StateError('Unexpected route ${options.uri.path}'),
+      };
+    });
+    final controller = MemberAccountController(
+      api: _client(adapter, _MemoryTokenStore()),
+    );
+    await controller.loginPassword('reader@example.com', 'secret');
+    expect(controller.hasPremiumAccess, isTrue);
+    premium = false;
+    await controller.loadMembership();
+    expect(controller.hasPremiumAccess, isFalse);
+  });
+
+  test(
+    'switching accounts cannot retain old premium when refresh fails',
+    () async {
+      var loginCount = 0;
+      final adapter = _RouteAdapter((options) {
+        return switch (options.uri.path) {
+          '/api/v1/auth/password/login' => _json(
+            _session(
+              access: 'access-${++loginCount}',
+              refresh: 'refresh-$loginCount',
+              userId: loginCount == 1 ? 'old-user' : 'new-user',
+            ),
+          ),
+          '/api/v1/membership' when loginCount == 1 => _json({
+            'premium': true,
+            'features': <String, bool>{},
+            'entitlements': <Object>[],
+          }),
+          '/api/v1/membership' => throw const SocketException('offline'),
+          _ => throw StateError('Unexpected route ${options.uri.path}'),
+        };
+      });
+      final controller = MemberAccountController(
+        api: _client(adapter, _MemoryTokenStore()),
+      );
+      await controller.loginPassword('reader@example.com', 'secret');
+      expect(controller.hasPremiumAccess, isTrue);
+      await controller.loginPassword('other@example.com', 'secret');
+      expect(controller.hasPremiumAccess, isFalse);
+      expect(controller.membership, isNull);
     },
   );
 
@@ -934,6 +1335,7 @@ Map<String, dynamic> _session({
   required String access,
   required String refresh,
   bool mfaRequired = false,
+  String? userId,
 }) => {
   'token_type': 'bearer',
   'access_token': access,
@@ -941,11 +1343,11 @@ Map<String, dynamic> _session({
   'access_expires_in': 900,
   'refresh_expires_in': 2592000,
   'mfa_required': mfaRequired,
-  'user': _user(),
+  'user': _user(id: userId),
 };
 
-Map<String, dynamic> _user() => {
-  'id': '6e29be31-ffeb-4699-bf69-8b37afe15504',
+Map<String, dynamic> _user({String? id}) => {
+  'id': id ?? '6e29be31-ffeb-4699-bf69-8b37afe15504',
   'email': 'reader@example.com',
   'email_verified': true,
   'username': 'reader',
@@ -1036,3 +1438,60 @@ class _MemoryTokenStore implements MemberTokenStore {
     this.mfaPending = mfaPending;
   }
 }
+
+class _AccountAppleStore implements ApplePurchaseStore {
+  final _stream = StreamController<List<PurchaseDetails>>.broadcast();
+  int completed = 0;
+  PurchaseParam? purchaseParam;
+
+  void emit() {
+    final purchase = PurchaseDetails(
+      productID: MemberAccountController.appleProductId,
+      verificationData: PurchaseVerificationData(
+        localVerificationData: '{}',
+        serverVerificationData: 'signed-jws',
+        source: 'app_store',
+      ),
+      transactionDate: '1785801600000',
+      status: PurchaseStatus.purchased,
+    )..pendingCompletePurchase = true;
+    _stream.add([purchase]);
+  }
+
+  Future<void> close() => _stream.close();
+  @override
+  Stream<List<PurchaseDetails>> get purchaseStream => _stream.stream;
+  @override
+  Future<bool> isAvailable() async => true;
+  @override
+  Future<ProductDetailsResponse> queryProductDetails(
+    Set<String> identifiers,
+  ) async => ProductDetailsResponse(
+    productDetails: [
+      ProductDetails(
+        id: MemberAccountController.appleProductId,
+        title: 'Premium',
+        description: 'Lifetime Premium',
+        price: '¥28',
+        rawPrice: 28,
+        currencyCode: 'CNY',
+      ),
+    ],
+    notFoundIDs: const [],
+  );
+  @override
+  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) async {
+    this.purchaseParam = purchaseParam;
+    return true;
+  }
+
+  @override
+  Future<Set<String>?> restorePurchases({String? applicationUserName}) async =>
+      null;
+  @override
+  Future<void> completePurchase(PurchaseDetails purchase) async {
+    completed++;
+  }
+}
+
+const _memberAccountId = '123e4567-e89b-42d3-a456-426614174000';

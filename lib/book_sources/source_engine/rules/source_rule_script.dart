@@ -6,14 +6,31 @@ import 'source_rule_parser.dart';
 import 'source_rule_port.dart';
 import 'source_rule_regex.dart';
 
+typedef SourceRuleScriptInterpolator =
+    String Function(
+      SourceRuleDocument document,
+      Object? context,
+      String script,
+    );
+typedef SourceRuleAsyncScriptInterpolator =
+    Future<String> Function(
+      SourceRuleDocument document,
+      Object? context,
+      String script,
+    );
+
 class SourceRuleScript {
   const SourceRuleScript({
     required this.selectors,
     required this.scriptEvaluatorProvider,
+    required this.interpolateScript,
+    required this.interpolateScriptAsync,
   });
 
   final SourceRuleSelectorPort selectors;
   final SourceScriptEvaluator Function()? scriptEvaluatorProvider;
+  final SourceRuleScriptInterpolator interpolateScript;
+  final SourceRuleAsyncScriptInterpolator interpolateScriptAsync;
 
   Object? evaluateInline(
     SourceRuleDocument document,
@@ -107,7 +124,8 @@ class SourceRuleScript {
     final input = scripted.selector.trim().isEmpty
         ? context ?? document.scriptResultValue
         : selectors.evaluateList(document, context, scripted.selector);
-    final output = _evaluate(document, input, scripted.script);
+    final script = interpolateScript(document, input, scripted.script);
+    final output = _evaluate(document, input, script);
     if (scripted.suffix.trim().isNotEmpty) {
       final nextDocument = _outputDocument(document, output);
       return selectors.evaluateList(
@@ -132,7 +150,12 @@ class SourceRuleScript {
             context,
             scripted.selector,
           );
-    final output = await _evaluateAsync(document, input, scripted.script);
+    final script = await interpolateScriptAsync(
+      document,
+      input,
+      scripted.script,
+    );
+    final output = await _evaluateAsync(document, input, script);
     if (scripted.suffix.trim().isNotEmpty) {
       final nextDocument = _outputDocument(document, output);
       return selectors.evaluateListAsync(
@@ -162,7 +185,8 @@ class SourceRuleScript {
             joinSeparator: joinSeparator,
             regexDotAll: regexDotAll,
           );
-    final output = _evaluate(document, input, scripted.script);
+    final script = interpolateScript(document, input, scripted.script);
+    final output = _evaluate(document, input, script);
     var value = '';
     if (scripted.suffix.trim().isNotEmpty) {
       final nextDocument = _outputDocument(document, output);
@@ -206,7 +230,12 @@ class SourceRuleScript {
             joinSeparator: joinSeparator,
             regexDotAll: regexDotAll,
           );
-    final output = await _evaluateAsync(document, input, scripted.script);
+    final script = await interpolateScriptAsync(
+      document,
+      input,
+      scripted.script,
+    );
+    final output = await _evaluateAsync(document, input, script);
     var value = '';
     if (scripted.suffix.trim().isNotEmpty) {
       final nextDocument = _outputDocument(document, output);

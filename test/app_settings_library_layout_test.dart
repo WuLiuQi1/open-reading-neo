@@ -1,13 +1,15 @@
 import 'dart:async';
 
+import 'support/premium_account.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/book_sources/networking/book_source_network_policy.dart';
 import 'package:xxread/services/core/app_settings_service.dart';
 import 'package:xxread/utils/page_transitions.dart';
 
-Future<AppSettingsNotifier> _loadNotifier() async {
-  final notifier = AppSettingsNotifier();
+Future<AppSettingsNotifier> _loadNotifier({PremiumTestAccount? account}) async {
+  final notifier = AppSettingsNotifier(account: account);
   if (notifier.isInitialized) return notifier;
 
   final initialized = Completer<void>();
@@ -57,7 +59,9 @@ void main() {
   });
 
   test('additional source protocols stay opt-in and persist', () async {
-    final notifier = await _loadNotifier();
+    final account = PremiumTestAccount();
+    addTearDown(account.dispose);
+    final notifier = await _loadNotifier(account: account);
     addTearDown(notifier.dispose);
 
     expect(notifier.additionalSourceProtocolsEnabled, isFalse);
@@ -66,13 +70,15 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(additionalSourceProtocolsPreferenceKey), isTrue);
 
-    final restored = await _loadNotifier();
+    final restored = await _loadNotifier(account: account);
     addTearDown(restored.dispose);
     expect(restored.additionalSourceProtocolsEnabled, isTrue);
   });
 
   test('private book-source network stays opt-in and persists', () async {
-    final notifier = await _loadNotifier();
+    final account = PremiumTestAccount();
+    addTearDown(account.dispose);
+    final notifier = await _loadNotifier(account: account);
     addTearDown(notifier.dispose);
 
     expect(notifier.privateBookSourceNetworkEnabled, isFalse);
@@ -83,11 +89,64 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(privateBookSourceNetworkPreferenceKey), isTrue);
 
-    final restored = await _loadNotifier();
+    final restored = await _loadNotifier(account: account);
     addTearDown(restored.dispose);
     expect(restored.privateBookSourceNetworkEnabled, isTrue);
     expect(BookSourceNetworkPolicy.preferredPrivateNetwork, isTrue);
   });
+
+  test(
+    'saved advanced preferences require live membership and revoke immediately',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        additionalSourceProtocolsPreferenceKey: true,
+        privateBookSourceNetworkPreferenceKey: true,
+      });
+      final account = PremiumTestAccount(premium: false);
+      final notifier = await _loadNotifier(account: account);
+      addTearDown(account.dispose);
+      addTearDown(notifier.dispose);
+
+      expect(notifier.advancedFeaturesUnlocked, isFalse);
+      expect(notifier.additionalSourceProtocolsEnabled, isFalse);
+      expect(notifier.privateBookSourceNetworkEnabled, isFalse);
+      expect(BookSourceNetworkPolicy.preferredPrivateNetwork, isFalse);
+
+      account.setPremium(true);
+      expect(notifier.advancedFeaturesUnlocked, isTrue);
+      expect(notifier.additionalSourceProtocolsEnabled, isTrue);
+      expect(notifier.privateBookSourceNetworkEnabled, isTrue);
+      expect(BookSourceNetworkPolicy.preferredPrivateNetwork, isTrue);
+
+      account.setPremium(false);
+      expect(notifier.additionalSourceProtocolsEnabled, isFalse);
+      expect(notifier.privateBookSourceNetworkEnabled, isFalse);
+      expect(BookSourceNetworkPolicy.preferredPrivateNetwork, isFalse);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(additionalSourceProtocolsPreferenceKey), isTrue);
+      expect(prefs.getBool(privateBookSourceNetworkPreferenceKey), isTrue);
+    },
+  );
+
+  test(
+    'nonmembers cannot enable advanced preferences through setters',
+    () async {
+      final notifier = await _loadNotifier();
+      addTearDown(notifier.dispose);
+      await notifier.setAdditionalSourceProtocolsEnabled(true);
+      await notifier.setPrivateBookSourceNetworkEnabled(true);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getBool(additionalSourceProtocolsPreferenceKey),
+        isNot(isTrue),
+      );
+      expect(
+        prefs.getBool(privateBookSourceNetworkPreferenceKey),
+        isNot(isTrue),
+      );
+      expect(BookSourceNetworkPolicy.preferredPrivateNetwork, isFalse);
+    },
+  );
 
   test('library layout and cover columns restore and persist', () async {
     SharedPreferences.setMockInitialValues({

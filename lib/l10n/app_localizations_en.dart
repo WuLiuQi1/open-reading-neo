@@ -358,7 +358,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesAdvancedFeatureRequired =>
-      'Enable More source protocols in Advanced features before importing this source.';
+      'This source is unavailable for the current account or settings.';
 
   @override
   String get bookSourcesNoWorkingSources =>
@@ -2770,11 +2770,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'A letter from the Open Reading developer asking for voluntary support';
 
   @override
-  String get settingsSupportDevelopmentCardTitle => 'Support advanced features';
+  String get settingsSupportDevelopmentCardTitle => 'Support development';
 
   @override
   String get settingsSupportDevelopmentCardSubtitle =>
-      'All features are currently free. Support is optional and helps fund continued development.';
+      'Donations are voluntary and support ongoing development.';
 
   @override
   String get settingsAccountGuestTitle => 'Sign in to Open Reading';
@@ -2936,24 +2936,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountSignOut => 'Sign out';
 
   @override
-  String get accountSupportTitle => 'Support advanced features';
-
-  @override
-  String get accountSupportFreeTitle => 'All features are free';
+  String get accountSupportTitle => 'Premium membership';
 
   @override
   String get accountSupportFreeSubtitle =>
-      'Support is optional and does not unlock WebDAV or any other feature.';
+      'Basic reading features are free to use.';
 
   @override
-  String get accountSupportPurchaseNotice =>
-      'Premium currently exists only to help us learn and validate the purchase flow; it does not include any actual premium features yet. Buying Premium is effectively much like making a donation. If you would like to support the project, you can purchase Premium.';
+  String get accountSupportAction => 'Get Premium';
 
   @override
-  String get accountSupportAction => 'Support now';
-
-  @override
-  String get accountSupporterBadge => 'Supporter';
+  String get accountSupporterBadge => 'Premium';
 
   @override
   String get accountPasswordLengthHint => 'At least 12 characters';
@@ -3013,8 +3006,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAiSaveAndEnable => 'Save and enable';
 
   @override
-  String get settingsAboutTagline =>
-      'Open source, cross-platform, focused on reading';
+  String get settingsAboutTagline => 'Cross-platform, focused on reading';
 
   @override
   String get settingsVersionLabel => 'Version';
@@ -6020,7 +6012,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bookSourcesImportIntro =>
-      'Automatically detects ORSP and Reading Source sources. Review before importing.';
+      'Automatically detects sources. Review before importing.';
 
   @override
   String get bookSourcesImportInputStep => 'Choose source';
@@ -6222,4 +6214,157 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get bookSourcesMaintenanceApplyFailed =>
       'Could not save changes. Try again.';
+
+  @override
+  String get settingsQqGroup => 'QQ Group';
+
+  @override
+  String get settingsOpenSourceTitle => 'Open-source details';
+
+  @override
+  String get settingsOpenSourceDetails =>
+      'All features except advanced features are open source. The open-source code is licensed under AGPL-3.0; see the GitHub repository for its scope.';
+
+  @override
+  String get premiumLifetimeTitle => 'Lifetime Premium';
+
+  @override
+  String get premiumLifetimeCaption => 'One-time purchase · No auto-renewal';
+
+  @override
+  String get premiumBenefitsTitle => 'Included with Premium';
+
+  @override
+  String get premiumProtocolsBenefit =>
+      'Import and use additional compatible source protocols.';
+
+  @override
+  String get premiumPrivateNetworkBenefit =>
+      'Access trusted sources on your device, local network or private network.';
+
+  @override
+  String get premiumSourceNotice =>
+      'Premium does not include books or source addresses. Third-party services may charge separately.';
+
+  @override
+  String get premiumSetupHint =>
+      'After unlocking, enable these options in Settings → Advanced features.';
+
+  @override
+  String get premiumBillingTitle => 'Purchase details';
+
+  @override
+  String get premiumBillingBody =>
+      'This is a non-consumable, one-time purchase, not a subscription. It does not renew automatically. The App Store displays the actual price and Apple handles payment.';
+
+  @override
+  String get premiumRestoreHelp =>
+      'After reinstalling or changing devices, restore using the Apple Account used to purchase and the linked Open Reading account. Restoring does not charge you again.';
+
+  @override
+  String get premiumMembershipTerms => 'Membership terms';
+
+  @override
+  String get premiumPrivacyPolicy => 'Privacy policy';
+
+  @override
+  String get premiumAppleEula => 'Apple standard EULA';
+
+  @override
+  String get premiumPurchaseConsent =>
+      'Before purchasing, read the membership terms, privacy policy and Apple standard EULA.';
+
+  @override
+  String get premiumAccountBindingTitle => 'Account and access';
+
+  @override
+  String get premiumAccountBindingBody =>
+      'After verification, Premium is linked to the current Open Reading account and syncs across supported platforms. Advanced settings become available with membership. Signing out or revocation disables advanced features. Check your account before purchasing.';
+
+  @override
+  String get premiumRefundTitle => 'Request a refund';
+
+  @override
+  String get premiumRefundTerms =>
+      'Apple reviews and processes App Store refund requests under its applicable rules. Submitting a request does not mean it is approved. Refunded or revoked purchases no longer provide the corresponding Premium access.';
+
+  @override
+  String get premiumPrivacyPurchaseTitle => 'Purchase verification data';
+
+  @override
+  String get premiumPrivacyPurchaseBody =>
+      'Apple handles payment information. The app sends the product identifier and Apple-signed transaction verification data to the Open Reading account service to verify purchases and link or restore Premium. This purchase flow does not give the developer your full payment-card number or Apple Account password.';
+
+  @override
+  String get premiumPrivacyAccountTitle => 'Account service';
+
+  @override
+  String get premiumPrivacyAccountBody =>
+      'The Open Reading account service processes account details and membership records for sign-in, security verification and access across devices. Contact us about support or privacy using the contact options on the official website.';
+
+  @override
+  String get premiumPurchaseSuccess => 'Premium unlocked';
+
+  @override
+  String get premiumTestPurchaseVerified =>
+      'Test purchase verified. Formal Premium was not activated.';
+
+  @override
+  String get premiumPurchaseRevoked =>
+      'Premium access from this purchase has been revoked.';
+
+  @override
+  String get premiumRestoreSuccess => 'Purchase restored. Premium is synced.';
+
+  @override
+  String get premiumRestoreEmpty =>
+      'No restorable purchase was found. Check your Apple Account and the Open Reading account linked to the purchase.';
+
+  @override
+  String get premiumPurchaseCanceled => 'Purchase canceled';
+
+  @override
+  String get premiumPendingApproval =>
+      'Waiting for Apple approval. Access unlocks after approval and verification.';
+
+  @override
+  String get premiumVerifying => 'Verifying your purchase…';
+
+  @override
+  String get premiumRestoring => 'Restoring purchases…';
+
+  @override
+  String get premiumRefundSubmitted =>
+      'Refund request sent to Apple for review.';
+
+  @override
+  String get premiumRefundNotFound =>
+      'No refundable Premium purchase was found for this Apple Account. You can also check your history with Apple purchase support.';
+
+  @override
+  String get premiumApplePurchaseSupport => 'Apple purchase support';
+
+  @override
+  String get premiumLinkFailed =>
+      'Unable to open this link. Please try again later.';
+
+  @override
+  String get premiumSignInRequired =>
+      'Sign in to Open Reading before purchasing or restoring Premium.';
+
+  @override
+  String get premiumRefundUnavailable =>
+      'The Apple refund sheet is unavailable. Continue through Apple purchase support.';
+
+  @override
+  String get premiumOperationFailed =>
+      'The operation could not be completed. Please try again.';
+
+  @override
+  String get premiumPurchaseConsentOther =>
+      'Please read the membership terms and privacy policy before unlocking Premium.';
+
+  @override
+  String get premiumBillingBodyOther =>
+      'Unlock Premium through the available purchase or redemption options. The purchase channel displays the price and payment method. Verified membership is linked to your current Open Reading account.';
 }

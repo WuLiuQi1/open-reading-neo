@@ -62,10 +62,8 @@ class ReadingSourceConfig {
     final contentRule = rule('ruleContent');
     if (rule('ruleToc').isEmpty || contentRule.isEmpty) return false;
     final content = _string(contentRule['content']).toLowerCase();
-    final imageStyle = _string(contentRule['imageStyle']).toUpperCase();
     final label = '$name\n$group'.toLowerCase();
     final emitsImages =
-        imageStyle == 'FULL' ||
         content.contains('<img') ||
         content.contains('@img') ||
         content.contains('img@') ||

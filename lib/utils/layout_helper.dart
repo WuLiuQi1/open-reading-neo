@@ -12,14 +12,24 @@ class LayoutHelper {
       ((width - tabletContentMaxWidth) / 2).clamp(0.0, double.infinity) +
       tabletPagePadding;
 
-  /// 按当前触控窗口判断，兼容 iPad mini、横屏大 iPad 与分屏。
-  /// 桌面平台仍保留侧栏；手机横屏不会仅因宽度变大进入平板模式。
+  /// 判断当前窗口是否使用顶部导航的宽屏布局。
+  ///
+  /// 触控设备保留高度门槛，避免手机横屏仅因宽度变大进入宽屏模式；
+  /// 桌面窗口只按宽度切换，让 macOS / Windows / Linux 复用平板顶部导航、
+  /// 标题动作、内容宽度和顶部背景。
   static bool usesTabletLayout(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final touchPlatform =
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android;
-    return touchPlatform && size.width >= 600 && size.height >= 500;
+    if (touchPlatform) {
+      return size.width >= 600 && size.height >= 500;
+    }
+    final desktopPlatform =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    return desktopPlatform && size.width >= 600;
   }
 
   // 屏幕尺寸断点
@@ -181,6 +191,9 @@ class LayoutHelper {
 
   // 获取导航栏类型
   static NavigationType getNavigationType(BuildContext context) {
+    if (usesTabletLayout(context)) {
+      return NavigationType.bottom;
+    }
     if (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android) {
       return NavigationType.bottom;

@@ -51,7 +51,7 @@ part 'parts/home_shell_layout_part.dart';
 /// 1) HomeShellPage 只负责「导航壳」：
 ///    - 手机：底部药丸导航 + PageView
 ///    - 平板：顶部悬浮导航 + 自适应内容区
-///    - 桌面：NavigationRail + 内容区
+///    - 桌面：复用平板顶部悬浮导航 + 自适应内容区
 ///
 /// 2) 真正的手机首页内容由 HomeMobileDashboardPage 渲染：
 ///    - 顶部毛玻璃标题栏
@@ -325,11 +325,14 @@ class _HomeShellPageState extends State<HomeShellPage> {
     if (!mounted) return;
     final destinationChanged =
         _selectedIndex != index || _targetTabIndex != null;
+    // onPageChanged and animateToPage completion can both settle the same
+    // transition. Do not rebuild the shell a second time without a state change.
+    if (!destinationChanged) return;
     setState(() {
       _selectedIndex = index;
       _targetTabIndex = null;
     });
-    if (destinationChanged) _scheduleHomeRefresh(index);
+    _scheduleHomeRefresh(index);
   }
 
   void _scheduleHomeRefresh(int index) {

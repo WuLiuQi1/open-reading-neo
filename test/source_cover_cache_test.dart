@@ -202,8 +202,21 @@ void main() {
       final bytes = await cache.load(
         Uri.parse('https://198.18.1.54/chapter/page.jpg'),
       );
+      final ipv6Bytes = await cache.load(
+        Uri.parse('https://[fdfe:dcba:9876::21b]/chapter/page.jpg'),
+      );
 
       expect(bytes.take(8), [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      expect(ipv6Bytes.take(8), [
+        0x89,
+        0x50,
+        0x4e,
+        0x47,
+        0x0d,
+        0x0a,
+        0x1a,
+        0x0a,
+      ]);
       await expectLater(
         cache.load(Uri.parse('https://192.168.1.8/private.jpg')),
         throwsA(isA<BookSourceProtocolException>()),

@@ -13,4 +13,4 @@ EXECUTABLE_NAME = OpenReading
 PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 Open Reading contributors. AGPL-3.0.
+PRODUCT_COPYRIGHT = Copyright © 2026 Wangtao Xie. AGPL-3.0.

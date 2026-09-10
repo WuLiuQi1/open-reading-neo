@@ -1297,6 +1297,47 @@ void main() {
     );
   });
 
+  test(
+    'Yiove catalog ignores JavaScript anchor fallbacks after attr URLs',
+    () async {
+      final transport = _FakeTransport({
+        'https://books.test/book/1': '''
+        <script>var topicHtml = "<ul><li><a href='javascript:void(0)' attr='https://books.test/chapter/1&name=test'>第一章</a></li></ul>";</script>
+      ''',
+        'https://books.test/chapter/1': '<div id="content">原创测试正文。</div>',
+      });
+      final raw = Map<String, dynamic>.from(_htmlSource().raw)
+        ..['ruleBookInfo'] = <String, String>{}
+        ..['ruleToc'] = {
+          'chapterList': r'''<js>
+result=result.match(/Html = "(.*?)"/)[1]
+unescape(result)
+</js>li a''',
+          'chapterName': r'text##^目录$',
+          'chapterUrl': r'attr##&name=.+',
+        };
+      final source = ReadingSourceConfig.fromJson(
+        raw,
+      ).toRegisteredSource(enabled: true);
+      final runtime = SourceRuntime(transport: transport);
+      addTearDown(runtime.close);
+
+      final chapters = await runtime.getChapters(
+        source,
+        'https://books.test/book/1',
+      );
+      expect(chapters.single.title, '第一章');
+      expect(chapters.single.id, 'https://books.test/chapter/1');
+      final content = await runtime.getChapterContent(
+        source,
+        bookId: 'https://books.test/book/1',
+        chapterId: chapters.single.id,
+      );
+      expect(content.content, contains('原创测试正文。'));
+      expect(transport.requests, hasLength(2));
+    },
+  );
+
   test('unified client blocks compatible requests while the toggle is off', () {
     final client = BookSourceClient();
     addTearDown(client.close);
@@ -1307,7 +1348,7 @@ void main() {
         isA<BookSourceProtocolException>().having(
           (error) => error.message,
           'message',
-          contains('disabled'),
+          contains('unavailable'),
         ),
       ),
     );

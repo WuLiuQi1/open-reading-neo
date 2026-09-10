@@ -10,7 +10,7 @@ import '../models/registered_book_source.dart';
 import '../protocol/book_source_protocol.dart';
 import 'book_source_client.dart';
 import 'book_source_registry_storage.dart';
-import '../../services/core/app_settings_service.dart';
+import '../../services/core/advanced_feature_access.dart';
 import 'book_source_health_configuration.dart';
 
 export 'book_source_registry_storage.dart' show BookSourceRegistryStorage;
@@ -87,9 +87,8 @@ class BookSourceRegistry {
   /// Compatible sources stay stored while the global advanced feature is off.
   Future<List<RegisteredBookSource>> loadRunnable() async {
     final loaded = await load();
-    final preferences = await SharedPreferences.getInstance();
     final additionalEnabled =
-        preferences.getBool(additionalSourceProtocolsPreferenceKey) ?? false;
+        await AdvancedFeatureAccess.additionalProtocolsEnabled();
     final runnable = loaded.where((source) => source.capabilities.isNotEmpty);
     if (additionalEnabled) return runnable.toList(growable: false);
     return runnable
@@ -102,9 +101,8 @@ class BookSourceRegistry {
   Future<List<RegisteredBookSource>> loadRunnableInBackground() async {
     final raw = await _readRaw();
     if (raw == null || raw.trim().isEmpty) return const [];
-    final preferences = await SharedPreferences.getInstance();
     final additionalEnabled =
-        preferences.getBool(additionalSourceProtocolsPreferenceKey) ?? false;
+        await AdvancedFeatureAccess.additionalProtocolsEnabled();
     final arguments = <String, Object>{
       'raw': raw,
       'additionalEnabled': additionalEnabled,
@@ -433,20 +431,26 @@ class BookSourceRegistry {
 
   Future<List<RegisteredBookSource>> remove(String id) async {
     return _mutate(() async {
-      final sources = (await _load())
-          .where((source) => source.id != id)
-          .toList();
-      return _saveAndPublish(sources);
+      final previous = await _load();
+      final sources = previous.where((source) => source.id != id).toList();
+      return _saveAndPublish(
+        sources,
+        groups: previous.isNotEmpty && sources.isEmpty ? const [] : null,
+      );
     });
   }
 
   Future<List<RegisteredBookSource>> removeAll(Iterable<String> ids) async {
     final removed = ids.toSet();
     return _mutate(() async {
-      final sources = (await _load())
+      final previous = await _load();
+      final sources = previous
           .where((source) => !removed.contains(source.id))
           .toList(growable: false);
-      return _saveAndPublish(sources);
+      return _saveAndPublish(
+        sources,
+        groups: previous.isNotEmpty && sources.isEmpty ? const [] : null,
+      );
     });
   }
 

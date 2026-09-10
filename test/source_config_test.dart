@@ -6,7 +6,7 @@ import 'package:xxread/book_sources/source_engine/source_config.dart';
 import 'package:xxread/book_sources/source_engine/source_explore.dart';
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
-import 'package:xxread/services/core/app_settings_service.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 
 Map<String, dynamic> _source({
   String name = 'Declarative source',
@@ -453,8 +453,16 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(additionalSourceProtocolsPreferenceKey, true);
+      expect(await AdvancedFeatureAccess.additionalProtocolsEnabled(), isFalse);
+      expect(await registry.loadRunnable(), isEmpty);
+      expect(await registry.loadRunnableInBackground(), isEmpty);
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
       expect(await registry.loadRunnable(), hasLength(1));
       expect(await registry.loadRunnableInBackground(), hasLength(1));
+      AdvancedFeatureAccess.premiumUnlocked = false;
+      expect(await registry.loadRunnable(), isEmpty);
+      expect(await registry.loadRunnableInBackground(), isEmpty);
     },
   );
 

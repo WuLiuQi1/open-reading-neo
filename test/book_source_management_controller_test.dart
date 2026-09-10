@@ -110,6 +110,50 @@ void main() {
     },
   );
 
+  test(
+    'single removal refreshes the group directory in controller state',
+    () async {
+      final registry = _Registry()..groupOrder = ['Only group'];
+      final source = _source('source', group: 'Only group');
+      final controller = BookSourceManagementController(registry: registry);
+      addTearDown(controller.dispose);
+      controller.replaceSources([source]);
+      controller.setGroup('Only group');
+      registry.mutationResult = const [];
+      registry.groupsAfterRemoval = const [];
+
+      await controller.removeSource(source.id);
+
+      expect(controller.state.sources, isEmpty);
+      expect(controller.state.availableGroups, isEmpty);
+      expect(controller.state.selectedGroup, isNull);
+    },
+  );
+
+  test(
+    'bulk removal refreshes the group directory in controller state',
+    () async {
+      final registry = _Registry()..groupOrder = ['Only group'];
+      final source = _source('source', group: 'Only group');
+      final controller = BookSourceManagementController(registry: registry);
+      addTearDown(controller.dispose);
+      controller.replaceSources([source]);
+      controller.setGroup('Only group');
+      controller.toggleSelectionMode();
+      controller.toggleSourceSelection(source.id);
+      registry.mutationResult = const [];
+      registry.groupsAfterRemoval = const [];
+
+      await controller.removeSelectedSources();
+
+      expect(controller.state.sources, isEmpty);
+      expect(controller.state.availableGroups, isEmpty);
+      expect(controller.state.selectedGroup, isNull);
+      expect(controller.state.selectionMode, isFalse);
+      expect(controller.state.selectedSourceIds, isEmpty);
+    },
+  );
+
   test('favorites filter intersects with groups and search', () {
     final controller = BookSourceManagementController();
     addTearDown(controller.dispose);
@@ -554,6 +598,7 @@ Map<String, dynamic>? _sourceConfig(
 
 class _Registry extends BookSourceRegistry {
   List<String> groupOrder = const [];
+  List<String>? groupsAfterRemoval;
 
   @override
   Future<List<String>> loadGroups() async => groupOrder;
@@ -574,6 +619,18 @@ class _Registry extends BookSourceRegistry {
     bool enabled,
   ) async {
     lastEnabledIds = ids.toSet();
+    return mutationResult;
+  }
+
+  @override
+  Future<List<RegisteredBookSource>> remove(String id) async {
+    groupOrder = groupsAfterRemoval ?? groupOrder;
+    return mutationResult;
+  }
+
+  @override
+  Future<List<RegisteredBookSource>> removeAll(Iterable<String> ids) async {
+    groupOrder = groupsAfterRemoval ?? groupOrder;
     return mutationResult;
   }
 

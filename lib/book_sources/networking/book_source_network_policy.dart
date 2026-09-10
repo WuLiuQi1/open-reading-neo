@@ -171,21 +171,20 @@ class BookSourceNetworkPolicy {
     if (bytes.length != 16) return true;
 
     // IPv4-mapped IPv6 addresses must inherit the IPv4 restrictions.
-    final isIpv4Mapped =
-        bytes.take(10).every((byte) => byte == 0) &&
-        bytes[10] == 0xff &&
-        bytes[11] == 0xff;
-    if (isIpv4Mapped) {
+    if (_isIpv4Mapped(bytes)) {
       return _isBlockedIpv4(
         bytes.sublist(12),
         allowSyntheticDns: allowSyntheticDns,
       );
     }
 
-    // Unspecified, loopback, and unique-local (fc00::/7) addresses.
+    // Unspecified, loopback, and unique-local (fc00::/7) addresses. Mihomo's
+    // documented fdfe:dcba:9876::/64 Fake-IP pool is allowed only through the
+    // same explicit synthetic-DNS opt-in as 198.18.0.0/15.
     if (bytes.every((byte) => byte == 0) ||
         (bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1) ||
-        (bytes[0] & 0xfe) == 0xfc) {
+        ((bytes[0] & 0xfe) == 0xfc &&
+            !(allowSyntheticDns && _isMihomoSyntheticIpv6(bytes)))) {
       return true;
     }
     return false;
@@ -193,10 +192,33 @@ class BookSourceNetworkPolicy {
 
   static bool isSyntheticDnsAddress(InternetAddress address) {
     final bytes = address.rawAddress;
-    return bytes.length == 4 &&
-        bytes[0] == 198 &&
-        (bytes[1] == 18 || bytes[1] == 19);
+    if (bytes.length == 4) return _isSyntheticIpv4(bytes);
+    if (bytes.length != 16) return false;
+    return _isMihomoSyntheticIpv6(bytes) ||
+        (_isIpv4Mapped(bytes) && _isSyntheticIpv4(bytes.sublist(12)));
   }
+
+  static bool _isIpv4Mapped(List<int> bytes) =>
+      bytes.length == 16 &&
+      bytes.take(10).every((byte) => byte == 0) &&
+      bytes[10] == 0xff &&
+      bytes[11] == 0xff;
+
+  static bool _isSyntheticIpv4(List<int> bytes) =>
+      bytes.length == 4 &&
+      bytes[0] == 198 &&
+      (bytes[1] == 18 || bytes[1] == 19);
+
+  static bool _isMihomoSyntheticIpv6(List<int> bytes) =>
+      bytes.length == 16 &&
+      bytes[0] == 0xfd &&
+      bytes[1] == 0xfe &&
+      bytes[2] == 0xdc &&
+      bytes[3] == 0xba &&
+      bytes[4] == 0x98 &&
+      bytes[5] == 0x76 &&
+      bytes[6] == 0 &&
+      bytes[7] == 0;
 
   static bool _isAlwaysBlockedAddress(InternetAddress address) {
     if (address.isMulticast) return true;

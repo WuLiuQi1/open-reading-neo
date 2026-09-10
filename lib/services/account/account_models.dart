@@ -354,11 +354,15 @@ class MemberMembership {
     required this.features,
     required this.entitlements,
     this.redeemed,
+    this.testPurchase = false,
+    this.purchaseStatus = 'active',
   });
 
   factory MemberMembership.fromJson(Map<String, dynamic> json) =>
       MemberMembership(
         premium: json['premium'] as bool? ?? false,
+        testPurchase: json['test_purchase'] as bool? ?? false,
+        purchaseStatus: _applePurchaseStatus(json['purchase_status']),
         features: Map<String, bool>.unmodifiable(
           _map(
             json['features'],
@@ -373,10 +377,18 @@ class MemberMembership {
       );
 
   final bool premium;
+  final bool testPurchase;
+  final String purchaseStatus;
   final Map<String, bool> features;
   final List<MemberEntitlement> entitlements;
   final bool? redeemed;
 }
+
+String _applePurchaseStatus(Object? value) => switch (value) {
+  null || 'active' => 'active',
+  'revoked' => 'revoked',
+  _ => throw const FormatException('invalid Apple purchase status'),
+};
 
 class MemberReferralInviter {
   const MemberReferralInviter({

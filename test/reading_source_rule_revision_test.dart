@@ -16,84 +16,90 @@ void main() {
     BookSourceChapterCache.clearMemory();
   });
 
-  test(
-    'rule revision bypasses revision 1 catalog and content on disk',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'reading-source-rule-revision-',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      final cache = BookSourceChapterCache(cacheDirectory: directory);
-      final source = _source();
-      // Frozen backend revision for this source before the OnlyOne and
-      // JS-followed-by-## rule fixes, with empty variables and auth revision 0.
-      const revision1 =
-          'e45dffe131e8e1ec4eacc95917440a2fd0c7610ac871c53a630802ff8771d2cb';
+  for (final entry in const {
+    1: 'e45dffe131e8e1ec4eacc95917440a2fd0c7610ac871c53a630802ff8771d2cb',
+    2: '9699728e43dd5d37a38e12571e4170bbde69a7e97dbac557abd93bb0ac107f1e',
+  }.entries) {
+    test(
+      'rule revision bypasses revision ${entry.key} catalog and content on disk',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'reading-source-rule-revision-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final cache = BookSourceChapterCache(cacheDirectory: directory);
+        final source = _source();
+        // Frozen old backend revisions with empty variables and auth revision 0.
+        final oldRevision = entry.value;
 
-      await cache.getChapterCatalogOrLoad(
-        sourceId: source.id,
-        sourceRevision: revision1,
-        bookId: 'book',
-        loader: () async => const [
-          BookSourceChapter(id: 'stale', title: 'Stale catalog', order: 0),
-        ],
-      );
-      await cache.getOrLoad(
-        sourceId: source.id,
-        sourceRevision: revision1,
-        bookId: 'book',
-        chapterId: 'chapter',
-        loader: () async => const BookSourceChapterContent(
+        await cache.getChapterCatalogOrLoad(
+          sourceId: source.id,
+          sourceRevision: oldRevision,
+          bookId: 'book',
+          loader: () async => const [
+            BookSourceChapter(id: 'stale', title: 'Stale catalog', order: 0),
+          ],
+        );
+        await cache.getOrLoad(
+          sourceId: source.id,
+          sourceRevision: oldRevision,
           bookId: 'book',
           chapterId: 'chapter',
-          title: 'Stale chapter',
-          content: 'stale content',
-          contentType: 'text/plain',
-        ),
-      );
-      await _waitForCacheFiles(directory, 2);
-      BookSourceChapterCache.clearMemory();
+          loader: () async => const BookSourceChapterContent(
+            bookId: 'book',
+            chapterId: 'chapter',
+            title: 'Stale chapter',
+            content: 'stale content',
+            contentType: 'text/plain',
+          ),
+        );
+        await _waitForCacheFiles(directory, 2);
+        BookSourceChapterCache.clearMemory();
 
-      final runtime = _RevisionRuntime();
-      final backend = _backend(runtime, directory);
-      final catalog = await backend.getChapters(source, 'book');
-      final content = await backend.getChapterContent(
-        source,
-        bookId: 'book',
-        chapterId: 'chapter',
-      );
+        final runtime = _RevisionRuntime();
+        final backend = _backend(runtime, directory);
+        final catalog = await backend.getChapters(source, 'book');
+        final content = await backend.getChapterContent(
+          source,
+          bookId: 'book',
+          chapterId: 'chapter',
+        );
 
-      expect(catalog.single.id, 'current');
-      expect(content.content, 'current content');
-      expect(runtime.catalogLoads, 1);
-      expect(runtime.contentLoads, 1);
+        expect(catalog.single.id, 'current');
+        expect(content.content, 'current content');
+        expect(runtime.catalogLoads, 1);
+        expect(runtime.contentLoads, 1);
 
-      await backend.getChapters(source, 'book');
-      await backend.getChapterContent(
-        source,
-        bookId: 'book',
-        chapterId: 'chapter',
-      );
-      expect(runtime.catalogLoads, 1);
-      expect(runtime.contentLoads, 1);
-      await _waitForCacheFiles(directory, 4);
+        await backend.getChapters(source, 'book');
+        await backend.getChapterContent(
+          source,
+          bookId: 'book',
+          chapterId: 'chapter',
+        );
+        expect(runtime.catalogLoads, 1);
+        expect(runtime.contentLoads, 1);
+        await _waitForCacheFiles(directory, 4);
 
-      BookSourceChapterCache.clearMemory();
-      final reopenedRuntime = _RevisionRuntime();
-      final reopenedBackend = _backend(reopenedRuntime, directory);
-      final reopenedCatalog = await reopenedBackend.getChapters(source, 'book');
-      final reopenedContent = await reopenedBackend.getChapterContent(
-        source,
-        bookId: 'book',
-        chapterId: 'chapter',
-      );
+        BookSourceChapterCache.clearMemory();
+        final reopenedRuntime = _RevisionRuntime();
+        final reopenedBackend = _backend(reopenedRuntime, directory);
+        final reopenedCatalog = await reopenedBackend.getChapters(
+          source,
+          'book',
+        );
+        final reopenedContent = await reopenedBackend.getChapterContent(
+          source,
+          bookId: 'book',
+          chapterId: 'chapter',
+        );
 
-      expect(reopenedCatalog.single.id, 'current');
-      expect(reopenedContent.content, 'current content');
-      expect(reopenedRuntime.catalogLoads, 0);
-      expect(reopenedRuntime.contentLoads, 0);
-    },
-  );
+        expect(reopenedCatalog.single.id, 'current');
+        expect(reopenedContent.content, 'current content');
+        expect(reopenedRuntime.catalogLoads, 0);
+        expect(reopenedRuntime.contentLoads, 0);
+      },
+    );
+  }
 }
 
 ReadingSourceBackend _backend(_RevisionRuntime runtime, Directory directory) =>

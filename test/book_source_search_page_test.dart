@@ -13,7 +13,7 @@ import 'package:xxread/book_sources/services/book_source_shelf_service.dart';
 import 'package:xxread/l10n/app_localizations.dart';
 import 'package:xxread/pages/book_sources/book_sources_page.dart';
 import 'package:xxread/pages/book_sources/source_search_page.dart';
-import 'package:xxread/services/core/app_settings_service.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 
 void main() {
   setUp(() {
@@ -630,6 +630,8 @@ void main() {
       tester.view.physicalSize = const Size(390, 1000);
       addTearDown(tester.view.reset);
       final source = _readingDiscoverySource();
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      addTearDown(() => AdvancedFeatureAccess.premiumUnlocked = false);
       SharedPreferences.setMockInitialValues({
         'open_reading_book_sources_v1': jsonEncode([source.toJson()]),
         additionalSourceProtocolsPreferenceKey: true,
@@ -646,16 +648,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.widgetWithText(ChoiceChip, 'reading source E'),
+        find.byKey(const Key('bookSourceDiscoverScope-reading-source')),
         findsOneWidget,
       );
-      expect(find.text('Ranking'), findsOneWidget);
+      expect(find.text('Ranking'), findsWidgets);
       expect(find.text('Channel Book 1'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'reading source E'));
+      await tester.tap(find.byKey(const Key('bookSourceDiscoverScope-reading-source')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ranking'), findsOneWidget);
+      expect(find.text('Ranking'), findsWidgets);
       await tester.tap(find.byKey(const Key('bookSourceCategoryLoadMore')));
       await tester.pumpAndSettle();
 

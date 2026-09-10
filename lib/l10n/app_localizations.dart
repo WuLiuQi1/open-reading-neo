@@ -704,7 +704,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesAdvancedFeatureRequired.
   ///
   /// In en, this message translates to:
-  /// **'Enable More source protocols in Advanced features before importing this source.'**
+  /// **'This source is unavailable for the current account or settings.'**
   String get bookSourcesAdvancedFeatureRequired;
 
   /// No description provided for @bookSourcesNoWorkingSources.
@@ -4909,13 +4909,13 @@ abstract class AppLocalizations {
   /// Title of the voluntary developer support card
   ///
   /// In en, this message translates to:
-  /// **'Support advanced features'**
+  /// **'Support development'**
   String get settingsSupportDevelopmentCardTitle;
 
   /// Explanation shown on the voluntary developer support card
   ///
   /// In en, this message translates to:
-  /// **'All features are currently free. Support is optional and helps fund continued development.'**
+  /// **'Donations are voluntary and support ongoing development.'**
   String get settingsSupportDevelopmentCardSubtitle;
 
   /// Guest account card title in settings
@@ -5218,40 +5218,28 @@ abstract class AppLocalizations {
   /// **'Sign out'**
   String get accountSignOut;
 
-  /// Supporter marketing card title
+  /// Premium membership card title
   ///
   /// In en, this message translates to:
-  /// **'Support advanced features'**
+  /// **'Premium membership'**
   String get accountSupportTitle;
 
-  /// Clarifies current feature availability
+  /// Explains that basic reading remains free
   ///
   /// In en, this message translates to:
-  /// **'All features are free'**
-  String get accountSupportFreeTitle;
-
-  /// Clarifies support does not gate features
-  ///
-  /// In en, this message translates to:
-  /// **'Support is optional and does not unlock WebDAV or any other feature.'**
+  /// **'Basic reading features are free to use.'**
   String get accountSupportFreeSubtitle;
 
-  /// Transparent notice explaining the current purpose of Premium purchases
+  /// Open the Premium purchase page
   ///
   /// In en, this message translates to:
-  /// **'Premium currently exists only to help us learn and validate the purchase flow; it does not include any actual premium features yet. Buying Premium is effectively much like making a donation. If you would like to support the project, you can purchase Premium.'**
-  String get accountSupportPurchaseNotice;
-
-  /// Open the supporter purchase page
-  ///
-  /// In en, this message translates to:
-  /// **'Support now'**
+  /// **'Get Premium'**
   String get accountSupportAction;
 
-  /// Supporter identity badge
+  /// Premium membership badge
   ///
   /// In en, this message translates to:
-  /// **'Supporter'**
+  /// **'Premium'**
   String get accountSupporterBadge;
 
   /// Password minimum length hint
@@ -5359,7 +5347,7 @@ abstract class AppLocalizations {
   /// Tagline under the app name in the about card
   ///
   /// In en, this message translates to:
-  /// **'Open source, cross-platform, focused on reading'**
+  /// **'Cross-platform, focused on reading'**
   String get settingsAboutTagline;
 
   /// Version label in the about card
@@ -10535,7 +10523,7 @@ abstract class AppLocalizations {
   /// No description provided for @bookSourcesImportIntro.
   ///
   /// In en, this message translates to:
-  /// **'Automatically detects ORSP and Reading Source sources. Review before importing.'**
+  /// **'Automatically detects sources. Review before importing.'**
   String get bookSourcesImportIntro;
 
   /// No description provided for @bookSourcesImportInputStep.
@@ -10879,6 +10867,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not save changes. Try again.'**
   String get bookSourcesMaintenanceApplyFailed;
+
+  /// No description provided for @settingsQqGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'QQ Group'**
+  String get settingsQqGroup;
+
+  /// No description provided for @settingsOpenSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-source details'**
+  String get settingsOpenSourceTitle;
+
+  /// No description provided for @settingsOpenSourceDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'All features except advanced features are open source. The open-source code is licensed under AGPL-3.0; see the GitHub repository for its scope.'**
+  String get settingsOpenSourceDetails;
+
+  /// Lifetime Premium
+  ///
+  /// In en, this message translates to:
+  /// **'Lifetime Premium'**
+  String get premiumLifetimeTitle;
+
+  /// One-time purchase · No auto-renewal
+  ///
+  /// In en, this message translates to:
+  /// **'One-time purchase · No auto-renewal'**
+  String get premiumLifetimeCaption;
+
+  /// Included with Premium
+  ///
+  /// In en, this message translates to:
+  /// **'Included with Premium'**
+  String get premiumBenefitsTitle;
+
+  /// Import and use additional compatible source protocols.
+  ///
+  /// In en, this message translates to:
+  /// **'Import and use additional compatible source protocols.'**
+  String get premiumProtocolsBenefit;
+
+  /// Access trusted sources on your device, local network or private network.
+  ///
+  /// In en, this message translates to:
+  /// **'Access trusted sources on your device, local network or private network.'**
+  String get premiumPrivateNetworkBenefit;
+
+  /// Premium does not include books or source addresses. Third-party services may charge separately.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium does not include books or source addresses. Third-party services may charge separately.'**
+  String get premiumSourceNotice;
+
+  /// After unlocking, enable these options in Settings → Advanced features.
+  ///
+  /// In en, this message translates to:
+  /// **'After unlocking, enable these options in Settings → Advanced features.'**
+  String get premiumSetupHint;
+
+  /// Purchase details
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase details'**
+  String get premiumBillingTitle;
+
+  /// This is a non-consumable, one-time purchase, not a subscription. It does not renew automatically. The App Store displays the actual price and Apple handles payment.
+  ///
+  /// In en, this message translates to:
+  /// **'This is a non-consumable, one-time purchase, not a subscription. It does not renew automatically. The App Store displays the actual price and Apple handles payment.'**
+  String get premiumBillingBody;
+
+  /// After reinstalling or changing devices, restore using the Apple Account used to purchase and the linked Open Reading account. Restoring does not charge you again.
+  ///
+  /// In en, this message translates to:
+  /// **'After reinstalling or changing devices, restore using the Apple Account used to purchase and the linked Open Reading account. Restoring does not charge you again.'**
+  String get premiumRestoreHelp;
+
+  /// Membership terms
+  ///
+  /// In en, this message translates to:
+  /// **'Membership terms'**
+  String get premiumMembershipTerms;
+
+  /// Privacy policy
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get premiumPrivacyPolicy;
+
+  /// Apple standard EULA
+  ///
+  /// In en, this message translates to:
+  /// **'Apple standard EULA'**
+  String get premiumAppleEula;
+
+  /// Before purchasing, read the membership terms, privacy policy and Apple standard EULA.
+  ///
+  /// In en, this message translates to:
+  /// **'Before purchasing, read the membership terms, privacy policy and Apple standard EULA.'**
+  String get premiumPurchaseConsent;
+
+  /// Account and access
+  ///
+  /// In en, this message translates to:
+  /// **'Account and access'**
+  String get premiumAccountBindingTitle;
+
+  /// After verification, Premium is linked to the current Open Reading account and syncs across supported platforms. Advanced settings become available with membership. Signing out or revocation disables advanced features. Check your account before purchasing.
+  ///
+  /// In en, this message translates to:
+  /// **'After verification, Premium is linked to the current Open Reading account and syncs across supported platforms. Advanced settings become available with membership. Signing out or revocation disables advanced features. Check your account before purchasing.'**
+  String get premiumAccountBindingBody;
+
+  /// Request a refund
+  ///
+  /// In en, this message translates to:
+  /// **'Request a refund'**
+  String get premiumRefundTitle;
+
+  /// Apple reviews and processes App Store refund requests under its applicable rules. Submitting a request does not mean it is approved. Refunded or revoked purchases no longer provide the corresponding Premium access.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple reviews and processes App Store refund requests under its applicable rules. Submitting a request does not mean it is approved. Refunded or revoked purchases no longer provide the corresponding Premium access.'**
+  String get premiumRefundTerms;
+
+  /// Purchase verification data
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase verification data'**
+  String get premiumPrivacyPurchaseTitle;
+
+  /// Apple handles payment information. The app sends the product identifier and Apple-signed transaction verification data to the Open Reading account service to verify purchases and link or restore Premium. This purchase flow does not give the developer your full payment-card number or Apple Account password.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple handles payment information. The app sends the product identifier and Apple-signed transaction verification data to the Open Reading account service to verify purchases and link or restore Premium. This purchase flow does not give the developer your full payment-card number or Apple Account password.'**
+  String get premiumPrivacyPurchaseBody;
+
+  /// Account service
+  ///
+  /// In en, this message translates to:
+  /// **'Account service'**
+  String get premiumPrivacyAccountTitle;
+
+  /// The Open Reading account service processes account details and membership records for sign-in, security verification and access across devices. Contact us about support or privacy using the contact options on the official website.
+  ///
+  /// In en, this message translates to:
+  /// **'The Open Reading account service processes account details and membership records for sign-in, security verification and access across devices. Contact us about support or privacy using the contact options on the official website.'**
+  String get premiumPrivacyAccountBody;
+
+  /// Premium unlocked
+  ///
+  /// In en, this message translates to:
+  /// **'Premium unlocked'**
+  String get premiumPurchaseSuccess;
+
+  /// Sandbox purchase verification result
+  ///
+  /// In en, this message translates to:
+  /// **'Test purchase verified. Formal Premium was not activated.'**
+  String get premiumTestPurchaseVerified;
+
+  /// Revoked Apple purchase result
+  ///
+  /// In en, this message translates to:
+  /// **'Premium access from this purchase has been revoked.'**
+  String get premiumPurchaseRevoked;
+
+  /// Purchase restored. Premium is synced.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase restored. Premium is synced.'**
+  String get premiumRestoreSuccess;
+
+  /// No restorable purchase was found. Check your Apple Account and the Open Reading account linked to the purchase.
+  ///
+  /// In en, this message translates to:
+  /// **'No restorable purchase was found. Check your Apple Account and the Open Reading account linked to the purchase.'**
+  String get premiumRestoreEmpty;
+
+  /// Purchase canceled
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase canceled'**
+  String get premiumPurchaseCanceled;
+
+  /// Waiting for Apple approval. Access unlocks after approval and verification.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Apple approval. Access unlocks after approval and verification.'**
+  String get premiumPendingApproval;
+
+  /// Verifying your purchase…
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying your purchase…'**
+  String get premiumVerifying;
+
+  /// Restoring purchases…
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring purchases…'**
+  String get premiumRestoring;
+
+  /// Refund request sent to Apple for review.
+  ///
+  /// In en, this message translates to:
+  /// **'Refund request sent to Apple for review.'**
+  String get premiumRefundSubmitted;
+
+  /// No refundable Premium purchase was found for this Apple Account. You can also check your history with Apple purchase support.
+  ///
+  /// In en, this message translates to:
+  /// **'No refundable Premium purchase was found for this Apple Account. You can also check your history with Apple purchase support.'**
+  String get premiumRefundNotFound;
+
+  /// Apple purchase support
+  ///
+  /// In en, this message translates to:
+  /// **'Apple purchase support'**
+  String get premiumApplePurchaseSupport;
+
+  /// Unable to open this link. Please try again later.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open this link. Please try again later.'**
+  String get premiumLinkFailed;
+
+  /// Sign in to Open Reading before purchasing or restoring Premium.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Open Reading before purchasing or restoring Premium.'**
+  String get premiumSignInRequired;
+
+  /// No description provided for @premiumRefundUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The Apple refund sheet is unavailable. Continue through Apple purchase support.'**
+  String get premiumRefundUnavailable;
+
+  /// No description provided for @premiumOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation could not be completed. Please try again.'**
+  String get premiumOperationFailed;
+
+  /// No description provided for @premiumPurchaseConsentOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Please read the membership terms and privacy policy before unlocking Premium.'**
+  String get premiumPurchaseConsentOther;
+
+  /// No description provided for @premiumBillingBodyOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock Premium through the available purchase or redemption options. The purchase channel displays the price and payment method. Verified membership is linked to your current Open Reading account.'**
+  String get premiumBillingBodyOther;
 }
 
 class _AppLocalizationsDelegate

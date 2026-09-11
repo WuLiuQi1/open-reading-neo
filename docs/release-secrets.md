@@ -41,16 +41,23 @@ flow, while iOS keeps the native system authorization sheet.
 | `MACOS_RELEASE_ENABLED` | Enables signed and notarized macOS artifacts when set to `true` |
 | `IOS_TESTFLIGHT_URL` | Optional public TestFlight URL added to release notes |
 
-## iOS App Store Connect
+The GitHub macOS job always uses `tool/macos/build_website.sh`. That binary is
+the notarized website build and must set `OPEN_READING_MACOS_APP_STORE=false`.
+
+## iOS and Mac App Store Connect
 
 The existing cross-platform workflow produces an **unsigned** iOS IPA. It does
-not upload to TestFlight or App Store Connect. See [the iOS runbook](app-store-release.md)
-for the separate signed archive/export/upload commands.
+not upload to TestFlight or App Store Connect, and it does not produce a Mac
+App Store package. See [the App Store runbook](app-store-release.md) for the
+separate signed iOS IPA and Mac App Store archive/export/upload commands.
+Website / notarized macOS builds stay on [the macOS signing runbook](macos-release-signing.md).
 
-Local commands read `IOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, and
-`ASC_KEY_PATH` from the environment. Keep the `.p8` and any private env file
-outside the repository with owner-only permissions. A Sign in with Apple key
-is not an App Store Connect API key. Do not rename or overwrite the existing
+Local iOS and Mac App Store commands read `IOS_TEAM_ID`, optional
+`MACOS_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH` from the
+environment. Keep the `.p8` and any private env file outside the repository
+with owner-only permissions. The Mac App Store script never uses Developer ID
+or notary secrets. A Sign in with Apple key is not an App Store Connect API
+key. Do not rename or overwrite the existing
 macOS notarization secrets. No iOS secret values have been added by this setup.
 
 `app-store-preflight.yml` uses no Apple credentials, only mocked tools/API tests

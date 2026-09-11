@@ -526,8 +526,8 @@ jobs:
           echo "MACOS_SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
           echo "MACOS_SIGNING_SERIAL=$signing_serial" >> "$GITHUB_ENV"
 
-      - name: Build macOS release
-        run: flutter build macos --release
+      - name: Build website macOS release
+        run: bash tool/macos/build_website.sh --no-pub
 
       - name: Prepare macOS Developer ID provisioning profile
         shell: bash

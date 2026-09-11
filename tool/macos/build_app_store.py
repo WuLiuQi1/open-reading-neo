@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a signed App Store IPA; upload only when explicitly requested."""
+"""Build a signed Mac App Store archive; upload only when explicitly requested."""
 from __future__ import annotations
 
 import argparse
@@ -12,8 +12,10 @@ import shutil
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'build' / 'app-store'
+import distribution as dist
+
+ROOT = dist.ROOT
+OUT = ROOT / 'build' / 'app-store-macos'
 BUNDLE_ID = 'com.niki.xxread'
 
 
@@ -46,6 +48,10 @@ def read_command(command):
         raise BuildError('Unable to inspect local Xcode/SDK installation') from None
 
 
+def team_id():
+    return os.environ.get('MACOS_TEAM_ID', '').strip() or os.environ.get('IOS_TEAM_ID', '').strip()
+
+
 def check_inputs(args):
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', args.build_name):
         raise BuildError('--build-name must use major.minor.patch')
@@ -53,8 +59,8 @@ def check_inputs(args):
         raise BuildError('--build-number must use 1-3 numeric components; first must be positive')
     if args.upload and args.allow_beta_xcode:
         raise BuildError('--allow-beta-xcode cannot be used with --upload')
-    if not os.environ.get('IOS_TEAM_ID', '').strip():
-        raise BuildError('IOS_TEAM_ID is required for automatic signing')
+    if not team_id():
+        raise BuildError('IOS_TEAM_ID or MACOS_TEAM_ID is required for automatic signing')
     credentials = [os.environ.get(name, '').strip() for name in ('ASC_KEY_ID', 'ASC_ISSUER_ID', 'ASC_KEY_PATH')]
     if any(credentials) and not all(credentials):
         raise BuildError('ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_PATH must be provided together')
@@ -71,22 +77,19 @@ def check_inputs(args):
     for command in ('flutter', 'pod', 'xcodebuild', 'xcrun', 'codesign'):
         if shutil.which(command) is None:
             raise BuildError(f'Required tool is missing: {command}')
-    if not (ROOT / 'ios/Runner.xcworkspace').is_dir():
-        raise BuildError('ios/Runner.xcworkspace is missing')
+    if not (ROOT / 'macos/Runner.xcworkspace').is_dir():
+        raise BuildError('macos/Runner.xcworkspace is missing')
     xcode = read_command(['xcodebuild', '-version'])
     match = re.search(r'Xcode (\d+)', xcode)
     if not match or int(match[1]) < 26:
         raise BuildError('Xcode 26 or newer is required')
     developer_dir = os.environ.get('DEVELOPER_DIR') or read_command(['xcode-select', '-p'])
-    # Released Xcode.app builds may use a trailing letter in ProductBuildVersion
-    # (for example 27A266a). Only treat an explicit beta/seed app or version
-    # label as a seed toolchain.
     seed = re.search(r'beta|seed|release.?candidate', developer_dir + '\n' + xcode, re.I)
     if seed and not args.allow_beta_xcode:
         raise BuildError('Selected Xcode is a beta/seed; select a released Xcode for upload')
-    sdk = read_command(['xcrun', '--sdk', 'iphoneos', '--show-sdk-version'])
-    if not re.match(r'^\d+', sdk) or int(sdk.split('.')[0]) < 26:
-        raise BuildError('iPhoneOS SDK 26 or newer is required')
+    sdk = read_command(['xcrun', '--sdk', 'macosx', '--show-sdk-version'])
+    if not re.match(r'^\d+', sdk):
+        raise BuildError('macOS SDK is required')
 
 
 def auth_arguments():
@@ -100,8 +103,6 @@ def auth_arguments():
 
 def run_step(label, command, log, cwd=ROOT):
     print(label, flush=True)
-    # Xcode can echo operational identifiers. Keep its output in a private,
-    # ignored log; never echo the command or CalledProcessError to the user.
     with log.open('a') as stream:
         stream.write('\n' + label + '\n')
         stream.flush()
@@ -111,36 +112,45 @@ def run_step(label, command, log, cwd=ROOT):
             raise BuildError(f'{label} failed; inspect private log: {log}') from None
 
 
+def flutter_config_command(args):
+    return ['flutter', 'build', 'macos', '--config-only', '--release', '--no-pub',
+            dist.MACOS_APP_STORE_DART_DEFINE,
+            '--build-name', args.build_name, '--build-number', args.build_number]
+
+
+def verify_store_defines():
+    try:
+        dist.assert_app_store_distribution(dist.read_generated_dart_defines())
+    except dist.DistributionError as error:
+        raise BuildError(str(error)) from error
+
+
 def validate_archive(archive, version, build):
     apps = list((archive / 'Products/Applications').glob('*.app'))
     if len(apps) != 1:
         raise BuildError('Archive must contain exactly one application')
     app = apps[0]
+    info_path = app / 'Contents/Info.plist'
     try:
-        with (app / 'Info.plist').open('rb') as stream:
+        with info_path.open('rb') as stream:
             info = plistlib.load(stream)
-        with (app / 'PrivacyInfo.xcprivacy').open('rb') as stream:
-            privacy = plistlib.load(stream)
     except (OSError, ValueError, plistlib.InvalidFileException):
-        raise BuildError('Archive is missing valid Info.plist or PrivacyInfo.xcprivacy') from None
+        raise BuildError('Archive is missing a valid Contents/Info.plist') from None
     expected = {'CFBundleIdentifier': BUNDLE_ID, 'CFBundleShortVersionString': version,
-                'CFBundleVersion': build, 'ITSAppUsesNonExemptEncryption': False}
+                'CFBundleVersion': build}
     if any(info.get(key) != value for key, value in expected.items()):
-        raise BuildError('Archive bundle/version/build/encryption does not match requested identity')
-    reasons = {entry.get('NSPrivacyAccessedAPIType'): entry.get('NSPrivacyAccessedAPITypeReasons', [])
-               for entry in privacy.get('NSPrivacyAccessedAPITypes', [])}
-    if 'CA92.1' not in reasons.get('NSPrivacyAccessedAPICategoryUserDefaults', []):
-        raise BuildError('Archive must declare app-local UserDefaults access')
-    if not (app / '_CodeSignature/CodeResources').is_file() or not (app / 'embedded.mobileprovision').is_file():
-        raise BuildError('Archive is unsigned or missing provisioning profile')
+        raise BuildError('Archive bundle/version/build does not match requested identity')
+    if not (app / 'Contents/_CodeSignature/CodeResources').is_file():
+        raise BuildError('Archive is unsigned')
+    if not (app / 'Contents/embedded.provisionprofile').is_file():
+        raise BuildError('Archive is missing an embedded provisioning profile')
     return app
 
 
 def export_options(upload):
     return {'method': 'app-store-connect', 'destination': 'upload' if upload else 'export',
-            'signingStyle': 'automatic', 'teamID': os.environ['IOS_TEAM_ID'],
-            'manageAppVersionAndBuildNumber': False, 'uploadSymbols': True,
-            'iCloudContainerEnvironment': 'Production', 'testFlightInternalTestingOnly': False}
+            'signingStyle': 'automatic', 'teamID': team_id(),
+            'manageAppVersionAndBuildNumber': False, 'uploadSymbols': True}
 
 
 def execute(args):
@@ -150,46 +160,52 @@ def execute(args):
     if output.exists():
         raise BuildError(f'Output exists; refusing overwrite: {output}')
     if args.check:
-        print('Local prerequisites passed. Apple account, signing assets and upload acceptance are not verified.')
+        print('Mac App Store prerequisites passed. Apple account, signing assets and upload acceptance are not verified.')
+        print(f'Store billing define: {dist.MACOS_APP_STORE_DART_DEFINE}')
         return 0
     output.mkdir(parents=True, mode=0o700)
     os.chmod(output, 0o700)
     log = output / 'build.log'
     log.touch(mode=0o600)
+    config = flutter_config_command(args)
+    if not dist.command_has_macos_app_store_define(config):
+        raise BuildError('Mac App Store Flutter command is missing OPEN_READING_MACOS_APP_STORE')
     run_step('Core Flutter validation: locked dependencies',
              ['flutter', 'pub', 'get', '--enforce-lockfile'], log)
-    run_step('Product build: configure Flutter iOS',
-             ['flutter', 'build', 'ios', '--config-only', '--release', '--no-codesign', '--no-pub',
-              '--build-name', args.build_name, '--build-number', args.build_number], log)
-    run_step('Product build: locked CocoaPods dependencies', ['pod', 'install', '--deployment'], log, ROOT / 'ios')
+    run_step('Product build: configure Flutter macOS App Store', config, log)
+    verify_store_defines()
+    run_step('Product build: locked CocoaPods dependencies', ['pod', 'install', '--deployment'], log, ROOT / 'macos')
     archive = output / 'OpenReading.xcarchive'
-    run_step('Product build: signed archive',
-             ['xcodebuild', '-workspace', 'ios/Runner.xcworkspace', '-scheme', 'Runner',
-              '-configuration', 'Release', '-destination', 'generic/platform=iOS',
+    run_step('Product build: signed Mac App Store archive',
+             ['xcodebuild', '-workspace', 'macos/Runner.xcworkspace', '-scheme', 'Runner',
+              '-configuration', 'Release', '-destination', 'generic/platform=macOS',
               '-archivePath', str(archive), *auth_arguments(),
-              'CODE_SIGN_STYLE=Automatic', 'DEVELOPMENT_TEAM=' + os.environ['IOS_TEAM_ID'],
+              'CODE_SIGN_STYLE=Automatic', 'DEVELOPMENT_TEAM=' + team_id(),
               'FLUTTER_BUILD_NAME=' + args.build_name, 'FLUTTER_BUILD_NUMBER=' + args.build_number,
               'archive'], log)
+    verify_store_defines()
     app = validate_archive(archive, args.build_name, args.build_number)
-    run_step('Product build: verify archive signature', ['codesign', '--verify', '--deep', '--strict', str(app)], log)
+    run_step('Product build: verify archive signature',
+             ['codesign', '--verify', '--deep', '--strict', str(app)], log)
     options = output / 'ExportOptions.plist'
     options.write_bytes(plistlib.dumps(export_options(args.upload)))
     destination = output / 'export'
-    label = 'App Store Connect upload' if args.upload else 'Product build: export signed IPA'
+    label = 'App Store Connect upload' if args.upload else 'Product build: export signed Mac App Store package'
     run_step(label, ['xcodebuild', '-exportArchive', '-archivePath', str(archive),
                     '-exportPath', str(destination), '-exportOptionsPlist', str(options), *auth_arguments()], log)
     if args.upload:
-        print('Xcode upload completed. Use connect.mjs status to confirm Apple processing before reporting TestFlight ready.')
+        print('Xcode upload completed. Use connect.mjs status to confirm Apple processing before reporting ready.')
     else:
-        ipas = list(destination.glob('*.ipa'))
-        if len(ipas) != 1:
-            raise BuildError('Export did not produce exactly one IPA')
+        packages = list(destination.glob('*.pkg'))
+        if len(packages) != 1:
+            raise BuildError('Export did not produce exactly one Mac App Store .pkg')
         digest = hashlib.sha256()
-        with ipas[0].open('rb') as stream:
+        with packages[0].open('rb') as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                 digest.update(chunk)
-        (output / 'SHA256SUMS').write_text(f'{digest.hexdigest()}  export/{ipas[0].name}\n')
-        print(f'Signed IPA exported: {ipas[0]}\nSHA256: {digest.hexdigest()}')
+        (output / 'SHA256SUMS').write_text(f'{digest.hexdigest()}  export/{packages[0].name}\n')
+        print(f'Signed Mac App Store package exported: {packages[0]}\nSHA256: {digest.hexdigest()}')
+        print('Billing: App Store in-app purchase. Do not ship this binary on the website.')
     return 0
 
 

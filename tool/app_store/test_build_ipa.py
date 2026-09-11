@@ -95,8 +95,28 @@ class BuildIpaTests(unittest.TestCase):
         with self.assertRaisesRegex(build.BuildError, 'outside'):
             build.check_inputs(self.args())
 
-    def test_beta_seed_suffix_is_detected(self):
-        with patch.object(build, 'read_command', return_value='Xcode 27.0\nBuild version 27A5252f'):
+    def test_released_xcode_letter_build_is_accepted(self):
+        with patch.object(
+            build,
+            'read_command',
+            side_effect=lambda command: {
+                'xcodebuild': 'Xcode 27.0\nBuild version 27A266a',
+                'xcode-select': '/Applications/Xcode.app/Contents/Developer',
+                'xcrun': '27.0',
+            }[command[0]],
+        ):
+            build.check_inputs(self.args())
+
+    def test_beta_version_label_is_detected(self):
+        with patch.object(
+            build,
+            'read_command',
+            side_effect=lambda command: {
+                'xcodebuild': 'Xcode 27.0\nBeta\nBuild version 27A5252f',
+                'xcode-select': '/Applications/Xcode.app/Contents/Developer',
+                'xcrun': '27.0',
+            }[command[0]],
+        ):
             with self.assertRaisesRegex(build.BuildError, 'beta/seed'):
                 build.check_inputs(self.args())
 

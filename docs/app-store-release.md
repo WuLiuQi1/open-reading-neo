@@ -3,6 +3,34 @@
 本页记录 2026-09-05 对 iPhone/iPad 版的准备工作。书源与漫画源由另一条开发线处理；
 不要把其未完成的工作混入上架验证结论。macOS 商店版需独立验证签名、沙盒和购买流程。
 
+GitHub / 官网的 Developer ID 公证包默认走卡密，不能直接拿去提交 Mac App Store。那条线的脚本和公证流程见 [macOS GitHub / 官网公证发布](macos-release-signing.md)。
+
+## Mac App Store 构建
+
+商店 macOS 包必须用商店脚本。它会强制带上 `--dart-define=OPEN_READING_MACOS_APP_STORE=true`，构建后读取 `macos/Flutter/ephemeral/Flutter-Generated.xcconfig` 确认该 define 已写入，然后才归档。不要手写 `flutter build macos`，也不要把官网公证包拿去上传。
+
+该开关会强制 StoreKit 永久高级版内购、隐藏卡密和外部购买入口，并关闭官网自更新。未加该 define 时，若运行时检测到 `_MASReceipt` 仍会按商店包处理；审核和沙盒构建不能依赖收据兜底，必须显式加 define。
+
+```bash
+# 加载已配置的私有环境（不输出其内容）。
+set -a
+source "$HOME/.private_keys/appstoreconnect.env"
+set +a
+
+# 只检查工具链和配置，不构建、不访问 Apple 服务。
+bash tool/macos/build_app_store.sh --check --build-number 260905001
+
+# 默认只生成签名 Mac App Store .pkg。
+bash tool/macos/build_app_store.sh --build-number 260905001
+
+# 或：使用新的未占用构建号，归档并上传到 App Store Connect。
+bash tool/macos/build_app_store.sh --build-number 260905002 --upload
+```
+
+`--build-name` 可覆盖商店版本号，默认读取 pubspec。产物在 `build/app-store-macos/<version>-<build>/`，目录仅当前用户可访问。已有目录时拒绝覆盖。导出模式生成 `.pkg` 和 `SHA256SUMS`；上传模式使用 `xcodebuild -exportArchive` 的 `destination=upload`。`build.log` 是本地私有分发日志。
+
+Mac 商店包与 iOS 共用 `IOS_TEAM_ID` / `ASC_*` 凭据；若 Mac 团队不同，可另设 `MACOS_TEAM_ID`。Developer ID / 公证 Secrets 不能用来打商店包。
+
 ## 本轮结果
 
 | 项目 | 状态 |
@@ -66,7 +94,8 @@ Apple Developer 中的 App ID 与 App Store Connect 中的 App 必须同属正�
 
 | 变量 | 用途 |
 | --- | --- |
-| `IOS_TEAM_ID` | 实际 Apple Developer Team ID |
+| `IOS_TEAM_ID` | 实际 Apple Developer Team ID；Mac App Store 脚本默认也用它 |
+| `MACOS_TEAM_ID` | 可选：Mac App Store 使用不同团队时覆盖 `IOS_TEAM_ID` |
 | `ASC_KEY_ID` | App Store Connect API Key ID |
 | `ASC_ISSUER_ID` | 该 API Key 所属的 Issuer ID |
 | `ASC_KEY_PATH` | 已存在 `.p8` 私钥的绝对路径（仓库外） |
@@ -137,12 +166,16 @@ API 同步只修改版本的描述、关键词、推广文本、支持/营销 UR
 
 ```bash
 python3 -m unittest discover -s tool/app_store -p 'test_*.py' -v
+python3 -m unittest discover -s tool/macos -p 'test_*.py' -v
 node --test tool/app_store/connect.test.mjs
 node tool/app_store/connect.mjs metadata
 plutil -lint ios/Runner/Info.plist ios/Runner/Runner.entitlements ios/Runner/PrivacyInfo.xcprivacy
+bash -n tool/macos/build_website.sh
+bash -n tool/macos/build_app_store.sh
 flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 flutter test --no-pub test/apple_purchase_service_test.dart
 flutter test --no-pub test/account_service_test.dart
+flutter test --no-pub test/app_distribution_test.dart
 git diff --check
 ```
 

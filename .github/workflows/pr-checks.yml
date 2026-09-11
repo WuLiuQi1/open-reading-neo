@@ -77,6 +77,7 @@ jobs:
               ! -name 'book_source_management_page_test.dart' \
               ! -name 'book_source_management_organization_test.dart' \
               ! -name 'book_source_reader_page_test.dart' \
+              ! -name 'book_source_horizontal_page_commit_test.dart' \
               ! -name 'book_source_discovery_page_test.dart' \
               ! -name 'native_reader_auto_page_turn_test.dart' \
               ! -name 'native_reader_txt_title_page_test.dart' \
@@ -91,6 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          flutter test test/book_source_horizontal_page_commit_test.dart
           # These widget suites own process-global preferences, controllers,
           # image codecs, and platform channels. Running one case per process
           # keeps a framework leak from looking like an application failure.
@@ -111,6 +113,8 @@ jobs:
           done
 
           organization_tests=(
+            'source switches and favorites respond before storage finishes'
+            'failed source switch save rolls back and reports the error'
             'favorite and single-source group controls work on a narrow screen'
             'bulk grouping retains selection and empty folders remain filterable'
           )
@@ -249,7 +253,7 @@ jobs:
             'discover scope defaults to all and filters every section'
             'reading source scope shows channels without ORSP tabs'
             'rapid source and layout changes settle on the newest view'
-            'latest aggregation interleaves sources and caps each contribution'
+            'shows a fast source while another source is still pending'
             'pull to refresh invalidates cached responses before reloading'
             'pull to refresh keeps content instead of showing another loader'
             'discover layout preference is restored by a new controller'

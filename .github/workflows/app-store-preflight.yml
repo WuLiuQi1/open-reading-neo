@@ -5,6 +5,9 @@ on:
     paths:
       - '.github/workflows/app-store-preflight.yml'
       - 'tool/app_store/**'
+      - 'tool/macos/**'
+      - 'docs/macos-release-signing.md'
+      - 'docs/app-store-release.md'
       - 'marketing/app-store/metadata.json'
       - 'ios/Runner/PrivacyInfo.xcprivacy'
   push:
@@ -12,6 +15,9 @@ on:
     paths:
       - '.github/workflows/app-store-preflight.yml'
       - 'tool/app_store/**'
+      - 'tool/macos/**'
+      - 'docs/macos-release-signing.md'
+      - 'docs/app-store-release.md'
       - 'marketing/app-store/metadata.json'
       - 'ios/Runner/PrivacyInfo.xcprivacy'
   workflow_dispatch:
@@ -28,6 +34,8 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Validate build command orchestration (mocked Apple tools)
         run: python3 -m unittest discover -s tool/app_store -p 'test_*.py' -v
+      - name: Validate macOS website and Mac App Store build orchestration
+        run: python3 -m unittest discover -s tool/macos -p 'test_*.py' -v
       - name: Validate App Store Connect client (mocked API)
         run: node --test tool/app_store/connect.test.mjs
       - name: Check listing metadata without Apple credentials
@@ -35,4 +43,6 @@ jobs:
       - name: Check shell and privacy manifest syntax
         run: |
           bash -n tool/app_store/build_ipa.sh
+          bash -n tool/macos/build_website.sh
+          bash -n tool/macos/build_app_store.sh
           python3 -c "import plistlib; plistlib.load(open('ios/Runner/PrivacyInfo.xcprivacy', 'rb'))"

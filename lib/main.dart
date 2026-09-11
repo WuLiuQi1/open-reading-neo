@@ -34,6 +34,7 @@ import 'services/books/book_format_support.dart';
 import 'services/ai/ai_chat_history_store.dart';
 import 'services/reading/reading_resume_service.dart';
 import 'services/reader/replace_rule_service.dart';
+import 'services/core/app_distribution.dart';
 import 'services/core/app_update_download_service.dart';
 import 'services/core/background_download_notifier.dart';
 import 'services/core/app_settings_service.dart';
@@ -60,6 +61,7 @@ import 'widgets/update_check_gate.dart';
 void main(List<String> arguments) async {
   // 确保可以在 runApp 前安全调用 SystemChrome
   WidgetsFlutterBinding.ensureInitialized();
+  await AppDistribution.initialize();
   // Large imported source libraries used to live in one SharedPreferences
   // value. Move that blob before any global preference cache is warmed so a
   // multi-thousand-source library cannot make startup consume ~1 GB or ANR.

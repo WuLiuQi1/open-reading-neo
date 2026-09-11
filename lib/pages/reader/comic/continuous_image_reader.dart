@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:xxread/pages/reader/comic/comic_scroll_controller.dart';
 
 import 'package:xxread/core/reader/reader_keep_screen_on.dart';
 import 'package:xxread/core/reader/reader_volume_key_controller.dart';
@@ -59,21 +60,17 @@ class ContinuousImageReader extends StatefulWidget {
 }
 
 class _ContinuousImageReaderState extends State<ContinuousImageReader> {
-  final ItemScrollController _itemController = ItemScrollController();
-  final ItemPositionsListener _positions = ItemPositionsListener.create();
+  final ComicScrollController _scrollController = ComicScrollController();
   final Map<int, Future<int>> _countLoads = {};
   final Map<int, int> _counts = {};
   final Set<int> _prefetchedChapters = {};
-  final ValueNotifier<bool> _userScrolling = ValueNotifier(false);
   final Map<({int chapterIndex, int pageIndex}), double> _pageAspectRatios = {};
 
   List<_ContinuousEntry> _entries = const [];
   late int _currentChapter = widget.initialChapterIndex;
   late int _currentPage = widget.initialPageIndex;
   bool _chromeVisible = false;
-  bool _initialJumpPending = true;
   int _windowGeneration = 0;
-  bool _scrolling = false;
   bool _windowLoadInFlight = false;
   int? _pendingWindowChapter;
 
@@ -82,7 +79,7 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
   @override
   void initState() {
     super.initState();
-    _positions.itemPositions.addListener(_handlePositions);
+    _scrollController.addListener(_handlePositions);
     unawaited(ReaderKeepScreenOnController.activate(this));
     unawaited(_activateVolumeKeys());
     unawaited(_ensureWindow(widget.initialChapterIndex));
@@ -92,8 +89,7 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
   void dispose() {
     unawaited(ReaderVolumeKeyController.deactivate(this));
     unawaited(ReaderKeepScreenOnController.deactivate(this));
-    _positions.itemPositions.removeListener(_handlePositions);
-    _userScrolling.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -120,7 +116,7 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
     });
   }
 
-  Future<bool> _ensureWindow(int anchorChapter) async {
+  Future<void> _ensureWindow(int anchorChapter) async {
     final generation = ++_windowGeneration;
     final requestedFirst = (anchorChapter - 1).clamp(
       0,
@@ -130,26 +126,38 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
       0,
       widget.document.chapters.length - 1,
     );
-    final first = requestedFirst;
-    final last = requestedLast;
+    var first = requestedFirst;
+    var last = requestedLast;
     final loads = <Future<int>>[
       for (var index = first; index <= last; index++) _loadCount(index),
     ];
     await Future.wait(loads);
-    if (!mounted || generation != _windowGeneration) return false;
-    _counts.removeWhere(
-      (chapter, _) => chapter < requestedFirst || chapter > requestedLast,
-    );
+    if (!mounted || generation != _windowGeneration) return;
+    // Keep any chapter still visible while a neighbor count was loading.
+    if (_entries.isNotEmpty && _scrollController.hasClients) {
+      final visible =
+          _entries[_scrollController.indexAt(_scrollController.offset)]
+              .chapterIndex;
+      final visibleLast =
+          _entries[_scrollController.indexAt(
+                _scrollController.offset +
+                    _scrollController.position.viewportDimension -
+                    0.01,
+              )]
+              .chapterIndex;
+      final keepFirst = (visible - 1).clamp(_windowFirst, _windowLast);
+      final keepLast = (visibleLast + 1).clamp(_windowFirst, _windowLast);
+      if (keepFirst < first) first = keepFirst;
+      if (keepLast > last) last = keepLast;
+    }
+    _counts.removeWhere((chapter, _) => chapter < first || chapter > last);
     _prefetchedChapters.removeWhere(
-      (chapter) => chapter < requestedFirst || chapter > requestedLast,
+      (chapter) => chapter < first || chapter > last,
     );
-    widget.source.retainChapterWindow(requestedFirst, requestedLast);
-    final anchorChapterBeforeRebuild = _currentChapter;
-    final anchorPageBeforeRebuild = _currentPage;
-    final anchorAlignment = _currentEntryAlignment();
+    widget.source.retainChapterWindow(first, last);
     final entries = <_ContinuousEntry>[];
     for (var chapter = first; chapter <= last; chapter++) {
-      if (entries.isNotEmpty) {
+      if (chapter > 0) {
         entries.add(
           _ContinuousEntry.boundary(
             chapterIndex: chapter,
@@ -173,61 +181,10 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
       }
     }
     setState(() => _entries = List.unmodifiable(entries));
-    if (_initialJumpPending) {
-      _scheduleInitialJump();
-    } else {
-      _scheduleAnchorRestore(
-        anchorChapterBeforeRebuild,
-        anchorPageBeforeRebuild,
-        anchorAlignment,
-      );
-    }
+    _pageAspectRatios.removeWhere(
+      (page, _) => page.chapterIndex < first || page.chapterIndex > last,
+    );
     _prefetchAdjacentChapters(anchorChapter);
-    return true;
-  }
-
-  double _currentEntryAlignment() {
-    final current = _entryIndexFor(_currentChapter, _currentPage);
-    if (current < 0) return 0;
-    for (final position in _positions.itemPositions.value) {
-      if (position.index == current) {
-        return position.itemLeadingEdge.clamp(0.0, 1.0);
-      }
-    }
-    return 0;
-  }
-
-  void _scheduleAnchorRestore(
-    int chapterIndex,
-    int pageIndex,
-    double alignment,
-  ) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final target = _entryIndexFor(chapterIndex, pageIndex);
-      if (_itemController.isAttached && target >= 0) {
-        _itemController.jumpTo(index: target, alignment: alignment);
-      }
-    });
-  }
-
-  void _scheduleInitialJump([int attemptsRemaining = 4]) {
-    if (!_initialJumpPending) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_initialJumpPending) return;
-      final target = _entryIndexFor(_currentChapter, _currentPage);
-      if (_itemController.isAttached && target >= 0) {
-        _itemController.jumpTo(index: target, alignment: 0);
-        _initialJumpPending = false;
-        return;
-      }
-      if (attemptsRemaining > 0) {
-        _scheduleInitialJump(attemptsRemaining - 1);
-      } else {
-        _initialJumpPending = false;
-        _handlePositions();
-      }
-    });
   }
 
   void _prefetchAdjacentChapters(int chapterIndex) {
@@ -243,7 +200,26 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
       final count = await _loadCount(chapterIndex);
       for (final page in [0, 1]) {
         if (page >= count) break;
-        await widget.source.loadPage(chapterIndex, page, preload: true);
+        final bytes = await widget.source.loadPage(
+          chapterIndex,
+          page,
+          preload: true,
+        );
+        if (!mounted) return;
+        final ratio = await _imageAspectRatio(bytes);
+        if (!mounted) return;
+        _recordAspectRatio(chapterIndex, page, ratio);
+        if (chapterIndex < _windowFirst || chapterIndex > _windowLast) return;
+        await precacheImage(
+          MemoryImage(bytes),
+          context,
+          onError: (error, stack) => comicDebugLog(
+            'chapter-preload',
+            'image decode failed chapterIndex=$chapterIndex page=$page',
+            error: error,
+            stackTrace: stack,
+          ),
+        );
       }
     } catch (error, stackTrace) {
       _prefetchedChapters.remove(chapterIndex);
@@ -256,45 +232,23 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
     }
   }
 
-  bool _handleScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification &&
-        notification.dragDetails != null) {
-      _scrolling = true;
-      _userScrolling.value = true;
-    } else if (notification is ScrollEndNotification) {
-      if (_scrolling) {
-        _scrolling = false;
-        _userScrolling.value = false;
-      }
-      final pending = _pendingWindowChapter;
-      if (pending != null && !_windowLoadInFlight) {
-        _pendingWindowChapter = null;
-        unawaited(_recenterWindow(pending));
-      }
-    }
-    return false;
-  }
-
   void _handlePositions() {
-    if (!mounted || _entries.isEmpty || _initialJumpPending) return;
-    final visible = _positions.itemPositions.value.where((position) {
-      if (position.itemTrailingEdge <= 0 ||
-          position.itemLeadingEdge >= 1 ||
-          position.index < 0 ||
-          position.index >= _entries.length) {
-        return false;
-      }
-      final kind = _entries[position.index].kind;
-      return kind == _ContinuousEntryKind.page ||
-          kind == _ContinuousEntryKind.empty;
-    });
-    if (visible.isEmpty) return;
-    final nearest = visible.reduce((left, right) {
-      return left.itemLeadingEdge.abs() <= right.itemLeadingEdge.abs()
-          ? left
-          : right;
-    });
-    final entry = _entries[nearest.index];
+    if (!mounted || _entries.isEmpty || !_scrollController.hasClients) return;
+    var index = _scrollController.indexAt(_scrollController.offset);
+    if (_entries[index].kind == _ContinuousEntryKind.boundary) {
+      index = (index + 1).clamp(0, _entries.length - 1);
+    }
+    final entry = _entries[index];
+    final lastVisible = _scrollController.indexAt(
+      _scrollController.offset + _scrollController.position.viewportDimension,
+    );
+    final enteringChapter = _entries[lastVisible].chapterIndex;
+    if (entry.chapterIndex == _windowFirst) {
+      unawaited(_recenterWindow(entry.chapterIndex));
+    }
+    if (enteringChapter == _windowLast) {
+      unawaited(_recenterWindow(enteringChapter));
+    }
     final chapterChanged = entry.chapterIndex != _currentChapter;
     final pageChanged =
         entry.kind == _ContinuousEntryKind.page &&
@@ -316,11 +270,6 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
       );
     }
     _prefetchAdjacentChapters(entry.chapterIndex);
-    if (chapterChanged &&
-        (entry.chapterIndex == _windowFirst ||
-            entry.chapterIndex == _windowLast)) {
-      unawaited(_recenterWindow(entry.chapterIndex));
-    }
   }
 
   int get _windowFirst {
@@ -349,7 +298,7 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
         (_windowFirst <= chapterIndex - 1 && _windowLast >= chapterIndex + 1)) {
       return;
     }
-    if (_scrolling || _windowLoadInFlight) {
+    if (_windowLoadInFlight) {
       _pendingWindowChapter = chapterIndex;
       return;
     }
@@ -359,10 +308,8 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
     try {
       while (mounted) {
         _pendingWindowChapter = null;
-        _initialJumpPending = false;
         await _ensureWindow(nextChapter);
         final pending = _pendingWindowChapter;
-        if (_scrolling) return;
         if (pending == null ||
             pending <= 0 ||
             pending >= widget.document.chapters.length - 1 ||
@@ -397,15 +344,8 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
     var target = current + delta;
     while (target >= 0 && target < _entries.length) {
       if (_entries[target].kind == _ContinuousEntryKind.page) {
-        if (_itemController.isAttached) {
-          unawaited(
-            _itemController.scrollTo(
-              index: target,
-              alignment: 0,
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOutCubic,
-            ),
-          );
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.offsetOf(target));
         }
         return;
       }
@@ -419,8 +359,8 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
 
   void _goToPage(int pageIndex) {
     final target = _entryIndexFor(_currentChapter, pageIndex);
-    if (target < 0 || !_itemController.isAttached) return;
-    _itemController.jumpTo(index: target, alignment: 0);
+    if (target < 0 || !_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.offsetOf(target));
   }
 
   void _handleTap(Offset position, Size size) {
@@ -445,72 +385,84 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
         children: [
           Positioned.fill(
             child: LayoutBuilder(
-              builder: (context, constraints) => GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) =>
-                    _handleTap(details.localPosition, constraints.biggest),
-                child: _entries.isEmpty
-                    ? _ReaderLoadingState(
-                        palette: _palette,
-                        label: widget.document.chapters[_currentChapter].title,
-                      )
-                    : NotificationListener<ScrollNotification>(
-                        onNotification: _handleScrollNotification,
-                        child: ScrollablePositionedList.builder(
-                          itemScrollController: _itemController,
-                          itemPositionsListener: _positions,
-                          itemCount: _entries.length,
-                          padding: EdgeInsets.zero,
-                          addAutomaticKeepAlives: false,
-                          itemBuilder: (context, index) {
-                            final entry = _entries[index];
-                            return switch (entry.kind) {
-                              _ContinuousEntryKind.boundary => _ChapterBoundary(
-                                key: ValueKey(
-                                  '${ContinuousImageReader.chapterBoundaryKeyPrefix}${entry.chapterIndex}',
-                                ),
-                                palette: _palette,
-                                title: entry.title,
-                              ),
-                              _ContinuousEntryKind.empty => _EmptyChapter(
-                                key: ValueKey(
-                                  '${ContinuousImageReader.emptyChapterKeyPrefix}${entry.chapterIndex}',
-                                ),
-                                palette: _palette,
-                                message: widget.source.emptyPagesMessage(
-                                  context.l10n,
-                                ),
-                                onRetry: () => unawaited(
-                                  _retryChapter(entry.chapterIndex),
-                                ),
-                              ),
-                              _ContinuousEntryKind.page => _ContinuousChapterPage(
-                                key: ValueKey(
-                                  '${ContinuousImageReader.pageKeyPrefix}${entry.chapterIndex}-${entry.pageIndex}',
-                                ),
-                                source: widget.source,
-                                chapterIndex: entry.chapterIndex,
-                                pageIndex: entry.pageIndex,
-                                palette: _palette,
-                                userScrolling: _userScrolling,
-                                knownAspectRatio:
-                                    _pageAspectRatios[(
-                                      chapterIndex: entry.chapterIndex,
-                                      pageIndex: entry.pageIndex,
-                                    )],
-                                onAspectRatio: (aspectRatio) {
-                                  _pageAspectRatios[(
-                                        chapterIndex: entry.chapterIndex,
-                                        pageIndex: entry.pageIndex,
-                                      )] =
-                                      aspectRatio;
-                                },
-                              ),
-                            };
+              builder: (context, constraints) {
+                if (_entries.isNotEmpty) {
+                  _scrollController.updateGeometry(
+                    [for (final entry in _entries) entry.key],
+                    [
+                      for (final entry in _entries)
+                        _entryExtent(context, entry, constraints.maxWidth),
+                    ],
+                    initialIndex: _entryIndexFor(_currentChapter, _currentPage),
+                  );
+                }
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) =>
+                      _handleTap(details.localPosition, constraints.biggest),
+                  child: _entries.isEmpty
+                      ? _ReaderLoadingState(
+                          palette: _palette,
+                          label:
+                              widget.document.chapters[_currentChapter].title,
+                        )
+                      : NotificationListener<ScrollMetricsNotification>(
+                          onNotification: (_) {
+                            _handlePositions();
+                            return false;
                           },
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            itemExtentBuilder: (index, _) =>
+                                _scrollController.extentOf(index),
+                            findChildIndexCallback: _scrollController.indexOf,
+                            itemCount: _entries.length,
+                            padding: EdgeInsets.zero,
+                            addAutomaticKeepAlives: false,
+                            itemBuilder: (context, index) {
+                              final entry = _entries[index];
+                              return switch (entry.kind) {
+                                _ContinuousEntryKind.boundary =>
+                                  _ChapterBoundary(
+                                    key: entry.key,
+                                    palette: _palette,
+                                    title: entry.title,
+                                  ),
+                                _ContinuousEntryKind.empty => _EmptyChapter(
+                                  key: entry.key,
+                                  palette: _palette,
+                                  message: widget.source.emptyPagesMessage(
+                                    context.l10n,
+                                  ),
+                                  onRetry: () => unawaited(
+                                    _retryChapter(entry.chapterIndex),
+                                  ),
+                                ),
+                                _ContinuousEntryKind.page =>
+                                  _ContinuousChapterPage(
+                                    key: entry.key,
+                                    source: widget.source,
+                                    chapterIndex: entry.chapterIndex,
+                                    pageIndex: entry.pageIndex,
+                                    palette: _palette,
+                                    knownAspectRatio:
+                                        _pageAspectRatios[(
+                                          chapterIndex: entry.chapterIndex,
+                                          pageIndex: entry.pageIndex,
+                                        )],
+                                    onAspectRatio: (aspectRatio) =>
+                                        _recordAspectRatio(
+                                          entry.chapterIndex,
+                                          entry.pageIndex,
+                                          aspectRatio,
+                                        ),
+                                  ),
+                              };
+                            },
+                          ),
                         ),
-                      ),
-              ),
+                );
+              },
             ),
           ),
           _ProgressPill(
@@ -542,6 +494,45 @@ class _ContinuousImageReaderState extends State<ContinuousImageReader> {
         ],
       ),
     );
+  }
+
+  void _recordAspectRatio(int chapter, int page, double ratio) {
+    if (chapter < _windowFirst || chapter > _windowLast) return;
+    final key = (chapterIndex: chapter, pageIndex: page);
+    if (_pageAspectRatios[key] == ratio) return;
+    setState(() => _pageAspectRatios[key] = ratio);
+  }
+
+  double _entryExtent(
+    BuildContext context,
+    _ContinuousEntry entry,
+    double width,
+  ) {
+    if (entry.kind == _ContinuousEntryKind.page) {
+      return width /
+          (_pageAspectRatios[(
+                chapterIndex: entry.chapterIndex,
+                pageIndex: entry.pageIndex,
+              )] ??
+              _defaultPageAspectRatio);
+    }
+    final boundary = entry.kind == _ContinuousEntryKind.boundary;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: boundary
+            ? entry.title
+            : widget.source.emptyPagesMessage(context.l10n),
+        style: DefaultTextStyle.of(context).style.merge(
+          boundary ? _chapterTitleStyle : const TextStyle(height: 1.4),
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: boundary ? 2 : null,
+    )..layout(maxWidth: (width - 48).clamp(1, double.infinity));
+    final height = painter.height;
+    painter.dispose();
+    return boundary ? height + 81 : height + 176;
   }
 
   Future<void> _retryChapter(int chapterIndex) async {
@@ -594,6 +585,15 @@ class _ContinuousEntry {
   final int pageIndex;
   final int pageCount;
   final String title;
+
+  Key get key => ValueKey(switch (kind) {
+    _ContinuousEntryKind.page =>
+      '${ContinuousImageReader.pageKeyPrefix}$chapterIndex-$pageIndex',
+    _ContinuousEntryKind.boundary =>
+      '${ContinuousImageReader.chapterBoundaryKeyPrefix}$chapterIndex',
+    _ContinuousEntryKind.empty =>
+      '${ContinuousImageReader.emptyChapterKeyPrefix}$chapterIndex',
+  });
 }
 
 class _ContinuousChapterPage extends StatefulWidget {
@@ -603,7 +603,6 @@ class _ContinuousChapterPage extends StatefulWidget {
     required this.chapterIndex,
     required this.pageIndex,
     required this.palette,
-    required this.userScrolling,
     required this.knownAspectRatio,
     required this.onAspectRatio,
   });
@@ -612,7 +611,6 @@ class _ContinuousChapterPage extends StatefulWidget {
   final int chapterIndex;
   final int pageIndex;
   final ReaderThemePalette palette;
-  final ValueListenable<bool> userScrolling;
   final double? knownAspectRatio;
   final ValueChanged<double> onAspectRatio;
 
@@ -621,39 +619,24 @@ class _ContinuousChapterPage extends StatefulWidget {
 }
 
 class _ContinuousChapterPageState extends State<_ContinuousChapterPage> {
-  Uint8List? _bytes;
   MemoryImage? _provider;
   Object? _error;
-  double? _aspectRatio;
-  bool _decoded = false;
-  bool _presented = false;
   int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _aspectRatio = widget.knownAspectRatio;
-    widget.userScrolling.addListener(_handleScrollingChanged);
     unawaited(_load());
   }
 
   @override
   void didUpdateWidget(covariant _ContinuousChapterPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.userScrolling, widget.userScrolling)) {
-      oldWidget.userScrolling.removeListener(_handleScrollingChanged);
-      widget.userScrolling.addListener(_handleScrollingChanged);
-    }
     if (!identical(oldWidget.source, widget.source) ||
         oldWidget.chapterIndex != widget.chapterIndex ||
         oldWidget.pageIndex != widget.pageIndex) {
-      _releaseProvider();
-      _aspectRatio = widget.knownAspectRatio;
-      _bytes = null;
       _provider = null;
       _error = null;
-      _decoded = false;
-      _presented = false;
       unawaited(_load());
     }
   }
@@ -661,16 +644,7 @@ class _ContinuousChapterPageState extends State<_ContinuousChapterPage> {
   @override
   void dispose() {
     _loadGeneration++;
-    widget.userScrolling.removeListener(_handleScrollingChanged);
-    _releaseProvider();
     super.dispose();
-  }
-
-  void _handleScrollingChanged() {
-    if (widget.userScrolling.value || !_decoded || _presented || !mounted) {
-      return;
-    }
-    setState(() => _presented = true);
   }
 
   Future<void> _load() async {
@@ -681,44 +655,32 @@ class _ContinuousChapterPageState extends State<_ContinuousChapterPage> {
         widget.pageIndex,
       );
       if (!mounted || generation != _loadGeneration) return;
-      _bytes = bytes;
-      _provider = MemoryImage(bytes);
-      final ratio =
-          _imageAspectRatio(bytes) ?? _aspectRatio ?? _defaultPageAspectRatio;
-      _aspectRatio = ratio;
+      final ratio = await _imageAspectRatio(bytes);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _provider = MemoryImage(bytes);
+      });
       widget.onAspectRatio(ratio);
-      _decoded = true;
-      if (!widget.userScrolling.value) {
-        setState(() => _presented = true);
-      }
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _error = error);
     }
   }
 
-  void _releaseProvider() {
-    _provider = null;
-    _bytes = null;
-  }
-
   Future<void> _retry() async {
     _loadGeneration++;
     await widget.source.invalidatePage(widget.chapterIndex, widget.pageIndex);
     if (!mounted) return;
-    _releaseProvider();
-    if (!mounted) return;
     setState(() {
+      _provider = null;
       _error = null;
-      _decoded = false;
-      _presented = false;
     });
     unawaited(_load());
   }
 
   @override
   Widget build(BuildContext context) {
-    final aspectRatio = _aspectRatio ?? _defaultPageAspectRatio;
+    final aspectRatio = widget.knownAspectRatio ?? _defaultPageAspectRatio;
     if (_error != null) {
       return _PageErrorState(
         palette: widget.palette,
@@ -727,7 +689,7 @@ class _ContinuousChapterPageState extends State<_ContinuousChapterPage> {
       );
     }
     final provider = _provider;
-    if (!_presented || provider == null || _bytes == null) {
+    if (provider == null) {
       return _PageLoadingPlaceholder(
         palette: widget.palette,
         pageNumber: widget.pageIndex + 1,
@@ -758,122 +720,39 @@ class _ContinuousChapterPageState extends State<_ContinuousChapterPage> {
 
 const double _defaultPageAspectRatio = 1.0;
 
-double _safeAspectRatio(double value) {
-  if (!value.isFinite || value <= 0) return _defaultPageAspectRatio;
-  return value.clamp(0.02, 50.0);
+/// Read dimensions with the same decoder used to render the page. A guessed or
+/// clamped ratio gives fitWidth a shorter box and crops valid long-strip art.
+Future<double> _imageAspectRatio(Uint8List bytes) async {
+  // Encoded ImageDescriptor dimensions are unavailable on Flutter web.
+  if (kIsWeb) {
+    final codec = await ui.instantiateImageCodec(bytes);
+    try {
+      final frame = await codec.getNextFrame();
+      try {
+        return frame.image.width / frame.image.height;
+      } finally {
+        frame.image.dispose();
+      }
+    } finally {
+      codec.dispose();
+    }
+  }
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  ui.ImageDescriptor? descriptor;
+  try {
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    return descriptor.width / descriptor.height;
+  } finally {
+    descriptor?.dispose();
+    buffer.dispose();
+  }
 }
 
-double? _imageAspectRatio(Uint8List bytes) {
-  int u16be(int offset) => (bytes[offset] << 8) | bytes[offset + 1];
-  int u16le(int offset) => bytes[offset] | (bytes[offset + 1] << 8);
-  int u24le(int offset) =>
-      bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
-  int u32be(int offset) =>
-      (bytes[offset] << 24) |
-      (bytes[offset + 1] << 16) |
-      (bytes[offset + 2] << 8) |
-      bytes[offset + 3];
-  int u32le(int offset) =>
-      bytes[offset] |
-      (bytes[offset + 1] << 8) |
-      (bytes[offset + 2] << 16) |
-      (bytes[offset + 3] << 24);
-  int i32le(int offset) {
-    final value = u32le(offset);
-    return value >= 0x80000000 ? value - 0x100000000 : value;
-  }
-
-  double? ratio(int width, int height) =>
-      width > 0 && height > 0 ? _safeAspectRatio(width / height) : null;
-
-  if (bytes.length >= 24 &&
-      bytes[0] == 0x89 &&
-      bytes[1] == 0x50 &&
-      bytes[2] == 0x4e &&
-      bytes[3] == 0x47) {
-    return ratio(u32be(16), u32be(20));
-  }
-  if (bytes.length >= 10 &&
-      bytes[0] == 0x47 &&
-      bytes[1] == 0x49 &&
-      bytes[2] == 0x46) {
-    return ratio(u16le(6), u16le(8));
-  }
-  if (bytes.length >= 26 && bytes[0] == 0x42 && bytes[1] == 0x4d) {
-    return ratio(i32le(18).abs(), i32le(22).abs());
-  }
-  if (bytes.length >= 30 &&
-      bytes[0] == 0x52 &&
-      bytes[1] == 0x49 &&
-      bytes[2] == 0x46 &&
-      bytes[3] == 0x46 &&
-      bytes[8] == 0x57 &&
-      bytes[9] == 0x45 &&
-      bytes[10] == 0x42 &&
-      bytes[11] == 0x50) {
-    if (bytes[12] == 0x56 &&
-        bytes[13] == 0x50 &&
-        bytes[14] == 0x38 &&
-        bytes[15] == 0x58) {
-      return ratio(u24le(24) + 1, u24le(27) + 1);
-    }
-    if (bytes[12] == 0x56 &&
-        bytes[13] == 0x50 &&
-        bytes[14] == 0x38 &&
-        bytes[15] == 0x4c &&
-        bytes[20] == 0x2f) {
-      final packed = u32le(21);
-      return ratio((packed & 0x3fff) + 1, ((packed >> 14) & 0x3fff) + 1);
-    }
-    if (bytes[12] == 0x56 &&
-        bytes[13] == 0x50 &&
-        bytes[14] == 0x38 &&
-        bytes[15] == 0x20 &&
-        bytes[23] == 0x9d &&
-        bytes[24] == 0x01 &&
-        bytes[25] == 0x2a) {
-      return ratio(u16le(26) & 0x3fff, u16le(28) & 0x3fff);
-    }
-  }
-  if (bytes.length >= 4 && bytes[0] == 0xff && bytes[1] == 0xd8) {
-    const sizeMarkers = <int>{
-      0xc0,
-      0xc1,
-      0xc2,
-      0xc3,
-      0xc5,
-      0xc6,
-      0xc7,
-      0xc9,
-      0xca,
-      0xcb,
-      0xcd,
-      0xce,
-      0xcf,
-    };
-    var offset = 2;
-    while (offset + 3 < bytes.length) {
-      while (offset < bytes.length && bytes[offset] != 0xff) {
-        offset++;
-      }
-      while (offset < bytes.length && bytes[offset] == 0xff) {
-        offset++;
-      }
-      if (offset >= bytes.length) break;
-      final marker = bytes[offset++];
-      if (marker == 0xd8 || marker == 0xd9 || marker == 0x01) continue;
-      if (marker >= 0xd0 && marker <= 0xd7) continue;
-      if (offset + 1 >= bytes.length) break;
-      final segmentLength = u16be(offset);
-      if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
-      if (sizeMarkers.contains(marker) && segmentLength >= 7) {
-        return ratio(u16be(offset + 5), u16be(offset + 3));
-      }
-      offset += segmentLength;
-    }
-  }
-  return null;
-}
+const _chapterTitleStyle = TextStyle(
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+  height: 1.25,
+);
 
 class _ChapterBoundary extends StatelessWidget {
   const _ChapterBoundary({
@@ -906,12 +785,7 @@ class _ChapterBoundary extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: palette.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              height: 1.25,
-            ),
+            style: _chapterTitleStyle.copyWith(color: palette.text),
           ),
         ],
       ),
@@ -1056,7 +930,6 @@ class _PageErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 260,
       color: palette.background,
       alignment: Alignment.center,
       child: Column(

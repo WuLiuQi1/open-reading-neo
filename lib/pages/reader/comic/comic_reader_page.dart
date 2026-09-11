@@ -312,17 +312,26 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   Future<void> _showCatalog(ImageReaderDocument document) async {
     final selected = await showModalBottomSheet<int>(
       context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView.builder(
-          itemCount: document.chapters.length,
-          itemBuilder: (context, index) => ListTile(
-            selected: index == _chapterIndex,
-            title: Text(document.chapters[index].title),
-            onTap: () => Navigator.of(sheetContext).pop(index),
-          ),
-        ),
+      backgroundColor: Colors.transparent,
+      barrierColor: _readerPalette.shadow.withValues(
+        alpha: _readerPalette.brightness == Brightness.dark ? 0.72 : 0.38,
       ),
+      showDragHandle: false,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 620),
+      builder: (sheetContext) {
+        final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.86;
+        return SizedBox(
+          height: sheetHeight,
+          child: _ComicCatalogSheet(
+            key: const ValueKey('comic-catalog-sheet'),
+            palette: _readerPalette,
+            chapters: document.chapters,
+            currentChapterIndex: _chapterIndex,
+            onChapterSelected: (index) => Navigator.of(sheetContext).pop(index),
+          ),
+        );
+      },
     );
     if (selected != null) {
       if (_resolvedDirection == ImageReaderDirection.vertical) {
@@ -514,6 +523,153 @@ class _ComicReaderPageState extends State<ComicReaderPage>
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _ComicCatalogSheet extends StatefulWidget {
+  const _ComicCatalogSheet({
+    super.key,
+    required this.palette,
+    required this.chapters,
+    required this.currentChapterIndex,
+    required this.onChapterSelected,
+  });
+
+  static const dragHandleKey = ValueKey('comic-catalog-drag-handle');
+  static const double chapterExtent = 56;
+
+  final ReaderThemePalette palette;
+  final List<ImageReaderChapter> chapters;
+  final int currentChapterIndex;
+  final ValueChanged<int> onChapterSelected;
+
+  @override
+  State<_ComicCatalogSheet> createState() => _ComicCatalogSheetState();
+}
+
+class _ComicCatalogSheetState extends State<_ComicCatalogSheet> {
+  late final ScrollController _chapterScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToCurrent();
+    });
+  }
+
+  @override
+  void dispose() {
+    _chapterScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToCurrent() {
+    if (!_chapterScrollController.hasClients || widget.chapters.isEmpty) {
+      return;
+    }
+    final position = _chapterScrollController.position;
+    final currentTop =
+        widget.currentChapterIndex * _ComicCatalogSheet.chapterExtent;
+    final rawTarget = currentTop - position.viewportDimension * 0.32;
+    final target = rawTarget.clamp(0.0, position.maxScrollExtent);
+    _chapterScrollController.jumpTo(target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.palette.toThemeData(
+      typography: Theme.of(context).textTheme,
+    );
+    return Theme(
+      data: theme,
+      child: Material(
+        color: widget.palette.surface,
+        surfaceTintColor: Colors.transparent,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              // Keep the handle outside the chapter list so a downward drag
+              // can dismiss the sheet instead of scrolling the catalog.
+              SizedBox(
+                key: _ComicCatalogSheet.dragHandleKey,
+                height: kMinInteractiveDimension,
+                width: double.infinity,
+                child: ReaderSettingsDragHandle(palette: widget.palette),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 12, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.readerToolbarTOC,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            context.l10n.readerNavigationPosition(
+                              widget.currentChapterIndex + 1,
+                              widget.chapters.length,
+                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: widget.palette.secondaryText),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      child: Text(
+                        MaterialLocalizations.of(context).closeButtonTooltip,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: widget.palette.border),
+              Expanded(
+                child: ListView.builder(
+                  controller: _chapterScrollController,
+                  itemExtent: _ComicCatalogSheet.chapterExtent,
+                  itemCount: widget.chapters.length,
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
+                  itemBuilder: (context, index) {
+                    final selected = index == widget.currentChapterIndex;
+                    return ListTile(
+                      selected: selected,
+                      selectedColor: widget.palette.accent,
+                      title: Text(
+                        widget.chapters[index].title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? widget.palette.accent
+                              : widget.palette.text,
+                        ),
+                      ),
+                      onTap: () => widget.onChapterSelected(index),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

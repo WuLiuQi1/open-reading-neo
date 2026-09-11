@@ -33,6 +33,51 @@ void main() {
     );
   });
 
+  test(
+    'keeps eager and lazy comic images in order without noscript duplicates',
+    () async {
+      final runtime = SourceRuntime(
+        transport: _ComicTransport({
+          'https://books.test/chapter/1': SourceResponse(
+            body: '''
+            <img src="/images/first.webp">
+            <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+                 data-src="/images/middle.webp">
+            <noscript><img src="/images/middle.webp"></noscript>
+            <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+                 data-src="/images/last.webp">
+            <noscript><img src="/images/last.webp"></noscript>
+          ''',
+            finalUri: Uri.parse('https://books.test/chapter/1'),
+          ),
+        }),
+        loginSessionStore: _MemoryLoginSessionStore(),
+      );
+      addTearDown(runtime.close);
+
+      final content = await runtime.getChapterContent(
+        _comicSource(
+          content: 'img@html',
+          headers: const {'Referer': 'https://books.test/'},
+        ),
+        bookId: 'https://books.test/book/1',
+        chapterId: 'https://books.test/chapter/1',
+      );
+
+      expect(content.images.map((image) => image.url.path), [
+        '/images/first.webp',
+        '/images/middle.webp',
+        '/images/last.webp',
+      ]);
+      expect(
+        content.images.every(
+          (image) => image.headers['Referer'] == 'https://books.test/',
+        ),
+        isTrue,
+      );
+    },
+  );
+
   test('keeps each page base URL and merges duplicate image options', () async {
     final transport = _ComicTransport({
       'https://books.test/chapter/1': SourceResponse(

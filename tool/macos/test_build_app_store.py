@@ -137,6 +137,12 @@ class BuildMacAppStoreTests(unittest.TestCase):
             self.assertEqual(pod[2], self.root / 'macos')
             xcode = [call[1] for call in calls if call[1][0] == 'xcodebuild']
             self.assertEqual(len(xcode), 2)
+            self.assertIn('CODE_SIGN_IDENTITY=Apple Distribution', xcode[0])
+            self.assertIn('CODE_SIGN_STYLE=Manual', xcode[0])
+            self.assertIn(
+                'PROVISIONING_PROFILE_SPECIFIER=Open Reading macOS App Store (Apple Distribution)',
+                xcode[0],
+            )
             options = plistlib.loads(
                 (build.OUT / f'2.6.7-{number}/ExportOptions.plist').read_bytes()
             )

@@ -37,6 +37,13 @@ def parser():
     result.add_argument('--check', action='store_true', help='Read-only local prerequisite check')
     result.add_argument('--upload', action='store_true', help='Upload archive to App Store Connect')
     result.add_argument('--allow-beta-xcode', action='store_true', help='Local export/check only')
+    # Flutter's framework check runs `lipo <binary> -verify_arch <archs...>`, and the
+    # lipo shipped with current Xcode reads every arch after the first as another input
+    # file, so a universal macOS archive fails with "does not contain architectures".
+    # Passing a single arch keeps that check to one argument. Drop this back to
+    # "arm64 x86_64" once the toolchain accepts the multi-arch form.
+    result.add_argument('--archs', default='arm64',
+                        help='ARCHS for the archive (default: arm64; Intel needs "arm64 x86_64")')
     return result
 
 
@@ -50,6 +57,21 @@ def read_command(command):
 
 def team_id():
     return os.environ.get('MACOS_TEAM_ID', '').strip() or os.environ.get('IOS_TEAM_ID', '').strip()
+
+
+def signing_identity():
+    return os.environ.get('MACOS_CODE_SIGN_IDENTITY', 'Apple Distribution').strip()
+
+
+def provisioning_profile():
+    # Xcode's automatic-signing engine fails to re-negotiate the Associated Domains
+    # capability for a macOS archive from the command line (confirmed by bisecting
+    # Release.entitlements: removing associated-domains alone makes Automatic signing
+    # succeed). Manual signing against an explicit profile sidesteps that renegotiation.
+    # The profile must be signed with an "Apple Distribution" certificate, not the
+    # legacy "3rd Party Mac Developer Application" type Xcode no longer matches by name.
+    default = 'Open Reading macOS App Store (Apple Distribution)'
+    return os.environ.get('MACOS_PROVISIONING_PROFILE', default).strip()
 
 
 def check_inputs(args):
@@ -180,8 +202,12 @@ def execute(args):
              ['xcodebuild', '-workspace', 'macos/Runner.xcworkspace', '-scheme', 'Runner',
               '-configuration', 'Release', '-destination', 'generic/platform=macOS',
               '-archivePath', str(archive), *auth_arguments(),
-              'CODE_SIGN_STYLE=Automatic', 'DEVELOPMENT_TEAM=' + team_id(),
+              'CODE_SIGN_STYLE=Manual',
+              'CODE_SIGN_IDENTITY=' + signing_identity(),
+              'PROVISIONING_PROFILE_SPECIFIER=' + provisioning_profile(),
+              'DEVELOPMENT_TEAM=' + team_id(),
               'FLUTTER_BUILD_NAME=' + args.build_name, 'FLUTTER_BUILD_NUMBER=' + args.build_number,
+              'ARCHS=' + args.archs, 'ONLY_ACTIVE_ARCH=NO',
               'archive'], log)
     verify_store_defines()
     app = validate_archive(archive, args.build_name, args.build_number)

@@ -35,6 +35,7 @@ AGENTS.md
 .pub-cache/
 .pub/
 /build/
+android/build/
 
 # Symbolication related
 app.*.symbols

@@ -93,8 +93,6 @@ class BookSourcesPage extends StatefulWidget {
   final BookSourceShelfService Function(BookSourceClient client)?
   shelfServiceFactory;
 
-  static const int maxLatestItemsPerSource = 12;
-
   const BookSourcesPage({
     super.key,
     this.client,
@@ -130,16 +128,6 @@ class BookSourcesPage extends StatefulWidget {
     ];
     return searchable.any((value) => value.toLowerCase().contains(normalized));
   }
-
-  /// 保留每个书源自己的 latest 顺序，再按来源轮流穿插。
-  ///
-  /// 首轮优先展示头部更新时间较新的书源；随后每轮每源最多贡献一本，
-  /// 避免单一书源依靠时间戳或返回数量占满聚合列表。
-  @visibleForTesting
-  static List<SourcedBook> interleaveLatestBatches(
-    Iterable<List<SourcedBook>> batches, {
-    int maxItemsPerSource = maxLatestItemsPerSource,
-  }) => mergeLatestSourceBatches(batches, maxItemsPerSource: maxItemsPerSource);
 
   @override
   State<BookSourcesPage> createState() => _BookSourcesPageState();

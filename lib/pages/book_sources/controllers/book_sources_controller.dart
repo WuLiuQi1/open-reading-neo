@@ -7,7 +7,7 @@ import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/services/book_source_gateway.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
 import 'package:xxread/pages/book_sources/models/sourced_book.dart';
-export 'book_source_batch_fetcher.dart' show mergeLatestSourceBatches;
+import 'package:xxread/services/core/advanced_feature_access.dart';
 export 'book_sources_state.dart';
 
 import 'book_source_batch_fetcher.dart';
@@ -50,11 +50,20 @@ class BookSourcesController extends ChangeNotifier {
     if (_closed) return;
     if (!_started) {
       _started = true;
+      AdvancedFeatureAccess.premiumAccessChanges.addListener(
+        _handlePremiumAccessChanged,
+      );
       _registrySubscription = _registry.changes.listen((_) {
         unawaited(refreshSourceMetadata());
       });
     }
     await _loadSources();
+  }
+
+  void _handlePremiumAccessChanged() {
+    // Invalidate pending startup reads immediately so a pre-auth snapshot
+    // cannot overwrite the runnable sources after membership is restored.
+    unawaited(reload());
   }
 
   Future<void> refreshSourceMetadata() => _refreshOrganizationMetadata();
@@ -85,7 +94,7 @@ class BookSourcesController extends ChangeNotifier {
             caches: {
               ..._state.caches,
               BookSourcesSection.categories: BookSourcesSectionCache.categories(
-                _allLoadedListChannels(),
+                _state.allLoadedListChannels,
               ),
             },
           ),
@@ -96,10 +105,10 @@ class BookSourcesController extends ChangeNotifier {
       }
       return;
     }
-    _emit(_state.copyWith(listLayout: false));
+    _emit(_state.withStandardLayout());
     if (!_state.loadingSources &&
         _state.section == BookSourcesSection.categories) {
-      _autoSelectFirstCategory();
+      unawaited(loadSection(BookSourcesSection.categories));
     }
   }
 
@@ -213,9 +222,9 @@ class BookSourcesController extends ChangeNotifier {
     if (_closed) return;
     final revision = ++_sectionRevision;
     final cachedSection = _state.caches[section];
-    if (!force && cachedSection != null) {
+    if (!force && cachedSection?.complete == true) {
       if (section == BookSourcesSection.categories &&
-          cachedSection.categories != null &&
+          cachedSection?.categories != null &&
           _state.section == section &&
           !(_state.listLayout && _state.showListDirectory)) {
         _autoSelectFirstCategory();
@@ -224,7 +233,7 @@ class BookSourcesController extends ChangeNotifier {
     }
     final currentCache = _state.caches[section];
     final keepCurrentContent =
-        preserveContent &&
+        (preserveContent || cachedSection?.complete == false) &&
         currentCache != null &&
         !currentCache.loading &&
         currentCache.error == null;
@@ -240,7 +249,7 @@ class BookSourcesController extends ChangeNotifier {
         _state.showListDirectory) {
       _setCache(
         section,
-        BookSourcesSectionCache.categories(_allLoadedListChannels()),
+        BookSourcesSectionCache.categories(_state.allLoadedListChannels),
       );
       return;
     }
@@ -260,17 +269,56 @@ class BookSourcesController extends ChangeNotifier {
     try {
       nextCache = switch (section) {
         BookSourcesSection.recommended => BookSourcesSectionCache.shelves(
-          await _fetchShelves(),
+          await _fetchShelves(
+            initial: currentCache?.shelves ?? const [],
+            onProgress: (items) {
+              if (items.isEmpty || _closed || revision != _sectionRevision) {
+                return;
+              }
+              _setCache(
+                section,
+                BookSourcesSectionCache.shelves(items, complete: false),
+              );
+            },
+          ),
         ),
         BookSourcesSection.categories => BookSourcesSectionCache.categories(
-          await _fetchCategories(),
+          await _fetchCategories(
+            initial: currentCache?.categories ?? const [],
+            onProgress: (items) {
+              if (items.isEmpty || _closed || revision != _sectionRevision) {
+                return;
+              }
+              _setCache(
+                section,
+                BookSourcesSectionCache.categories(items, complete: false),
+              );
+              if (_state.section == BookSourcesSection.categories &&
+                  !(_state.listLayout && _state.showListDirectory)) {
+                _autoSelectFirstCategory();
+              }
+            },
+          ),
         ),
         BookSourcesSection.latest => BookSourcesSectionCache.books(
-          await _fetchLatest(),
+          await _fetchLatest(
+            initial: currentCache?.books ?? const [],
+            onProgress: (items) {
+              if (items.isEmpty || _closed || revision != _sectionRevision) {
+                return;
+              }
+              _setCache(
+                section,
+                BookSourcesSectionCache.books(items, complete: false),
+              );
+            },
+          ),
         ),
       };
     } catch (error) {
-      nextCache = BookSourcesSectionCache.error(error);
+      nextCache = keepCurrentContent
+          ? currentCache
+          : BookSourcesSectionCache.error(error);
     }
     if (_closed || revision != _sectionRevision) {
       _clearStaleLoading(section);
@@ -278,6 +326,7 @@ class BookSourcesController extends ChangeNotifier {
     }
     var next = _state.copyWith(caches: {..._state.caches, section: nextCache});
     if (keepCurrentContent &&
+        force &&
         section == BookSourcesSection.categories &&
         nextCache.error == null) {
       next = _resetCategory(next);
@@ -306,11 +355,30 @@ class BookSourcesController extends ChangeNotifier {
       ),
     );
     if (!supportsBrowse) return;
+    void publishCached(BookSourceSearchPage page) {
+      if (_closed ||
+          revision != _categoryRevision ||
+          _state.selectedCategory != category) {
+        return;
+      }
+      _emit(
+        _state.copyWith(
+          categoryBooks: page.items
+              .map((book) => SourcedBook(source: category.source, book: book))
+              .toList(growable: false),
+          loadingCategoryBooks: false,
+          categoryPage: page.page,
+          categoryHasMore: false,
+        ),
+      );
+    }
+
     try {
       final page = await gateway.browse(
         category.source,
         category: category.id,
         sort: 'popular',
+        onCached: publishCached,
       );
       if (_closed ||
           revision != _categoryRevision ||
@@ -442,6 +510,7 @@ class BookSourcesController extends ChangeNotifier {
       return;
     }
     final revision = _sourceRevision;
+    final sectionRevision = _sectionRevision;
     final errors = {..._state.listChannelErrors}..remove(group.source.id);
     _emit(
       _state.copyWith(
@@ -452,32 +521,35 @@ class BookSourcesController extends ChangeNotifier {
         listChannelErrors: errors,
       ),
     );
+    void publishChannels(
+      List<BookSourceCategory> channels, {
+      required bool done,
+    }) {
+      if (_closed ||
+          revision != _sourceRevision ||
+          sectionRevision != _sectionRevision) {
+        return;
+      }
+      _emit(_state.withLoadedListChannels(group.source, channels, done: done));
+    }
+
     try {
-      final channels = await gateway.getCategories(group.source);
-      if (_closed || revision != _sourceRevision) return;
-      final loaded = {
-        ..._state.listChannelsBySource,
-        group.source.id: _uniqueSourcedCategories(group.source, channels),
-      };
-      final loading = {..._state.loadingListChannelSources}
-        ..remove(group.source.id);
-      final errors = {..._state.listChannelErrors}..remove(group.source.id);
-      _emit(
-        _state.copyWith(
-          listChannelsBySource: loaded,
-          loadingListChannelSources: loading,
-          listChannelErrors: errors,
-          caches: {
-            ..._state.caches,
-            BookSourcesSection.categories: BookSourcesSectionCache.categories(
-              loaded.values.expand((items) => items).toList(growable: false),
-            ),
-          },
-          listGroupsRevision: _state.listGroupsRevision + 1,
-        ),
+      final channels = await gateway.getCategories(
+        group.source,
+        onCached: (items) => publishChannels(items, done: false),
       );
+      if (_closed ||
+          revision != _sourceRevision ||
+          sectionRevision != _sectionRevision) {
+        return;
+      }
+      publishChannels(channels, done: true);
     } catch (error) {
-      if (_closed || revision != _sourceRevision) return;
+      if (_closed ||
+          revision != _sourceRevision ||
+          sectionRevision != _sectionRevision) {
+        return;
+      }
       final loading = {..._state.loadingListChannelSources}
         ..remove(group.source.id);
       _emit(
@@ -519,6 +591,9 @@ class BookSourcesController extends ChangeNotifier {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    AdvancedFeatureAccess.premiumAccessChanges.removeListener(
+      _handlePremiumAccessChanged,
+    );
     _sourceRevision++;
     _sectionRevision++;
     _categoryRevision++;
@@ -558,49 +633,101 @@ class BookSourcesController extends ChangeNotifier {
     return Map.unmodifiable(result);
   }
 
-  Future<List<BookSourceDiscoveryShelf>> _fetchShelves() async {
-    final batches = await _batchFetcher.fetch(
-      _state.scopedSourcesFor(BookSourcesSection.recommended),
-      (source) async {
-        final page = await gateway.getDiscovery(source);
-        return page.sections
-            .where((section) => section.items.isNotEmpty)
-            .map(
-              (section) => BookSourceDiscoveryShelf(
-                source: source,
-                title: section.title,
-                items: section.items,
-              ),
-            )
-            .toList(growable: false);
+  Future<List<BookSourceDiscoveryShelf>> _fetchShelves({
+    required Iterable<BookSourceDiscoveryShelf> initial,
+    required void Function(List<BookSourceDiscoveryShelf>) onProgress,
+  }) async {
+    final slots = SourceBatchAccumulator<BookSourceDiscoveryShelf>(
+      initial,
+      (item) => item.source.id,
+    );
+    final batches = await _batchFetcher
+        .fetchProgressively<BookSourceDiscoveryShelf>(
+          _state.scopedSourcesFor(BookSourcesSection.recommended),
+          (source, publish) async {
+            List<BookSourceDiscoveryShelf> convert(
+              BookSourceDiscoveryPage page,
+            ) => page.sections
+                .where((section) => section.items.isNotEmpty)
+                .map(
+                  (section) => BookSourceDiscoveryShelf(
+                    source: source,
+                    title: section.title,
+                    items: section.items,
+                  ),
+                )
+                .toList(growable: false);
+            final page = await gateway.getDiscovery(
+              source,
+              onCached: (cached) => publish(convert(cached)),
+            );
+            return convert(page);
+          },
+          onProgress: (source, items) {
+            slots.replace(source.id, items);
+            onProgress(slots.items);
+          },
+        );
+    if (batches.isEmpty && slots.items.isEmpty) return const [];
+    return slots.items;
+  }
+
+  Future<List<SourcedBookCategory>> _fetchCategories({
+    required Iterable<SourcedBookCategory> initial,
+    required void Function(List<SourcedBookCategory>) onProgress,
+  }) async {
+    final slots = SourceBatchAccumulator<SourcedBookCategory>(
+      initial,
+      (item) => item.source.id,
+    );
+    final batches = await _batchFetcher.fetchProgressively<SourcedBookCategory>(
+      _state.scopedSourcesFor(BookSourcesSection.categories),
+      (source, publish) async {
+        List<SourcedBookCategory> convert(List<BookSourceCategory> items) =>
+            _uniqueSourcedCategories(source, items);
+        final categories = await gateway.getCategories(
+          source,
+          onCached: (cached) => publish(convert(cached)),
+        );
+        return convert(categories);
+      },
+      onProgress: (source, items) {
+        slots.replace(source.id, items);
+        onProgress(slots.items);
       },
     );
-    return batches.expand((items) => items).toList(growable: false);
+    if (batches.isEmpty && slots.items.isEmpty) return const [];
+    return slots.items;
   }
 
-  Future<List<SourcedBookCategory>> _fetchCategories() async {
-    final batches = await _batchFetcher.fetch(
-      _state.scopedSourcesFor(BookSourcesSection.categories),
-      (source) async =>
-          _uniqueSourcedCategories(source, await gateway.getCategories(source)),
+  Future<List<SourcedBook>> _fetchLatest({
+    required Iterable<SourcedBook> initial,
+    required void Function(List<SourcedBook>) onProgress,
+  }) async {
+    final slots = SourceBatchAccumulator<SourcedBook>(
+      initial,
+      (item) => item.source.id,
     );
-    return batches.expand((items) => items).toList(growable: false);
-  }
-
-  Future<List<SourcedBook>> _fetchLatest() async {
-    final batches = await _batchFetcher.fetch(
+    final batches = await _batchFetcher.fetchProgressively<SourcedBook>(
       _state.scopedSourcesFor(BookSourcesSection.latest),
-      (source) async {
-        final page = await gateway.browse(source, sort: 'latest');
-        return page.items
+      (source, publish) async {
+        List<SourcedBook> convert(BookSourceSearchPage page) => page.items
             .map((book) => SourcedBook(source: source, book: book))
             .toList(growable: false);
+        final page = await gateway.browse(
+          source,
+          sort: 'latest',
+          onCached: (cached) => publish(convert(cached)),
+        );
+        return convert(page);
+      },
+      onProgress: (source, items) {
+        slots.replace(source.id, items.take(maxLatestItemsPerSource).toList());
+        onProgress(slots.items);
       },
     );
-    return mergeLatestSourceBatches(
-      batches,
-      maxItemsPerSource: maxLatestItemsPerSource,
-    );
+    if (batches.isEmpty && slots.items.isEmpty) return const [];
+    return slots.items;
   }
 
   List<SourcedBookCategory> _uniqueSourcedCategories(
@@ -641,15 +768,8 @@ class BookSourcesController extends ChangeNotifier {
     categoryPage: 1,
   );
 
-  List<SourcedBookCategory> _allLoadedListChannels() => _state
-      .listChannelsBySource
-      .values
-      .expand((items) => items)
-      .toList(growable: false);
-
-  void _setCache(BookSourcesSection section, BookSourcesSectionCache cache) {
-    _emit(_state.copyWith(caches: {..._state.caches, section: cache}));
-  }
+  void _setCache(BookSourcesSection section, BookSourcesSectionCache cache) =>
+      _emit(_state.copyWith(caches: {..._state.caches, section: cache}));
 
   void _clearStaleLoading(BookSourcesSection section) {
     if (_closed ||

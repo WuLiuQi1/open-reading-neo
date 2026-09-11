@@ -49,6 +49,9 @@ class BookSourceListChannels {
 
 class BookSourcesSectionCache {
   final bool loading;
+
+  /// False while more sources can still replace or append their batch.
+  final bool complete;
   final Object? error;
   final List<BookSourceDiscoveryShelf>? shelves;
   final List<SourcedBookCategory>? categories;
@@ -56,6 +59,7 @@ class BookSourcesSectionCache {
 
   const BookSourcesSectionCache.loading()
     : loading = true,
+      complete = false,
       error = null,
       shelves = null,
       categories = null,
@@ -63,25 +67,30 @@ class BookSourcesSectionCache {
 
   const BookSourcesSectionCache.error(this.error)
     : loading = false,
+      complete = true,
       shelves = null,
       categories = null,
       books = null;
 
-  BookSourcesSectionCache.shelves(List<BookSourceDiscoveryShelf> shelves)
-    : loading = false,
-      error = null,
-      shelves = List.unmodifiable(shelves),
-      categories = null,
-      books = null;
+  BookSourcesSectionCache.shelves(
+    List<BookSourceDiscoveryShelf> shelves, {
+    this.complete = true,
+  }) : loading = false,
+       error = null,
+       shelves = List.unmodifiable(shelves),
+       categories = null,
+       books = null;
 
-  BookSourcesSectionCache.categories(List<SourcedBookCategory> categories)
-    : loading = false,
-      error = null,
-      shelves = null,
-      categories = List.unmodifiable(categories),
-      books = null;
+  BookSourcesSectionCache.categories(
+    List<SourcedBookCategory> categories, {
+    this.complete = true,
+  }) : loading = false,
+       error = null,
+       shelves = null,
+       categories = List.unmodifiable(categories),
+       books = null;
 
-  BookSourcesSectionCache.books(List<SourcedBook> books)
+  BookSourcesSectionCache.books(List<SourcedBook> books, {this.complete = true})
     : loading = false,
       error = null,
       shelves = null,
@@ -209,6 +218,60 @@ class BookSourcesState {
             ),
           )
           .toList(growable: false);
+
+  List<SourcedBookCategory> get allLoadedListChannels => listChannelsBySource
+      .values
+      .expand((items) => items)
+      .toList(growable: false);
+
+  BookSourcesState withLoadedListChannels(
+    RegisteredBookSource source,
+    Iterable<BookSourceCategory> channels, {
+    required bool done,
+  }) {
+    final seen = <String>{};
+    final loaded = {
+      ...listChannelsBySource,
+      source.id: channels
+          .where((channel) => seen.add(channel.id))
+          .map(
+            (channel) => SourcedBookCategory(
+              source: source,
+              id: channel.id,
+              name: channel.name,
+            ),
+          )
+          .toList(growable: false),
+    };
+    final loading = {...loadingListChannelSources};
+    if (done) loading.remove(source.id);
+    final errors = {...listChannelErrors}..remove(source.id);
+    return copyWith(
+      listChannelsBySource: loaded,
+      loadingListChannelSources: loading,
+      listChannelErrors: errors,
+      caches: {
+        ...caches,
+        BookSourcesSection.categories: BookSourcesSectionCache.categories(
+          loaded.values.expand((items) => items).toList(growable: false),
+        ),
+      },
+      listGroupsRevision: listGroupsRevision + 1,
+    );
+  }
+
+  /// A directory contains only expanded sources, not the full category set.
+  BookSourcesState withStandardLayout() => copyWith(
+    listLayout: false,
+    loadingListChannelSources: const {},
+    caches: {
+      ...caches,
+      BookSourcesSection.categories: BookSourcesSectionCache.categories(
+        allLoadedListChannels,
+        complete: false,
+      ),
+    },
+  );
 
   BookSourcesState copyWith({
     List<RegisteredBookSource>? sources,

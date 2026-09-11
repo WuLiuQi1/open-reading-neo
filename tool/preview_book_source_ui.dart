@@ -517,8 +517,9 @@ class _PreviewClient extends BookSourceClient {
 
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
       throw StateError('Reading sources must not request ORSP discovery.');
     }
@@ -539,8 +540,9 @@ class _PreviewClient extends BookSourceClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
     if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
       return List.generate(readingChannelCount, (index) {
         final id = index == 0 ? 'fantasy' : 'channel-$index';
@@ -565,6 +567,7 @@ class _PreviewClient extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
     final books = [
       _book('night-wind', '长风入夜', '林舟', '少年踏入山海之间，在风起之处寻找失落已久的答案。'),

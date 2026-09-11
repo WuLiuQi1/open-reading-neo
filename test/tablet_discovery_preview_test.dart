@@ -367,8 +367,9 @@ void main() {
 class _PreviewDiscoveryClient extends BookSourceClient {
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     final index = int.parse(source.id.split('-').last);
     const featuredTitles = _featuredTitles;
     return BookSourceDiscoveryPage(
@@ -399,8 +400,9 @@ class _PreviewDiscoveryClient extends BookSourceClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
     return const [
       BookSourceCategory(id: 'recent', name: '最近更新'),
       BookSourceCategory(id: 'literature', name: '文学小说'),
@@ -417,6 +419,7 @@ class _PreviewDiscoveryClient extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
     final items = [
       _book('${source.id}-browse-1', '平凡的世界', author: '路遥'),

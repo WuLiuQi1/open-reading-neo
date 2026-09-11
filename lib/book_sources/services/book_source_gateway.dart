@@ -33,9 +33,18 @@ abstract interface class BookSourceGateway {
     BookDownloadCancellation? cancellation,
   });
 
-  Future<BookSourceDiscoveryPage> getDiscovery(RegisteredBookSource source);
+  /// Discovery operations may publish a bounded cached snapshot via [onCached]
+  /// before the returned future completes with fresh data (or the snapshot if
+  /// refresh fails). Callers must guard both deliveries against navigation.
+  Future<BookSourceDiscoveryPage> getDiscovery(
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  });
 
-  Future<List<BookSourceCategory>> getCategories(RegisteredBookSource source);
+  Future<List<BookSourceCategory>> getCategories(
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  });
 
   Future<BookSourceSearchPage> browse(
     RegisteredBookSource source, {
@@ -43,6 +52,7 @@ abstract interface class BookSourceGateway {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   });
 
   Future<BookSourceBook> getBook(

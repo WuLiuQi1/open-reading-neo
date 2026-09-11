@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +26,48 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('source switches and favorites respond before storage finishes', (
+    tester,
+  ) async {
+    final registry = _DelayedPreferenceRegistry();
+    await mount(tester, registry);
+    final toggle = find.descendant(
+      of: find.byKey(const ValueKey('bookSourceCard-alpha')),
+      matching: find.byType(Switch),
+    );
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(registry.enabledWrite.isCompleted, isFalse);
+    await tester.tap(find.byKey(const ValueKey('bookSourceFavorite-alpha')));
+    await tester.pump();
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+    expect(registry.favoriteWrite.isCompleted, isFalse);
+    registry.enabledWrite.complete();
+    registry.favoriteWrite.complete();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(registry.sources.single.enabled, isTrue);
+    expect(registry.sources.single.isFavorite, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed source switch save rolls back and reports the error', (
+    tester,
+  ) async {
+    final registry = _DelayedPreferenceRegistry();
+    await mount(tester, registry);
+    final toggle = find.byType(Switch);
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    registry.enabledWrite.completeError(StateError('Source save failed'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(find.textContaining('Source save failed'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'favorite and single-source group controls work on a narrow screen',
@@ -174,5 +218,29 @@ class _MemoryRegistry extends BookSourceRegistry {
           source,
     ];
     return sources;
+  }
+}
+
+class _DelayedPreferenceRegistry extends _MemoryRegistry {
+  _DelayedPreferenceRegistry()
+    : super([_source('alpha').copyWith(enabled: false)], []);
+
+  final enabledWrite = Completer<void>();
+  final favoriteWrite = Completer<void>();
+
+  @override
+  Future<List<RegisteredBookSource>> setEnabled(String id, bool value) async {
+    await enabledWrite.future;
+    sources = [
+      for (final source in sources)
+        source.id == id ? source.copyWith(enabled: value) : source,
+    ];
+    return sources;
+  }
+
+  @override
+  Future<List<RegisteredBookSource>> setFavorite(String id, bool value) async {
+    await favoriteWrite.future;
+    return super.setFavorite(id, value);
   }
 }

@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/pages/book_sources/controllers/book_source_batch_fetcher.dart';
-import 'package:xxread/pages/book_sources/models/sourced_book.dart';
 
 void main() {
   test('returns an empty list when there are no sources', () async {
@@ -80,48 +81,105 @@ void main() {
     expect(maxActive, lessThanOrEqualTo(3));
   });
 
-  test('interleaves latest batches and caps each source contribution', () {
-    final sourceA = _source('source-a', name: 'Source A');
-    final sourceB = _source('source-b', name: 'Source B');
-    final batches = [
-      [
-        _sourcedBook(sourceA, 'A1', DateTime.utc(2026, 7, 18)),
-        _sourcedBook(sourceA, 'A2', DateTime.utc(2026, 7, 17)),
-        _sourcedBook(sourceA, 'A3', DateTime.utc(2026, 7, 16)),
-      ],
-      [
-        _sourcedBook(sourceB, 'B1', DateTime.utc(2026, 7, 19)),
-        _sourcedBook(sourceB, 'B2', DateTime.utc(2026, 7, 15)),
-        _sourcedBook(sourceB, 'B3', DateTime.utc(2026, 7, 14)),
-      ],
-    ];
+  test(
+    'publishes completed sources immediately and keeps their visible order stable',
+    () async {
+      final sources = [_source('slow'), _source('fast')];
+      final slow = Completer<List<String>>();
+      final fast = Completer<List<String>>();
+      final updates = <List<List<String>>>[];
+      final visibleOrder = <String>[];
+      final visibleItems = <String, List<String>>{};
+      final fetcher = BookSourceBatchFetcher(maxConcurrent: 2);
 
-    final merged = mergeLatestSourceBatches(batches, maxItemsPerSource: 2);
+      final pending = fetcher.fetchProgressively<String>(
+        sources,
+        (source, publish) => source.id == 'slow' ? slow.future : fast.future,
+        onProgress: (source, items) {
+          if (!visibleItems.containsKey(source.id) && items.isNotEmpty) {
+            visibleOrder.add(source.id);
+          }
+          visibleItems[source.id] = items;
+          updates.add([
+            for (final id in visibleOrder)
+              if (visibleItems[id]!.isNotEmpty) List.of(visibleItems[id]!),
+          ]);
+        },
+      );
+      fast.complete(['fast']);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(merged.map((item) => item.book.title), ['B1', 'A1', 'B2', 'A2']);
-  });
+      expect(updates, [
+        [
+          ['fast'],
+        ],
+      ]);
 
-  test('prefers a dated source over an undated source, then source name', () {
-    final dated = _source('dated', name: 'Zebra');
-    final undated = _source('undated', name: 'Alpha');
-    final namedEarlier = _source('named-a', name: 'Alpha');
-    final namedLater = _source('named-b', name: 'Beta');
+      slow.complete(['slow']);
+      await pending;
 
-    expect(
-      mergeLatestSourceBatches([
-        [_sourcedBook(undated, 'U1', null)],
-        [_sourcedBook(dated, 'D1', DateTime.utc(2026, 7, 19))],
-      ], maxItemsPerSource: 1).map((item) => item.book.title),
-      ['D1', 'U1'],
+      expect(updates.last, [
+        ['fast'],
+        ['slow'],
+      ]);
+    },
+  );
+
+  test(
+    'replaces one source snapshot without moving other source slots',
+    () async {
+      final sources = [_source('cached'), _source('other')];
+      final cachedFresh = Completer<List<String>>();
+      final otherFresh = Completer<List<String>>();
+      final updates = <List<List<String>>>[];
+      final visibleOrder = <String>[];
+      final visibleItems = <String, List<String>>{};
+      final fetcher = BookSourceBatchFetcher(maxConcurrent: 2);
+
+      final pending = fetcher.fetchProgressively<String>(
+        sources,
+        (source, publish) {
+          if (source.id == 'cached') {
+            publish(['cached-old']);
+            return cachedFresh.future;
+          }
+          publish(['other-old']);
+          return otherFresh.future;
+        },
+        onProgress: (source, items) {
+          if (!visibleItems.containsKey(source.id) && items.isNotEmpty) {
+            visibleOrder.add(source.id);
+          }
+          visibleItems[source.id] = items;
+          updates.add([
+            for (final id in visibleOrder)
+              if (visibleItems[id]!.isNotEmpty) List.of(visibleItems[id]!),
+          ]);
+        },
+      );
+      await Future<void>.delayed(Duration.zero);
+      otherFresh.complete(['other-new']);
+      await Future<void>.delayed(Duration.zero);
+      cachedFresh.complete(['cached-new']);
+      await pending;
+
+      expect(updates.last, [
+        ['cached-new'],
+        ['other-new'],
+      ]);
+    },
+  );
+
+  test('an empty snapshot does not hide a later non-empty result', () {
+    final accumulator = SourceBatchAccumulator<String>(
+      const [],
+      (_) => 'source',
     );
-    expect(
-      mergeLatestSourceBatches([
-        [_sourcedBook(namedLater, 'B1', null)],
-        [_sourcedBook(namedEarlier, 'A1', null)],
-      ], maxItemsPerSource: 1).map((item) => item.book.title),
-      ['A1', 'B1'],
-    );
-    expect(mergeLatestSourceBatches(const [], maxItemsPerSource: 0), isEmpty);
+
+    accumulator.replace('source', const []);
+    accumulator.replace('source', ['fresh']);
+
+    expect(accumulator.items, ['fresh']);
   });
 }
 
@@ -136,20 +194,4 @@ RegisteredBookSource _source(String id, {String? name}) => RegisteredBookSource(
   capabilities: const {'discover', 'categories', 'browse'},
   enabled: true,
   addedAt: DateTime.utc(2026, 8, 9),
-);
-
-SourcedBook _sourcedBook(
-  RegisteredBookSource source,
-  String title,
-  DateTime? updatedAt,
-) => SourcedBook(
-  source: source,
-  book: BookSourceBook(
-    id: title.toLowerCase(),
-    title: title,
-    author: 'Author',
-    description: '',
-    categories: const [],
-    updatedAt: updatedAt,
-  ),
 );

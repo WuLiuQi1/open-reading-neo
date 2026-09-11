@@ -124,7 +124,10 @@ class BookSourceClient implements BookSourceGateway {
   }
 
   @override
-  Future<BookSourceDiscoveryPage> getDiscovery(RegisteredBookSource source) {
+  Future<BookSourceDiscoveryPage> getDiscovery(
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) {
     if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
       throw const BookSourceProtocolException(
         'This source does not support curated discovery.',
@@ -133,17 +136,20 @@ class BookSourceClient implements BookSourceGateway {
     return _discoveryCache.getDiscovery(
       source,
       () => _resources.orspBackend.getDiscovery(source),
+      onCached: onCached,
     );
   }
 
   @override
-  Future<List<BookSourceCategory>> getCategories(RegisteredBookSource source) =>
-      _discoveryCache.getCategories(source, () {
-        if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
-          return _resources.readingBackend.getCategories(source);
-        }
-        return _resources.orspBackend.getCategories(source);
-      });
+  Future<List<BookSourceCategory>> getCategories(
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) => _discoveryCache.getCategories(source, () {
+    if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
+      return _resources.readingBackend.getCategories(source);
+    }
+    return _resources.orspBackend.getCategories(source);
+  }, onCached: onCached);
 
   @override
   Future<BookSourceSearchPage> browse(
@@ -152,12 +158,14 @@ class BookSourceClient implements BookSourceGateway {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) => _discoveryCache.browse(
     source,
     category: category,
     sort: sort,
     page: page,
     pageSize: pageSize,
+    onCached: onCached,
     loader: () {
       if (source.sourceProtocol == BookSourceProtocolKind.readingSource) {
         return _resources.readingBackend.browse(

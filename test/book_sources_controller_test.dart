@@ -6,8 +6,103 @@ import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
 import 'package:xxread/book_sources/services/book_source_client.dart';
 import 'package:xxread/book_sources/services/book_source_registry.dart';
 import 'package:xxread/pages/book_sources/controllers/book_sources_controller.dart';
+import 'package:xxread/services/core/advanced_feature_access.dart';
 
 void main() {
+  test(
+    'membership restoration refreshes sources without registry edits',
+    () async {
+      AdvancedFeatureAccess.premiumUnlocked = false;
+      final orsp = _source('orsp');
+      final reading = _source(
+        'reading',
+        protocol: BookSourceProtocolKind.readingSource,
+      );
+      final registry = _FakeRegistry([
+        Future.value([orsp]),
+        Future.value([orsp, reading]),
+        Future.value([orsp]),
+      ]);
+      final gateway = _ControllerGateway();
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: registry,
+      );
+      addTearDown(() async {
+        await controller.close();
+        gateway.close();
+        AdvancedFeatureAccess.premiumUnlocked = false;
+      });
+      controller.setListLayout(true);
+      await controller.load();
+      expect(controller.state.sources.map((s) => s.id), ['orsp']);
+
+      Future<void> expectSources(List<String> ids) async {
+        final refreshed = Completer<void>();
+        void listener() {
+          if (!controller.state.loadingSources && !refreshed.isCompleted) {
+            refreshed.complete();
+          }
+        }
+
+        controller.addListener(listener);
+        await refreshed.future.timeout(const Duration(seconds: 2));
+        controller.removeListener(listener);
+        expect(controller.state.sources.map((s) => s.id), ids);
+      }
+
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      await expectSources(['orsp', 'reading']);
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      expect(registry._loadIndex, 2);
+      AdvancedFeatureAccess.premiumUnlocked = false;
+      await expectSources(['orsp']);
+      await controller.close();
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      expect(registry._loadIndex, 3);
+    },
+  );
+
+  test(
+    'late startup load cannot overwrite restored membership sources',
+    () async {
+      AdvancedFeatureAccess.premiumUnlocked = false;
+      final stale = Completer<List<RegisteredBookSource>>();
+      final orsp = _source('orsp');
+      final reading = _source(
+        'reading',
+        protocol: BookSourceProtocolKind.readingSource,
+      );
+      final registry = _FakeRegistry([
+        stale.future,
+        Future.value([orsp, reading]),
+      ]);
+      final gateway = _ControllerGateway();
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: registry,
+      );
+      addTearDown(() async {
+        await controller.close();
+        gateway.close();
+        AdvancedFeatureAccess.premiumUnlocked = false;
+      });
+      controller.setListLayout(true);
+      final pending = controller.load();
+      final restored = Completer<void>();
+      controller.addListener(() {
+        if (!controller.state.loadingSources && !restored.isCompleted) {
+          restored.complete();
+        }
+      });
+      AdvancedFeatureAccess.premiumUnlocked = true;
+      await restored.future.timeout(const Duration(seconds: 2));
+      stale.complete([orsp]);
+      await pending;
+      expect(controller.state.sources.map((s) => s.id), ['orsp', 'reading']);
+    },
+  );
+
   test(
     'large library metadata comparisons preserve the current source',
     () async {
@@ -429,6 +524,171 @@ void main() {
   );
 
   test(
+    'publishes a fast discovery source before a slow source finishes',
+    () async {
+      final slow = Completer<BookSourceDiscoveryPage>();
+      final fast = Completer<BookSourceDiscoveryPage>();
+      final gateway = _ControllerGateway(
+        discoveryResults: [slow.future, fast.future],
+      );
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: _FakeRegistry.completed([_source('slow'), _source('fast')]),
+        largeSourceLibraryThreshold: 100,
+      );
+      addTearDown(controller.close);
+      addTearDown(gateway.close);
+
+      final load = controller.load();
+      while (gateway.discoveryIds.length < 2) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      fast.complete(_discoveryPage('fast'));
+      await Future<void>.delayed(Duration.zero);
+
+      var cache = controller.state.caches[BookSourcesSection.recommended]!;
+      expect(cache.complete, isFalse);
+      expect(cache.shelves!.map((item) => item.source.id), ['fast']);
+
+      slow.complete(_discoveryPage('slow'));
+      await load;
+
+      cache = controller.state.caches[BookSourcesSection.recommended]!;
+      expect(cache.complete, isTrue);
+      expect(cache.shelves!.map((item) => item.source.id), ['fast', 'slow']);
+    },
+  );
+
+  test(
+    'leaving list layout loads channels from sources not yet expanded',
+    () async {
+      final sources = [_source('a'), _source('b')];
+      final gateway = _ControllerGateway();
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: _FakeRegistry.completed(sources),
+      );
+      addTearDown(controller.close);
+      addTearDown(gateway.close);
+      controller.setListLayout(true);
+      await controller.load();
+      await controller.expandListSource(
+        BookSourceListChannels(source: sources.first, channels: const []),
+      );
+      expect(
+        controller.state.caches[BookSourcesSection.categories]!.categories!.map(
+          (item) => item.source.id,
+        ),
+        ['a'],
+      );
+      controller.setListLayout(false);
+      await Future<void>.delayed(Duration.zero);
+      final cache = controller.state.caches[BookSourcesSection.categories]!;
+      expect(cache.complete, isTrue);
+      expect(cache.categories!.map((item) => item.source.id), ['a', 'b']);
+    },
+  );
+
+  test(
+    'latest keeps visible source order and caps each contribution',
+    () async {
+      final slow = Completer<BookSourceSearchPage>();
+      final fast = Completer<BookSourceSearchPage>();
+      final gateway = _ControllerGateway(
+        browseResults: [slow.future, fast.future],
+      );
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: _FakeRegistry.completed([_source('slow'), _source('fast')]),
+        maxLatestItemsPerSource: 1,
+      );
+      addTearDown(controller.close);
+      addTearDown(gateway.close);
+      await controller.load();
+      final load = controller.changeSection(BookSourcesSection.latest);
+      expect(gateway.browseIds, ['slow', 'fast']);
+      fast.complete(_page([_book('fast-1'), _book('fast-2')]));
+      await Future<void>.delayed(Duration.zero);
+      final partial = controller.state.caches[BookSourcesSection.latest]!;
+      expect(partial.complete, isFalse);
+      expect(partial.books!.map((item) => item.book.id), ['fast-1']);
+      slow.complete(_page([_book('slow-1'), _book('slow-2')]));
+      await load;
+      final complete = controller.state.caches[BookSourcesSection.latest]!;
+      expect(complete.complete, isTrue);
+      expect(complete.books!.map((item) => item.book.id), ['fast-1', 'slow-1']);
+    },
+  );
+
+  test(
+    'a failed refresh preserves the previously visible discovery content',
+    () async {
+      final failedRefresh = Completer<BookSourceDiscoveryPage>();
+      final gateway = _ControllerGateway(
+        discoveryResults: [
+          Future.value(_discoveryPage('visible')),
+          failedRefresh.future,
+        ],
+      );
+      final controller = BookSourcesController(
+        gateway: gateway,
+        registry: _FakeRegistry.completed([_source('source')]),
+      );
+      addTearDown(controller.close);
+      addTearDown(gateway.close);
+
+      await controller.load();
+      final refresh = controller.refresh();
+      while (gateway.discoveryIds.length < 2) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      failedRefresh.completeError(StateError('offline'));
+      await refresh;
+
+      final cache = controller.state.caches[BookSourcesSection.recommended]!;
+      expect(cache.error, isNull);
+      expect(cache.shelves!.single.items.single.id, 'visible');
+    },
+  );
+
+  test(
+    'cached category books render before refresh and cannot page early',
+    () async {
+      final fresh = Completer<BookSourceSearchPage>();
+      final gateway = _ControllerGateway(
+        browseResults: [fresh.future],
+        cachedBrowseResults: [
+          _page([_book('cached')], hasMore: true),
+        ],
+      );
+      final controller = BookSourcesController(gateway: gateway);
+      addTearDown(controller.close);
+      addTearDown(gateway.close);
+      final category = SourcedBookCategory(
+        source: _source('source'),
+        id: 'category',
+        name: 'Category',
+      );
+
+      final pending = controller.selectCategory(category);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.state.loadingCategoryBooks, isFalse);
+      expect(controller.state.categoryBooks.single.book.id, 'cached');
+      expect(controller.state.categoryHasMore, isFalse);
+
+      await controller.loadMoreCategory();
+      expect(gateway.browseIds, hasLength(1));
+
+      fresh.complete(_page([_book('fresh')], hasMore: true));
+      await pending;
+      expect(controller.state.categoryBooks.single.book.id, 'fresh');
+      expect(controller.state.categoryHasMore, isTrue);
+    },
+  );
+
+  test(
     'registry load failure leaves discovery in a retryable error state',
     () async {
       final controller = BookSourcesController(
@@ -676,23 +936,27 @@ class _ControllerGateway extends BookSourceClient {
     this.failingIds = const {},
     this.discoveryResults = const [],
     this.browseResults = const [],
+    this.cachedBrowseResults = const [],
   });
 
   final Set<String> failingIds;
   final List<Future<BookSourceDiscoveryPage>> discoveryResults;
   final List<Future<BookSourceSearchPage>> browseResults;
+  final List<BookSourceSearchPage> cachedBrowseResults;
   final List<String> discoveryIds = [];
   final List<String> browseIds = [];
   final List<String?> browseCategories = [];
   int _browseIndex = 0;
+  int _cachedBrowseIndex = 0;
   int _discoveryIndex = 0;
   int active = 0;
   int maxActive = 0;
 
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     discoveryIds.add(source.id);
     active++;
     if (active > maxActive) maxActive = active;
@@ -715,8 +979,9 @@ class _ControllerGateway extends BookSourceClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async => [const BookSourceCategory(id: 'category', name: 'Category')];
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async => [const BookSourceCategory(id: 'category', name: 'Category')];
 
   @override
   Future<BookSourceSearchPage> browse(
@@ -725,13 +990,23 @@ class _ControllerGateway extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) {
     browseIds.add(source.id);
     browseCategories.add(category);
+    if (_cachedBrowseIndex < cachedBrowseResults.length) {
+      onCached?.call(cachedBrowseResults[_cachedBrowseIndex++]);
+    }
     if (browseResults.isNotEmpty) return browseResults[_browseIndex++];
     return Future.value(_page([_book('${source.id}-$page')]));
   }
 }
+
+BookSourceDiscoveryPage _discoveryPage(String id) => BookSourceDiscoveryPage(
+  sections: [
+    BookSourceDiscoverySection(id: id, title: id, items: [_book(id)]),
+  ],
+);
 
 RegisteredBookSource _source(
   String id, {

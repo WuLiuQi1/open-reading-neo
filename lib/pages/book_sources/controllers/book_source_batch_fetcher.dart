@@ -1,6 +1,5 @@
 import 'package:xxread/book_sources/models/registered_book_source.dart';
 import 'package:xxread/book_sources/protocol/book_source_protocol.dart';
-import 'package:xxread/pages/book_sources/models/sourced_book.dart';
 
 /// Concurrent per-source fetch with a bounded worker pool.
 ///
@@ -15,21 +14,46 @@ class BookSourceBatchFetcher {
   Future<List<List<T>>> fetch<T>(
     List<RegisteredBookSource> sources,
     Future<List<T>> Function(RegisteredBookSource source) fetch,
-  ) async {
+  ) => fetchProgressively(
+    sources,
+    (source, _) => fetch(source),
+    onProgress: (_, _) {},
+  );
+
+  Future<List<List<T>>> fetchProgressively<T>(
+    List<RegisteredBookSource> sources,
+    Future<List<T>> Function(
+      RegisteredBookSource source,
+      void Function(List<T> items) publish,
+    )
+    fetch, {
+    required void Function(RegisteredBookSource source, List<T> items)
+    onProgress,
+  }) async {
     if (sources.isEmpty) return const [];
     final results = List<_SourceFetchResult<T>?>.filled(sources.length, null);
+    final publishedItems = <int, List<T>>{};
     var nextIndex = 0;
+
+    void publish(int sourceIndex, List<T> items) {
+      final frozenItems = List<T>.unmodifiable(items);
+      publishedItems[sourceIndex] = frozenItems;
+      onProgress(sources[sourceIndex], frozenItems);
+    }
+
     Future<void> worker() async {
       while (nextIndex < sources.length) {
         final index = nextIndex++;
         final source = sources[index];
         try {
-          results[index] = _SourceFetchResult.success(
-            source,
-            await fetch(source),
-          );
+          final items = await fetch(source, (items) => publish(index, items));
+          results[index] = _SourceFetchResult.success(source, items);
+          publish(index, items);
         } catch (error) {
-          results[index] = _SourceFetchResult.failure(source, error);
+          final cachedItems = publishedItems[index];
+          results[index] = cachedItems != null && cachedItems.isNotEmpty
+              ? _SourceFetchResult.success(source, cachedItems)
+              : _SourceFetchResult.failure(source, error);
         }
       }
     }
@@ -56,45 +80,31 @@ class BookSourceBatchFetcher {
   }
 }
 
-/// Keep each source's latest order, then interleave one item per source.
-///
-/// The first round prefers sources whose head item is newer; later rounds
-/// still contribute at most one book per source so a single catalog cannot
-/// fill the aggregated list.
-List<SourcedBook> mergeLatestSourceBatches(
-  Iterable<List<SourcedBook>> batches, {
-  required int maxItemsPerSource,
-}) {
-  if (maxItemsPerSource <= 0) return const [];
-  final queues = batches
-      .where((batch) => batch.isNotEmpty)
-      .map((batch) => batch.take(maxItemsPerSource).toList(growable: false))
-      .toList();
-  queues.sort((left, right) {
-    final leftTime = left.first.book.updatedAt;
-    final rightTime = right.first.book.updatedAt;
-    if (leftTime != null && rightTime != null) {
-      final byTime = rightTime.compareTo(leftTime);
-      if (byTime != 0) return byTime;
-    } else if (leftTime != null) {
-      return -1;
-    } else if (rightTime != null) {
-      return 1;
+/// Replaces one source's visible batch while retaining the order in which
+/// sources first became visible.
+class SourceBatchAccumulator<T> {
+  SourceBatchAccumulator(Iterable<T> initial, this.sourceIdOf) {
+    for (final item in initial) {
+      final sourceId = sourceIdOf(item);
+      if (!_itemsBySource.containsKey(sourceId)) _sourceOrder.add(sourceId);
+      (_itemsBySource[sourceId] ??= <T>[]).add(item);
     }
-    return left.first.source.name.compareTo(right.first.source.name);
-  });
-
-  final results = <SourcedBook>[];
-  for (var index = 0; index < maxItemsPerSource; index++) {
-    var added = false;
-    for (final queue in queues) {
-      if (index >= queue.length) continue;
-      results.add(queue[index]);
-      added = true;
-    }
-    if (!added) break;
   }
-  return results;
+
+  final String Function(T item) sourceIdOf;
+  final List<String> _sourceOrder = [];
+  final Map<String, List<T>> _itemsBySource = {};
+
+  void replace(String sourceId, List<T> items) {
+    if (!_sourceOrder.contains(sourceId) && items.isNotEmpty) {
+      _sourceOrder.add(sourceId);
+    }
+    _itemsBySource[sourceId] = List.unmodifiable(items);
+  }
+
+  List<T> get items => List.unmodifiable(
+    _sourceOrder.expand((sourceId) => _itemsBySource[sourceId] ?? <T>[]),
+  );
 }
 
 class _SourceFetchResult<T> {

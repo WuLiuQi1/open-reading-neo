@@ -165,6 +165,30 @@ class BookSourceResponseCache {
     }
   }
 
+  /// Read a bounded snapshot without renewing its age or starting a request.
+  /// Callers may display it while awaiting getOrLoadJson's fresh result.
+  Future<Map<String, dynamic>?> readCachedJson({
+    required String key,
+    required Duration maxAge,
+    bool persistToDisk = true,
+  }) async {
+    final state = _retainKeyState(key);
+    final generation = state.generation;
+    final clearEpoch = _clearEpoch;
+    try {
+      var entry = _memory[key];
+      if (!_isCurrent(state, generation, clearEpoch) ||
+          entry == null ||
+          !_isFresh(entry.cachedAt, maxAge)) {
+        return null;
+      }
+      _remember(key, entry);
+      return entry.value;
+    } finally {
+      _releaseKeyState(key, state);
+    }
+  }
+
   Future<Map<String, dynamic>> getOrLoadJson({
     required String key,
     required Duration ttl,
@@ -237,9 +261,10 @@ class BookSourceResponseCache {
     required bool skipCache,
   }) async {
     if (!skipCache && _isCurrent(state, generation, clearEpoch)) {
-      final memory = _memory.remove(key);
+      // Keep expired entries at their original age until a successful load
+      // replaces them, so snapshot consumers can survive a failed refresh.
+      final memory = _memory[key];
       if (memory != null) {
-        _memoryBytes -= memory.size;
         if (_isFresh(memory.cachedAt, ttl)) {
           _remember(key, memory);
           return memory.value;

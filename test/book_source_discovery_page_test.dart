@@ -28,6 +28,44 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets('shows a fast source while another source is still pending', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({
+      'open_reading_book_sources_v1': jsonEncode([
+        _source('slow', 'Slow').toJson(),
+        _source('fast', 'Fast').toJson(),
+      ]),
+    });
+    final client = _PartialDiscoveryClient();
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: BookSourcesPage(client: client, registry: BookSourceRegistry()),
+        ),
+      ),
+    );
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(client.slow.isCompleted, isFalse);
+    expect(find.text('Fast picks'), findsOneWidget);
+    client.slow.completeError(
+      const BookSourceProtocolException('Slow source timed out'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Fast picks'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'favorite then create and select a group without leaving discovery',
     (tester) async {
@@ -299,30 +337,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ORSP latest 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
-  });
-
-  test('latest aggregation interleaves sources and caps each contribution', () {
-    final sourceA = _source('source-a', 'Source A');
-    final sourceB = _source('source-b', 'Source B');
-    final batches = [
-      [
-        _sourcedBook(sourceA, 'A1', DateTime.utc(2026, 7, 18)),
-        _sourcedBook(sourceA, 'A2', DateTime.utc(2026, 7, 17)),
-        _sourcedBook(sourceA, 'A3', DateTime.utc(2026, 7, 16)),
-      ],
-      [
-        _sourcedBook(sourceB, 'B1', DateTime.utc(2026, 7, 19)),
-        _sourcedBook(sourceB, 'B2', DateTime.utc(2026, 7, 15)),
-        _sourcedBook(sourceB, 'B3', DateTime.utc(2026, 7, 14)),
-      ],
-    ];
-
-    final merged = BookSourcesPage.interleaveLatestBatches(
-      batches,
-      maxItemsPerSource: 2,
-    );
-
-    expect(merged.map((result) => result.book.title), ['B1', 'A1', 'B2', 'A2']);
   });
 
   testWidgets('rapid source and layout changes settle on the newest view', (
@@ -1757,8 +1771,9 @@ class _DiscoveryClient extends BookSourceClient {
 
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     discoverySourceIds.add(source.id);
     return BookSourceDiscoveryPage(
       sections: [
@@ -1773,8 +1788,9 @@ class _DiscoveryClient extends BookSourceClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
     categoryLoadSourceIds.add(source.id);
     return [BookSourceCategory(id: '${source.id}-fiction', name: 'Fiction')];
   }
@@ -1786,6 +1802,7 @@ class _DiscoveryClient extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
     if (category != null) {
       categoryBrowseSourceIds.add(source.id);
@@ -1818,8 +1835,9 @@ class _DelayedRefreshDiscoveryClient extends _DiscoveryClient {
 
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     _requestCount++;
     if (_requestCount > 1) await _refreshCompleter.future;
     return super.getDiscovery(source);
@@ -1831,8 +1849,9 @@ class _LargeCategoryDiscoveryClient extends _DiscoveryClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
     return List.generate(
       500,
       (index) => BookSourceCategory(
@@ -1850,6 +1869,7 @@ class _LargeCategoryDiscoveryClient extends _DiscoveryClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
     lastCategoryId = category;
     return _page([_book('selected-book', 'Selected category book')]);
@@ -1859,8 +1879,9 @@ class _LargeCategoryDiscoveryClient extends _DiscoveryClient {
 class _DuplicateCategoryDiscoveryClient extends _DiscoveryClient {
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
     const categoryId = '/store/98-a-0-5-a-20-p-{{page}}-98';
     return const [
       BookSourceCategory(id: categoryId, name: 'First channel'),
@@ -1872,8 +1893,9 @@ class _DuplicateCategoryDiscoveryClient extends _DiscoveryClient {
 class _ManyShelfDiscoveryClient extends _DiscoveryClient {
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     return BookSourceDiscoveryPage(
       sections: List.generate(
         12,
@@ -1893,8 +1915,9 @@ class _BoundedDiscoveryClient extends _DiscoveryClient {
 
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     active++;
     if (active > maxActive) maxActive = active;
     try {
@@ -1909,12 +1932,18 @@ class _BoundedDiscoveryClient extends _DiscoveryClient {
 
 class _FailingDiscoveryClient extends BookSourceClient {
   @override
-  Future<BookSourceDiscoveryPage> getDiscovery(RegisteredBookSource source) {
+  Future<BookSourceDiscoveryPage> getDiscovery(
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) {
     throw const BookSourceProtocolException('Source request timed out.');
   }
 
   @override
-  Future<List<BookSourceCategory>> getCategories(RegisteredBookSource source) {
+  Future<List<BookSourceCategory>> getCategories(
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) {
     throw const BookSourceProtocolException('Source request timed out.');
   }
 
@@ -1925,6 +1954,7 @@ class _FailingDiscoveryClient extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) {
     throw const BookSourceProtocolException('Source request timed out.');
   }
@@ -1938,6 +1968,7 @@ class _CategoryFailingDiscoveryClient extends _DiscoveryClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) {
     throw const BookSourceProtocolException('Channel endpoint failed.');
   }
@@ -1946,8 +1977,9 @@ class _CategoryFailingDiscoveryClient extends _DiscoveryClient {
 class _EmptyDiscoveryClient extends BookSourceClient {
   @override
   Future<BookSourceDiscoveryPage> getDiscovery(
-    RegisteredBookSource source,
-  ) async {
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
     return const BookSourceDiscoveryPage(sections: []);
   }
 }
@@ -1986,17 +2018,6 @@ RegisteredBookSource _source(
   );
 }
 
-SourcedBook _sourcedBook(
-  RegisteredBookSource source,
-  String title,
-  DateTime updatedAt,
-) {
-  return SourcedBook(
-    source: source,
-    book: _book(title.toLowerCase(), title, updatedAt: updatedAt),
-  );
-}
-
 BookSourceBook _book(String id, String title, {DateTime? updatedAt}) {
   return BookSourceBook(
     id: id,
@@ -2016,4 +2037,15 @@ BookSourceSearchPage _page(List<BookSourceBook> items) {
     total: items.length,
     hasMore: false,
   );
+}
+
+class _PartialDiscoveryClient extends _DiscoveryClient {
+  final slow = Completer<BookSourceDiscoveryPage>();
+  @override
+  Future<BookSourceDiscoveryPage> getDiscovery(
+    RegisteredBookSource source, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) => source.id == 'slow'
+      ? slow.future
+      : super.getDiscovery(source, onCached: onCached);
 }

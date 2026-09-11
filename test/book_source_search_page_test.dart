@@ -873,8 +873,9 @@ class _DiscoveryBookSourceClient extends BookSourceClient {
 
   @override
   Future<List<BookSourceCategory>> getCategories(
-    RegisteredBookSource source,
-  ) async => const [BookSourceCategory(id: '/rank', name: 'Ranking')];
+    RegisteredBookSource source, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async => const [BookSourceCategory(id: '/rank', name: 'Ranking')];
 
   @override
   Future<BookSourceSearchPage> browse(
@@ -883,6 +884,7 @@ class _DiscoveryBookSourceClient extends BookSourceClient {
     String sort = 'latest',
     int page = 1,
     int pageSize = 20,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
     requestedPages.add(page);
     return BookSourceSearchPage(

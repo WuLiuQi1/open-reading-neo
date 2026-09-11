@@ -28,24 +28,31 @@ class BookSourceDiscoveryCache {
   final Duration categoriesTtl;
   final Duration browseTtl;
 
+  static const _snapshotMaxAge = Duration(hours: 24);
+
   Future<BookSourceDiscoveryPage> getDiscovery(
     RegisteredBookSource source,
-    Future<BookSourceDiscoveryPage> Function() loader,
-  ) async {
-    final json = await _responseCache.getOrLoadJson(
+    Future<BookSourceDiscoveryPage> Function() loader, {
+    void Function(BookSourceDiscoveryPage)? onCached,
+  }) async {
+    final json = await _getJson(
       key: _key(source, 'recommended'),
       ttl: discoveryTtl,
       loader: () async => _discoveryToJson(await loader()),
       persistToDisk: _mayPersistPayload(source),
+      onCached: onCached == null
+          ? null
+          : (json) => onCached(BookSourceDiscoveryPage.fromJson(json)),
     );
     return BookSourceDiscoveryPage.fromJson(json);
   }
 
   Future<List<BookSourceCategory>> getCategories(
     RegisteredBookSource source,
-    Future<List<BookSourceCategory>> Function() loader,
-  ) async {
-    final json = await _responseCache.getOrLoadJson(
+    Future<List<BookSourceCategory>> Function() loader, {
+    void Function(List<BookSourceCategory>)? onCached,
+  }) async {
+    final json = await _getJson(
       key: _key(source, 'categories'),
       ttl: categoriesTtl,
       loader: () async => {
@@ -54,20 +61,11 @@ class BookSourceDiscoveryCache {
             .toList(growable: false),
       },
       persistToDisk: _mayPersistPayload(source),
+      onCached: onCached == null
+          ? null
+          : (json) => onCached(_categoriesFromJson(json)),
     );
-    final items = json['items'];
-    if (items is! List) {
-      throw const BookSourceProtocolException(
-        'Cached discovery categories must contain an items array.',
-      );
-    }
-    return items
-        .map(
-          (item) => BookSourceCategory.fromJson(
-            Map<String, dynamic>.from(item as Map),
-          ),
-        )
-        .toList(growable: false);
+    return _categoriesFromJson(json);
   }
 
   Future<BookSourceSearchPage> browse(
@@ -77,8 +75,9 @@ class BookSourceDiscoveryCache {
     required int page,
     required int pageSize,
     required Future<BookSourceSearchPage> Function() loader,
+    void Function(BookSourceSearchPage)? onCached,
   }) async {
-    final json = await _responseCache.getOrLoadJson(
+    final json = await _getJson(
       key: _key(source, 'browse', {
         'category': category ?? '',
         'sort': sort,
@@ -88,8 +87,40 @@ class BookSourceDiscoveryCache {
       ttl: browseTtl,
       loader: () async => _searchPageToJson(await loader()),
       persistToDisk: _mayPersistPayload(source),
+      onCached: onCached == null
+          ? null
+          : (json) => onCached(BookSourceSearchPage.fromJson(json)),
     );
     return BookSourceSearchPage.fromJson(json);
+  }
+
+  Future<Map<String, dynamic>> _getJson({
+    required String key,
+    required Duration ttl,
+    required Future<Map<String, dynamic>> Function() loader,
+    required bool persistToDisk,
+    required void Function(Map<String, dynamic>)? onCached,
+  }) async {
+    final snapshot = onCached == null
+        ? null
+        : await _responseCache.readCachedJson(
+            key: key,
+            maxAge: _snapshotMaxAge,
+            persistToDisk: persistToDisk,
+          );
+    if (snapshot != null) onCached!(snapshot);
+    try {
+      return await _responseCache.getOrLoadJson(
+        key: key,
+        ttl: ttl,
+        loader: loader,
+        persistToDisk: persistToDisk,
+      );
+    } on Exception catch (error) {
+      if (error is FormatException) rethrow;
+      if (snapshot != null) return snapshot;
+      rethrow;
+    }
   }
 
   Future<void> invalidateSource(RegisteredBookSource source) =>
@@ -163,4 +194,19 @@ Object? _stableJson(Object? value) {
     return value.map(_stableJson).toList(growable: false);
   }
   return value;
+}
+
+List<BookSourceCategory> _categoriesFromJson(Map<String, dynamic> json) {
+  final items = json['items'];
+  if (items is! List) {
+    throw const BookSourceProtocolException(
+      'Cached discovery categories must contain an items array.',
+    );
+  }
+  return items
+      .map(
+        (item) =>
+            BookSourceCategory.fromJson(Map<String, dynamic>.from(item as Map)),
+      )
+      .toList(growable: false);
 }

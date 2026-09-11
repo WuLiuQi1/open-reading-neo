@@ -174,6 +174,174 @@ void main() {
     expect(controller.state.visibleSources, isEmpty);
   });
 
+  test('enabled state and filter update before persistence finishes', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source', enabled: false);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+    controller.setFilter(BookSourceManagementFilter.enabled);
+
+    final saving = controller.setSourceEnabled(source, true);
+
+    expect(controller.state.sources.single.enabled, isTrue);
+    expect(controller.state.visibleSources.single.id, source.id);
+    registry.enabledWrites.single.completer.complete([
+      source.copyWith(enabled: true),
+    ]);
+    await saving;
+    expect(registry.loadCalls, 0);
+  });
+
+  test('favorite state and filter update without reloading sources', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source');
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+    controller.setFilter(BookSourceManagementFilter.favorites);
+
+    final saving = controller.setSourceFavorite(source);
+
+    expect(controller.state.sources.single.isFavorite, isTrue);
+    expect(controller.state.visibleSources.single.id, source.id);
+    registry.favoriteWrites.single.completer.complete([
+      source.copyWith(isFavorite: true),
+    ]);
+    await saving;
+    expect(registry.loadCalls, 0);
+  });
+
+  test('failed preference save rolls back its latest intent', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source', enabled: false);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+
+    final error = StateError('save failed');
+    final saving = controller.setSourceEnabled(source, true);
+    expect(controller.state.sources.single.enabled, isTrue);
+    registry.enabledWrites.single.completer.completeError(error);
+
+    await expectLater(saving, throwsA(same(error)));
+    expect(controller.state.sources.single.enabled, isFalse);
+    expect(controller.state.failure, same(error));
+  });
+
+  test('newer preference intent survives stale completion and rolls back '
+      'to the last confirmed value', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source', enabled: false);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+
+    final enable = controller.setSourceEnabled(source, true);
+    final disable = controller.setSourceEnabled(source, false);
+    expect(controller.state.sources.single.enabled, isFalse);
+
+    registry.enabledWrites.first.completer.complete([
+      source.copyWith(enabled: true),
+    ]);
+    await enable;
+    expect(controller.state.sources.single.enabled, isFalse);
+
+    final error = StateError('newest save failed');
+    registry.enabledWrites.last.completer.completeError(error);
+    await expectLater(disable, throwsA(same(error)));
+    expect(controller.state.sources.single.enabled, isTrue);
+  });
+
+  test('preference completions merge only their source and field', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final first = _source('first', enabled: false);
+    final second = _source('second', enabled: false);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([first, second]);
+
+    final enabling = controller.setSourceEnabled(first, true);
+    final favoriting = controller.setSourceFavorite(first);
+    final enablingSecond = controller.setSourceEnabled(second, true);
+    expect(controller.state.sources[0].enabled, isTrue);
+    expect(controller.state.sources[0].isFavorite, isTrue);
+    expect(controller.state.sources[1].enabled, isTrue);
+
+    registry.favoriteWrites.single.completer.complete([
+      first.copyWith(isFavorite: true),
+      second,
+    ]);
+    await favoriting;
+    expect(controller.state.sources[0].enabled, isTrue);
+    expect(controller.state.sources[1].enabled, isTrue);
+
+    registry.enabledWrites.first.completer.complete([
+      first.copyWith(enabled: true),
+      second,
+    ]);
+    await enabling;
+    expect(controller.state.sources[0].isFavorite, isTrue);
+    expect(controller.state.sources[1].enabled, isTrue);
+
+    registry.enabledWrites.last.completer.complete([
+      first,
+      second.copyWith(enabled: true),
+    ]);
+    await enablingSecond;
+    expect(controller.state.sources[0].enabled, isTrue);
+    expect(controller.state.sources[0].isFavorite, isTrue);
+    expect(controller.state.sources[1].enabled, isTrue);
+  });
+
+  test('preference save invalidates an older organization reload', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source');
+    final staleReload = Completer<List<RegisteredBookSource>>();
+    registry.loads.add(staleReload);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+
+    final reloading = controller.reloadOrganization();
+    final favoriting = controller.setSourceFavorite(source);
+    registry.favoriteWrites.single.completer.complete([
+      source.copyWith(isFavorite: true),
+    ]);
+    await favoriting;
+    staleReload.complete([source]);
+    await reloading;
+
+    expect(controller.state.sources.single.isFavorite, isTrue);
+  });
+
+  test('an old completion cannot match a later preference revision', () async {
+    final registry = _Registry()..delayPreferences = true;
+    final source = _source('source', enabled: false);
+    final controller = BookSourceManagementController(registry: registry);
+    addTearDown(controller.dispose);
+    controller.replaceSources([source]);
+
+    final first = controller.setSourceEnabled(source, true);
+    final second = controller.setSourceEnabled(source, false);
+    registry.enabledWrites[1].completer.complete([
+      source.copyWith(enabled: false),
+    ]);
+    await second;
+    final third = controller.setSourceEnabled(source, true);
+
+    registry.enabledWrites[0].completer.complete([
+      source.copyWith(enabled: true),
+    ]);
+    await first;
+    expect(controller.state.sources.single.enabled, isTrue);
+
+    final error = StateError('latest save failed');
+    registry.enabledWrites[2].completer.completeError(error);
+    await expectLater(third, throwsA(same(error)));
+    expect(controller.state.sources.single.enabled, isFalse);
+  });
+
   test('filters groups and advances the display limit immutably', () {
     final controller = BookSourceManagementController(
       initialDisplayLimit: 1,
@@ -605,12 +773,39 @@ class _Registry extends BookSourceRegistry {
 
   final List<Completer<List<RegisteredBookSource>>> loads = [];
   final List<Completer<List<RegisteredBookSource>>> refreshes = [];
+  final List<
+    ({String id, bool value, Completer<List<RegisteredBookSource>> completer})
+  >
+  enabledWrites = [];
+  final List<
+    ({String id, bool value, Completer<List<RegisteredBookSource>> completer})
+  >
+  favoriteWrites = [];
+  bool delayPreferences = false;
+  int loadCalls = 0;
   Set<String> lastEnabledIds = const {};
   List<RegisteredBookSource> mutationResult = const [];
 
   @override
   Future<List<RegisteredBookSource>> loadInBackground() {
+    loadCalls++;
     return loads.removeAt(0).future;
+  }
+
+  @override
+  Future<List<RegisteredBookSource>> setEnabled(String id, bool enabled) {
+    if (!delayPreferences) return Future.value(mutationResult);
+    final completer = Completer<List<RegisteredBookSource>>();
+    enabledWrites.add((id: id, value: enabled, completer: completer));
+    return completer.future;
+  }
+
+  @override
+  Future<List<RegisteredBookSource>> setFavorite(String id, bool value) {
+    if (!delayPreferences) return Future.value(mutationResult);
+    final completer = Completer<List<RegisteredBookSource>>();
+    favoriteWrites.add((id: id, value: value, completer: completer));
+    return completer.future;
   }
 
   @override

@@ -314,7 +314,7 @@ class _BookSourceManagementPageState extends State<BookSourceManagementPage> {
             onToggleSourceSelection: (source) =>
                 _controller.toggleSourceSelection(source.id),
             onSourceEnabledChanged: (source, enabled) =>
-                unawaited(_controller.setSourceEnabled(source, enabled)),
+                unawaited(_setSourceEnabled(source, enabled)),
             onSourceAction: _handleSourceAction,
           ),
         ),
@@ -359,6 +359,17 @@ class _BookSourceManagementPageState extends State<BookSourceManagementPage> {
   Future<void> _reloadOrganization() async {
     try {
       await _controller.reloadOrganization();
+    } on Object catch (error) {
+      if (mounted) showSideToast(context, '$error', kind: SideToastKind.error);
+    }
+  }
+
+  Future<void> _setSourceEnabled(
+    RegisteredBookSource source,
+    bool enabled,
+  ) async {
+    try {
+      await _controller.setSourceEnabled(source, enabled);
     } on Object catch (error) {
       if (mounted) showSideToast(context, '$error', kind: SideToastKind.error);
     }

@@ -24,6 +24,13 @@ enum BookSourceManagementFilter {
 
 enum BookSourceManagementMutation { enable, refresh, remove, health }
 
+enum _BookSourcePreferenceField { enabled, favorite }
+
+typedef _BookSourcePreferenceKey = ({
+  String sourceId,
+  _BookSourcePreferenceField field,
+});
+
 @immutable
 class BookSourceInstalledDedupeResult {
   const BookSourceInstalledDedupeResult({
@@ -94,6 +101,11 @@ class BookSourceManagementController extends ChangeNotifier {
   int _organizationRevision = 0;
   int _mutationRevision = 0;
   int _healthRevision = 0;
+  int _nextPreferenceRevision = 0;
+  final Map<_BookSourcePreferenceKey, int> _preferenceRevisions = {};
+  final Map<_BookSourcePreferenceKey, int> _settledPreferenceRevisions = {};
+  final Map<_BookSourcePreferenceKey, bool> _pendingPreferenceValues = {};
+  final Map<_BookSourcePreferenceKey, bool> _confirmedPreferenceValues = {};
   Timer? _healthProgressTimer;
   BookSourceHealthProgress? _pendingHealthProgress;
 
@@ -176,8 +188,15 @@ class BookSourceManagementController extends ChangeNotifier {
   }
 
   Future<void> setSourceFavorite(RegisteredBookSource source) async {
-    await _registry.setFavorite(source.id, !source.isFavorite);
-    await reloadOrganization();
+    final current = _sourceWithId(source.id);
+    if (current == null) return;
+    final favorite = !current.isFavorite;
+    await _persistSourcePreference(
+      sourceId: current.id,
+      field: _BookSourcePreferenceField.favorite,
+      value: favorite,
+      operation: () => _registry.setFavorite(current.id, favorite),
+    );
   }
 
   void setAdditionalProtocolsEnabled(bool enabled) {
@@ -239,10 +258,13 @@ class BookSourceManagementController extends ChangeNotifier {
     RegisteredBookSource source,
     bool enabled,
   ) async {
-    if (enabled && !_canEnable(source)) return;
-    await _runMutation(
-      BookSourceManagementMutation.enable,
-      () => _registry.setEnabled(source.id, enabled),
+    final current = _sourceWithId(source.id);
+    if (current == null || (enabled && !_canEnable(current))) return;
+    await _persistSourcePreference(
+      sourceId: current.id,
+      field: _BookSourcePreferenceField.enabled,
+      value: enabled,
+      operation: () => _registry.setEnabled(current.id, enabled),
     );
   }
 
@@ -531,6 +553,106 @@ class BookSourceManagementController extends ChangeNotifier {
     }
   }
 
+  Future<void> _persistSourcePreference({
+    required String sourceId,
+    required _BookSourcePreferenceField field,
+    required bool value,
+    required Future<List<RegisteredBookSource>> Function() operation,
+  }) async {
+    final current = _sourceWithId(sourceId);
+    if (current == null) return;
+    _loadRevision++;
+    _organizationRevision++;
+    final key = (sourceId: sourceId, field: field);
+    _confirmedPreferenceValues.putIfAbsent(
+      key,
+      () => _preferenceValue(current, field),
+    );
+    final revision = ++_nextPreferenceRevision;
+    _preferenceRevisions[key] = revision;
+    _pendingPreferenceValues[key] = value;
+    _emit(
+      _state.copyWith(
+        sources: _sourcesWithPreference(sourceId, field, value),
+        loading: false,
+        failure: null,
+      ),
+    );
+
+    try {
+      final saved = await operation();
+      if (_disposed || !_preferenceRevisions.containsKey(key)) return;
+      final persisted = _sourceWithIdIn(saved, sourceId);
+      if (revision > (_settledPreferenceRevisions[key] ?? 0)) {
+        _settledPreferenceRevisions[key] = revision;
+        _confirmedPreferenceValues[key] = persisted == null
+            ? value
+            : _preferenceValue(persisted, field);
+      }
+      if (_preferenceRevisions[key] != revision) return;
+      final confirmed = _confirmedPreferenceValues.remove(key)!;
+      _preferenceRevisions.remove(key);
+      _pendingPreferenceValues.remove(key);
+      _emit(
+        _state.copyWith(
+          sources: _sourcesWithPreference(sourceId, field, confirmed),
+        ),
+      );
+    } on Object catch (error) {
+      if (!_disposed && _preferenceRevisions[key] == revision) {
+        _settledPreferenceRevisions[key] = revision;
+        final confirmed = _confirmedPreferenceValues.remove(key)!;
+        _preferenceRevisions.remove(key);
+        _pendingPreferenceValues.remove(key);
+        _emit(
+          _state.copyWith(
+            sources: _sourcesWithPreference(sourceId, field, confirmed),
+            failure: error,
+          ),
+        );
+      }
+      rethrow;
+    }
+  }
+
+  RegisteredBookSource? _sourceWithId(String id) =>
+      _sourceWithIdIn(_state.sources, id);
+
+  RegisteredBookSource? _sourceWithIdIn(
+    List<RegisteredBookSource> sources,
+    String id,
+  ) {
+    for (final source in sources) {
+      if (source.id == id) return source;
+    }
+    return null;
+  }
+
+  bool _preferenceValue(
+    RegisteredBookSource source,
+    _BookSourcePreferenceField field,
+  ) => switch (field) {
+    _BookSourcePreferenceField.enabled => source.enabled,
+    _BookSourcePreferenceField.favorite => source.isFavorite,
+  };
+
+  List<RegisteredBookSource> _sourcesWithPreference(
+    String sourceId,
+    _BookSourcePreferenceField field,
+    bool value,
+  ) => [
+    for (final source in _state.sources)
+      if (source.id != sourceId)
+        source
+      else
+        switch (field) {
+          _BookSourcePreferenceField.enabled => source.copyWith(enabled: value),
+          _BookSourcePreferenceField.favorite => source.copyWith(
+            isFavorite: value,
+          ),
+        },
+  ];
+
   void _mergeSources(List<RegisteredBookSource> updated) {
     if (updated.isEmpty) return;
     _emit(_state.copyWith(sources: _mergedSources(updated)));
@@ -596,8 +718,37 @@ class BookSourceManagementController extends ChangeNotifier {
 
   void _emit(BookSourceManagementState state) {
     if (_disposed) return;
-    _state = state;
+    _state =
+        _pendingPreferenceValues.isEmpty ||
+            identical(state.sources, _state.sources)
+        ? state
+        : state.copyWith(
+            sources: [
+              for (final source in state.sources)
+                _sourceWithPendingPreferences(source),
+            ],
+          );
     notifyListeners();
+  }
+
+  RegisteredBookSource _sourceWithPendingPreferences(
+    RegisteredBookSource source,
+  ) {
+    final enabled =
+        _pendingPreferenceValues[(
+          sourceId: source.id,
+          field: _BookSourcePreferenceField.enabled,
+        )];
+    final favorite =
+        _pendingPreferenceValues[(
+          sourceId: source.id,
+          field: _BookSourcePreferenceField.favorite,
+        )];
+    if ((enabled == null || enabled == source.enabled) &&
+        (favorite == null || favorite == source.isFavorite)) {
+      return source;
+    }
+    return source.copyWith(enabled: enabled, isFavorite: favorite);
   }
 
   @override
@@ -607,6 +758,10 @@ class BookSourceManagementController extends ChangeNotifier {
     _loadRevision++;
     _mutationRevision++;
     _healthRevision++;
+    _preferenceRevisions.clear();
+    _settledPreferenceRevisions.clear();
+    _pendingPreferenceValues.clear();
+    _confirmedPreferenceValues.clear();
     _clearPendingHealthProgress();
     if (_ownsClient) _client?.close();
     super.dispose();

@@ -3,6 +3,28 @@
     "entries": [
         {
             "version": "2.6.7",
+            "buildNumber": "260911001",
+            "notes": {
+                "zh": [
+                    "发现页会先展示已加载完成的书源，刷新时保留现有内容。",
+                    "漫画连续阅读时，图片加载不再把正在看的位置顶走。",
+                    "漫画目录改为阅读主题样式，打开后定位到当前章节。",
+                    "阅读搜索跳转更准确；横滑翻页在滑动结束后再确认进度。",
+                    "网络异常时不再误退出登录，账号页可以直接重试。",
+                    "书源开关和收藏保存失败时会提示，并恢复原来的状态。"
+                ],
+                "en": [
+                    "Discover shows finished sources first and keeps existing content while refreshing.",
+                    "Comic pages stay in place while images finish loading.",
+                    "The comic catalog matches the reader theme and opens at the current chapter.",
+                    "Reader search jumps more reliably, and swipe page turns confirm progress after the gesture ends.",
+                    "A network error no longer signs you out; the account page can retry.",
+                    "Failed source enable or favorite changes now show an error and restore the previous state."
+                ]
+            }
+        },
+        {
+            "version": "2.6.7",
             "buildNumber": "260910002",
             "notes": {
                 "zh": [

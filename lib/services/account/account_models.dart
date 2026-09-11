@@ -217,6 +217,61 @@ class MemberMfaStatus {
   final int recoveryCodesRemaining;
 }
 
+/// 注销前的账号快照：告诉用户这次删除到底会带走什么。
+class MemberAccountDeletionPreview {
+  const MemberAccountDeletionPreview({
+    required this.email,
+    required this.createdAt,
+    required this.confirmationPhrase,
+    required this.deletable,
+    required this.premium,
+    required this.applePurchase,
+    required this.mfaRequired,
+    this.username,
+    this.blockedReason,
+    this.sessions = 0,
+    this.passkeys = 0,
+    this.oauthIdentities = 0,
+    this.invitedMembers = 0,
+    this.redemptions = 0,
+  });
+
+  factory MemberAccountDeletionPreview.fromJson(Map<String, dynamic> json) {
+    final counts = _map(json['counts']);
+    return MemberAccountDeletionPreview(
+      email: json['email'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      confirmationPhrase: json['confirmation_phrase'] as String,
+      deletable: json['deletable'] as bool? ?? false,
+      premium: json['premium'] as bool? ?? false,
+      applePurchase: json['apple_purchase'] as bool? ?? false,
+      mfaRequired: json['mfa_required'] as bool? ?? false,
+      username: json['username'] as String?,
+      blockedReason: json['blocked_reason'] as String?,
+      sessions: counts['sessions'] as int? ?? 0,
+      passkeys: counts['passkeys'] as int? ?? 0,
+      oauthIdentities: counts['oauth_identities'] as int? ?? 0,
+      invitedMembers: counts['invited_members'] as int? ?? 0,
+      redemptions: counts['redemptions'] as int? ?? 0,
+    );
+  }
+
+  final String email;
+  final DateTime createdAt;
+  final String confirmationPhrase;
+  final bool deletable;
+  final bool premium;
+  final bool applePurchase;
+  final bool mfaRequired;
+  final String? username;
+  final String? blockedReason;
+  final int sessions;
+  final int passkeys;
+  final int oauthIdentities;
+  final int invitedMembers;
+  final int redemptions;
+}
+
 class MemberMfaSetup {
   const MemberMfaSetup({required this.secret, required this.otpauthUri});
 

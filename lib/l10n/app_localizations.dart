@@ -11131,6 +11131,294 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unlock Premium through the available purchase or redemption options. The purchase channel displays the price and payment method. Verified membership is linked to your current Open Reading account.'**
   String get premiumBillingBodyOther;
+
+  /// Title of the account deletion screen and its entry tile
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get accountDeleteTitle;
+
+  /// Subtitle of the account deletion entry tile
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently erase this account and all of its data'**
+  String get accountDeleteEntrySubtitle;
+
+  /// Progress indicator in the account deletion flow
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String accountDeleteStepOf(int current, int total);
+
+  /// Heading of the first deletion step
+  ///
+  /// In en, this message translates to:
+  /// **'What deletion does'**
+  String get accountDeleteReviewTitle;
+
+  /// Intro paragraph of the first deletion step
+  ///
+  /// In en, this message translates to:
+  /// **'Please read every point. Once you confirm, everything below is deleted immediately and we cannot get it back for you.'**
+  String get accountDeleteReviewBody;
+
+  /// Label for the account being deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Current account'**
+  String get accountDeleteCurrentAccount;
+
+  /// Label for the account registration date
+  ///
+  /// In en, this message translates to:
+  /// **'Joined'**
+  String get accountDeleteJoined;
+
+  /// Premium status line when premium will be removed
+  ///
+  /// In en, this message translates to:
+  /// **'Premium unlocked (will be removed)'**
+  String get accountDeletePremiumActive;
+
+  /// Premium status line when no premium is held
+  ///
+  /// In en, this message translates to:
+  /// **'Premium not unlocked'**
+  String get accountDeletePremiumNone;
+
+  /// Heading above the counts of data the deletion removes
+  ///
+  /// In en, this message translates to:
+  /// **'This account currently has'**
+  String get accountDeleteHasTitle;
+
+  /// Count of active sessions the deletion will revoke
+  ///
+  /// In en, this message translates to:
+  /// **'{count} signed-in devices'**
+  String accountDeleteHasSessions(int count);
+
+  /// Count of passkeys the deletion will remove
+  ///
+  /// In en, this message translates to:
+  /// **'{count} passkeys'**
+  String accountDeleteHasPasskeys(int count);
+
+  /// Count of linked OAuth providers the deletion will remove
+  ///
+  /// In en, this message translates to:
+  /// **'{count} linked sign-in providers'**
+  String accountDeleteHasOauth(int count);
+
+  /// Count of members invited by this account
+  ///
+  /// In en, this message translates to:
+  /// **'{count} members who joined with your invite code'**
+  String accountDeleteHasInvited(int count);
+
+  /// Count of redemption codes this account has used
+  ///
+  /// In en, this message translates to:
+  /// **'{count} redeemed codes'**
+  String accountDeleteHasRedemptions(int count);
+
+  /// Heading of the deletion terms
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion terms'**
+  String get accountDeleteTermsTitle;
+
+  /// Lead warning that deletion cannot be undone
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion is final and cannot be reversed. Once you confirm, nobody — support included — has any way to restore the deleted data.'**
+  String get accountDeleteTermsIrreversible;
+
+  /// Deletion term about identity data
+  ///
+  /// In en, this message translates to:
+  /// **'The account itself is deleted: your email address, username, display name and avatar.'**
+  String get accountDeleteTermsIdentity;
+
+  /// Deletion term about sign-in methods
+  ///
+  /// In en, this message translates to:
+  /// **'Every sign-in method is deleted: your password, your passkeys, and your Google, GitHub and Apple links.'**
+  String get accountDeleteTermsLogins;
+
+  /// Deletion term about active sessions
+  ///
+  /// In en, this message translates to:
+  /// **'You are signed out everywhere immediately, on phones, tablets and computers alike.'**
+  String get accountDeleteTermsSessions;
+
+  /// Deletion term about two-factor authentication
+  ///
+  /// In en, this message translates to:
+  /// **'Your two-factor setup and all recovery codes are deleted.'**
+  String get accountDeleteTermsMfa;
+
+  /// Deletion term about premium entitlements
+  ///
+  /// In en, this message translates to:
+  /// **'Premium access is removed, however you unlocked it — a redemption code, an invite reward, or an Apple purchase.'**
+  String get accountDeleteTermsPremium;
+
+  /// Deletion term about referrals and invite codes
+  ///
+  /// In en, this message translates to:
+  /// **'Your invite code stops working and the referral records between you and the people you invited are deleted. Rewards already given to others are not taken back.'**
+  String get accountDeleteTermsReferrals;
+
+  /// Deletion term about spent redemption codes
+  ///
+  /// In en, this message translates to:
+  /// **'Redemption codes you have already used are not refunded and do not become available again.'**
+  String get accountDeleteTermsRedemptions;
+
+  /// Deletion term about App Store purchases and restoring them
+  ///
+  /// In en, this message translates to:
+  /// **'You bought lifetime Premium on the App Store. Deleting your account does not refund it and does not cancel any App Store transaction — refunds can only be requested from Apple. Your purchase receipt is unlinked from this account and kept, so you can later tap Restore purchases on a new account with the same Apple ID and get Premium back.'**
+  String get accountDeleteTermsApple;
+
+  /// Deletion term clarifying that on-device library data stays
+  ///
+  /// In en, this message translates to:
+  /// **'Books, shelves and reading progress on this device are not deleted — they only ever lived on your device. Remove them in the app if you want them gone too.'**
+  String get accountDeleteTermsLocalData;
+
+  /// Deletion term about the minimal retained deletion record
+  ///
+  /// In en, this message translates to:
+  /// **'We keep one deletion record. It contains no plaintext email address and cannot be turned back into personal information. Its only purposes are preventing abuse and making the Apple purchase restore above possible.'**
+  String get accountDeleteTermsTombstone;
+
+  /// Deletion term about registering again with the same address
+  ///
+  /// In en, this message translates to:
+  /// **'After deletion the same email address can register again, but it will be a brand-new empty account with none of your old data or access.'**
+  String get accountDeleteTermsRejoin;
+
+  /// Heading shown when the account may not be deleted
+  ///
+  /// In en, this message translates to:
+  /// **'This account cannot be deleted yet'**
+  String get accountDeleteBlockedTitle;
+
+  /// Explains that an admin owner must hand over ownership first
+  ///
+  /// In en, this message translates to:
+  /// **'You are the owner of the admin console. Hand the ownership to someone else first, then come back — otherwise nobody would be left to administer it.'**
+  String get accountDeleteBlockedOwner;
+
+  /// Checkbox label accepting the deletion terms
+  ///
+  /// In en, this message translates to:
+  /// **'I have read the terms in full, I understand that deletion cannot be undone, and I agree to permanently delete my account and all of its data.'**
+  String get accountDeleteConsent;
+
+  /// Error shown when continuing without accepting the terms
+  ///
+  /// In en, this message translates to:
+  /// **'Please accept the deletion terms first.'**
+  String get accountDeleteConsentRequired;
+
+  /// Button advancing from the terms step
+  ///
+  /// In en, this message translates to:
+  /// **'I understand, continue'**
+  String get accountDeleteContinue;
+
+  /// Heading of the deletion email verification step
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your email'**
+  String get accountDeleteVerifyTitle;
+
+  /// Explains the deletion verification code email
+  ///
+  /// In en, this message translates to:
+  /// **'We will send a 6-digit code to {email} to confirm that this request is really from you.'**
+  String accountDeleteVerifyBody(String email);
+
+  /// Button sending the deletion verification code
+  ///
+  /// In en, this message translates to:
+  /// **'Send deletion code'**
+  String get accountDeleteSendCode;
+
+  /// Button resending the deletion verification code
+  ///
+  /// In en, this message translates to:
+  /// **'Send again'**
+  String get accountDeleteResendCode;
+
+  /// Toast confirming the deletion code was sent
+  ///
+  /// In en, this message translates to:
+  /// **'Code sent. Finish the deletion within 10 minutes.'**
+  String get accountDeleteCodeSent;
+
+  /// Heading of the final deletion step
+  ///
+  /// In en, this message translates to:
+  /// **'Final step'**
+  String get accountDeleteConfirmTitle;
+
+  /// Asks the member to retype their account email to confirm deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Type your account email {email} so there is no doubt which account is being deleted.'**
+  String accountDeleteConfirmBody(String email);
+
+  /// Warning directly above the irreversible delete button
+  ///
+  /// In en, this message translates to:
+  /// **'The moment you press the button below, the account is permanently deleted.'**
+  String get accountDeleteConfirmWarning;
+
+  /// Label of the field where the member retypes their email
+  ///
+  /// In en, this message translates to:
+  /// **'Type your account email to confirm'**
+  String get accountDeleteConfirmField;
+
+  /// Hint that a two-factor code is also required
+  ///
+  /// In en, this message translates to:
+  /// **'This account has two-factor authentication on, so one more code is required.'**
+  String get accountDeleteMfaHint;
+
+  /// Error when the retyped email does not match
+  ///
+  /// In en, this message translates to:
+  /// **'That email does not match the current account.'**
+  String get accountDeleteConfirmMismatch;
+
+  /// Button that permanently deletes the account
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently delete my account'**
+  String get accountDeleteAction;
+
+  /// Heading of the deletion success dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is deleted'**
+  String get accountDeleteDoneTitle;
+
+  /// Body of the deletion success dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Your account and its data are permanently gone, and every device has been signed out. Thank you for having used Open Reading.'**
+  String get accountDeleteDoneBody;
+
+  /// Button closing the deletion success dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get accountDeleteDoneClose;
 }
 
 class _AppLocalizationsDelegate

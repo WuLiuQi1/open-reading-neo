@@ -118,6 +118,7 @@ class _AccountActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.destructive = false,
   });
 
   final IconData icon;
@@ -125,31 +126,42 @@ class _AccountActionTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onTap;
 
+  /// 破坏性入口用错误色标出来，避免和普通设置项看起来一样。
+  final bool destructive;
+
   @override
-  Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-      leading: Container(
-        width: 42,
-        height: 42,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          shape: BoxShape.circle,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final background = destructive
+        ? scheme.errorContainer
+        : scheme.primaryContainer;
+    final foreground = destructive
+        ? scheme.onErrorContainer
+        : scheme.onPrimaryContainer;
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+        leading: Container(
+          width: 42,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+          child: Icon(icon, size: 21, color: foreground),
         ),
-        child: Icon(
-          icon,
-          size: 21,
-          color: Theme.of(context).colorScheme.onPrimaryContainer,
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: destructive ? scheme.error : null,
+          ),
         ),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onTap,
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: onTap,
-    ),
-  );
+    );
+  }
 }
 
 class _ReferralCard extends StatefulWidget {

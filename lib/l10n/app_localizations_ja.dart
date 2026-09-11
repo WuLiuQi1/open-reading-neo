@@ -6118,4 +6118,179 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get premiumBillingBodyOther =>
       '利用可能な購入または引き換え方法でプレミアムを開通できます。価格と支払い方法は購入先の表示をご確認ください。検証済みの会員特典は現在の Open Reading アカウントに紐づきます。';
+
+  @override
+  String get accountDeleteTitle => 'アカウントを削除';
+
+  @override
+  String get accountDeleteEntrySubtitle => 'このアカウントとすべてのデータを完全に削除します';
+
+  @override
+  String accountDeleteStepOf(int current, int total) {
+    return 'ステップ $current / $total';
+  }
+
+  @override
+  String get accountDeleteReviewTitle => '削除すると何が起きるか';
+
+  @override
+  String get accountDeleteReviewBody =>
+      'すべての項目をお読みください。確認後、以下の内容はただちに削除され、こちらで復元することはできません。';
+
+  @override
+  String get accountDeleteCurrentAccount => '現在のアカウント';
+
+  @override
+  String get accountDeleteJoined => '登録日';
+
+  @override
+  String get accountDeletePremiumActive => 'プレミアム有効（削除されます）';
+
+  @override
+  String get accountDeletePremiumNone => 'プレミアム未購入';
+
+  @override
+  String get accountDeleteHasTitle => 'このアカウントの現在の状態';
+
+  @override
+  String accountDeleteHasSessions(int count) {
+    return 'ログイン中のデバイス $count 台';
+  }
+
+  @override
+  String accountDeleteHasPasskeys(int count) {
+    return 'パスキー $count 件';
+  }
+
+  @override
+  String accountDeleteHasOauth(int count) {
+    return '連携中のログイン方法 $count 件';
+  }
+
+  @override
+  String accountDeleteHasInvited(int count) {
+    return 'あなたの招待コードで参加したメンバー $count 名';
+  }
+
+  @override
+  String accountDeleteHasRedemptions(int count) {
+    return '引き換え済みコード $count 件';
+  }
+
+  @override
+  String get accountDeleteTermsTitle => '削除に関する規約';
+
+  @override
+  String get accountDeleteTermsIrreversible =>
+      'アカウントの削除は取り消せません。確認後は、サポートを含め誰も削除されたデータを復元できません。';
+
+  @override
+  String get accountDeleteTermsIdentity =>
+      'アカウント自体が削除されます：メールアドレス、ユーザー名、表示名、アイコン。';
+
+  @override
+  String get accountDeleteTermsLogins =>
+      'すべてのログイン方法が削除されます：パスワード、パスキー、Google・GitHub・Apple の連携。';
+
+  @override
+  String get accountDeleteTermsSessions =>
+      'スマートフォン、タブレット、パソコンを含むすべての端末で、ただちにログアウトされます。';
+
+  @override
+  String get accountDeleteTermsMfa => '2 段階認証の設定とすべての復旧コードが削除されます。';
+
+  @override
+  String get accountDeleteTermsPremium =>
+      'プレミアム特典は削除されます。引き換えコード、招待報酬、Apple での購入のいずれで取得した場合も同様です。';
+
+  @override
+  String get accountDeleteTermsReferrals =>
+      'あなたの招待コードは無効になり、招待した相手との招待記録も削除されます。すでに付与された報酬が取り消されることはありません。';
+
+  @override
+  String get accountDeleteTermsRedemptions =>
+      '使用済みの引き換えコードは返金されず、再び使用可能になることもありません。';
+
+  @override
+  String get accountDeleteTermsApple =>
+      'App Store で買い切りのプレミアムを購入済みです。アカウントを削除しても返金されず、App Store の取引が取り消されることもありません。返金は Apple にのみ申請できます。購入レシートはアカウントとの紐づけを解除したうえで保持されるため、後日同じ Apple ID で新しいアカウントから「購入を復元」を実行すればプレミアムを取り戻せます。';
+
+  @override
+  String get accountDeleteTermsLocalData =>
+      'この端末に保存された書籍・本棚・読書記録は削除されません。もともと端末内にのみ保存されています。あわせて消したい場合はアプリ内で削除してください。';
+
+  @override
+  String get accountDeleteTermsTombstone =>
+      '削除記録を 1 件だけ保持します。メールアドレスの平文は含まれず、個人情報に戻すこともできません。目的は不正利用の防止と、上記の Apple 購入の復元を可能にすることだけです。';
+
+  @override
+  String get accountDeleteTermsRejoin =>
+      '削除後も同じメールアドレスで再登録できますが、以前のデータや特典を引き継がない、まったく新しい空のアカウントになります。';
+
+  @override
+  String get accountDeleteBlockedTitle => 'このアカウントはまだ削除できません';
+
+  @override
+  String get accountDeleteBlockedOwner =>
+      'あなたは管理コンソールのオーナーです。先に他の方へオーナー権限を引き継いでから、もう一度お試しください。そうしないと管理する人がいなくなります。';
+
+  @override
+  String get accountDeleteConsent =>
+      '上記の規約をすべて読み、削除が取り消せないことを理解したうえで、アカウントとすべてのデータの完全な削除に同意します。';
+
+  @override
+  String get accountDeleteConsentRequired => '先に削除規約への同意にチェックを入れてください。';
+
+  @override
+  String get accountDeleteContinue => '理解しました。続ける';
+
+  @override
+  String get accountDeleteVerifyTitle => 'メールアドレスの確認';
+
+  @override
+  String accountDeleteVerifyBody(String email) {
+    return '本人確認のため、$email に 6 桁の確認コードを送信します。';
+  }
+
+  @override
+  String get accountDeleteSendCode => '削除用コードを送信';
+
+  @override
+  String get accountDeleteResendCode => '再送信';
+
+  @override
+  String get accountDeleteCodeSent => 'コードを送信しました。10 分以内に削除を完了してください。';
+
+  @override
+  String get accountDeleteConfirmTitle => '最後のステップ';
+
+  @override
+  String accountDeleteConfirmBody(String email) {
+    return 'どのアカウントを削除するかを明確にするため、アカウントのメールアドレス $email を入力してください。';
+  }
+
+  @override
+  String get accountDeleteConfirmWarning => '下のボタンを押した時点で、アカウントは完全に削除されます。';
+
+  @override
+  String get accountDeleteConfirmField => '確認のためアカウントのメールアドレスを入力';
+
+  @override
+  String get accountDeleteMfaHint => 'このアカウントは 2 段階認証が有効なため、もう一度コードの入力が必要です。';
+
+  @override
+  String get accountDeleteConfirmMismatch => '入力されたメールアドレスが現在のアカウントと一致しません。';
+
+  @override
+  String get accountDeleteAction => 'アカウントを完全に削除';
+
+  @override
+  String get accountDeleteDoneTitle => 'アカウントを削除しました';
+
+  @override
+  String get accountDeleteDoneBody =>
+      'アカウントと関連データは完全に削除され、すべての端末でログアウトされました。Open Reading をご利用いただきありがとうございました。';
+
+  @override
+  String get accountDeleteDoneClose => '閉じる';
 }

@@ -6371,4 +6371,186 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get premiumBillingBodyOther =>
       'Unlock Premium through the available purchase or redemption options. The purchase channel displays the price and payment method. Verified membership is linked to your current Open Reading account.';
+
+  @override
+  String get accountDeleteTitle => 'Delete account';
+
+  @override
+  String get accountDeleteEntrySubtitle =>
+      'Permanently erase this account and all of its data';
+
+  @override
+  String accountDeleteStepOf(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get accountDeleteReviewTitle => 'What deletion does';
+
+  @override
+  String get accountDeleteReviewBody =>
+      'Please read every point. Once you confirm, everything below is deleted immediately and we cannot get it back for you.';
+
+  @override
+  String get accountDeleteCurrentAccount => 'Current account';
+
+  @override
+  String get accountDeleteJoined => 'Joined';
+
+  @override
+  String get accountDeletePremiumActive => 'Premium unlocked (will be removed)';
+
+  @override
+  String get accountDeletePremiumNone => 'Premium not unlocked';
+
+  @override
+  String get accountDeleteHasTitle => 'This account currently has';
+
+  @override
+  String accountDeleteHasSessions(int count) {
+    return '$count signed-in devices';
+  }
+
+  @override
+  String accountDeleteHasPasskeys(int count) {
+    return '$count passkeys';
+  }
+
+  @override
+  String accountDeleteHasOauth(int count) {
+    return '$count linked sign-in providers';
+  }
+
+  @override
+  String accountDeleteHasInvited(int count) {
+    return '$count members who joined with your invite code';
+  }
+
+  @override
+  String accountDeleteHasRedemptions(int count) {
+    return '$count redeemed codes';
+  }
+
+  @override
+  String get accountDeleteTermsTitle => 'Deletion terms';
+
+  @override
+  String get accountDeleteTermsIrreversible =>
+      'Account deletion is final and cannot be reversed. Once you confirm, nobody — support included — has any way to restore the deleted data.';
+
+  @override
+  String get accountDeleteTermsIdentity =>
+      'The account itself is deleted: your email address, username, display name and avatar.';
+
+  @override
+  String get accountDeleteTermsLogins =>
+      'Every sign-in method is deleted: your password, your passkeys, and your Google, GitHub and Apple links.';
+
+  @override
+  String get accountDeleteTermsSessions =>
+      'You are signed out everywhere immediately, on phones, tablets and computers alike.';
+
+  @override
+  String get accountDeleteTermsMfa =>
+      'Your two-factor setup and all recovery codes are deleted.';
+
+  @override
+  String get accountDeleteTermsPremium =>
+      'Premium access is removed, however you unlocked it — a redemption code, an invite reward, or an Apple purchase.';
+
+  @override
+  String get accountDeleteTermsReferrals =>
+      'Your invite code stops working and the referral records between you and the people you invited are deleted. Rewards already given to others are not taken back.';
+
+  @override
+  String get accountDeleteTermsRedemptions =>
+      'Redemption codes you have already used are not refunded and do not become available again.';
+
+  @override
+  String get accountDeleteTermsApple =>
+      'You bought lifetime Premium on the App Store. Deleting your account does not refund it and does not cancel any App Store transaction — refunds can only be requested from Apple. Your purchase receipt is unlinked from this account and kept, so you can later tap Restore purchases on a new account with the same Apple ID and get Premium back.';
+
+  @override
+  String get accountDeleteTermsLocalData =>
+      'Books, shelves and reading progress on this device are not deleted — they only ever lived on your device. Remove them in the app if you want them gone too.';
+
+  @override
+  String get accountDeleteTermsTombstone =>
+      'We keep one deletion record. It contains no plaintext email address and cannot be turned back into personal information. Its only purposes are preventing abuse and making the Apple purchase restore above possible.';
+
+  @override
+  String get accountDeleteTermsRejoin =>
+      'After deletion the same email address can register again, but it will be a brand-new empty account with none of your old data or access.';
+
+  @override
+  String get accountDeleteBlockedTitle => 'This account cannot be deleted yet';
+
+  @override
+  String get accountDeleteBlockedOwner =>
+      'You are the owner of the admin console. Hand the ownership to someone else first, then come back — otherwise nobody would be left to administer it.';
+
+  @override
+  String get accountDeleteConsent =>
+      'I have read the terms in full, I understand that deletion cannot be undone, and I agree to permanently delete my account and all of its data.';
+
+  @override
+  String get accountDeleteConsentRequired =>
+      'Please accept the deletion terms first.';
+
+  @override
+  String get accountDeleteContinue => 'I understand, continue';
+
+  @override
+  String get accountDeleteVerifyTitle => 'Verify your email';
+
+  @override
+  String accountDeleteVerifyBody(String email) {
+    return 'We will send a 6-digit code to $email to confirm that this request is really from you.';
+  }
+
+  @override
+  String get accountDeleteSendCode => 'Send deletion code';
+
+  @override
+  String get accountDeleteResendCode => 'Send again';
+
+  @override
+  String get accountDeleteCodeSent =>
+      'Code sent. Finish the deletion within 10 minutes.';
+
+  @override
+  String get accountDeleteConfirmTitle => 'Final step';
+
+  @override
+  String accountDeleteConfirmBody(String email) {
+    return 'Type your account email $email so there is no doubt which account is being deleted.';
+  }
+
+  @override
+  String get accountDeleteConfirmWarning =>
+      'The moment you press the button below, the account is permanently deleted.';
+
+  @override
+  String get accountDeleteConfirmField => 'Type your account email to confirm';
+
+  @override
+  String get accountDeleteMfaHint =>
+      'This account has two-factor authentication on, so one more code is required.';
+
+  @override
+  String get accountDeleteConfirmMismatch =>
+      'That email does not match the current account.';
+
+  @override
+  String get accountDeleteAction => 'Permanently delete my account';
+
+  @override
+  String get accountDeleteDoneTitle => 'Your account is deleted';
+
+  @override
+  String get accountDeleteDoneBody =>
+      'Your account and its data are permanently gone, and every device has been signed out. Thank you for having used Open Reading.';
+
+  @override
+  String get accountDeleteDoneClose => 'Close';
 }

@@ -555,6 +555,34 @@ class MemberAccountController extends ChangeNotifier {
     _referral = await _api.bindReferral(code);
   });
 
+  Future<MemberAccountDeletionPreview> accountDeletionPreview() =>
+      _runValue(_api.accountDeletionPreview);
+
+  Future<MemberEmailChallenge> requestAccountDeletionCode() =>
+      _runValue(_api.requestAccountDeletionCode);
+
+  /// 注销成功后本地状态必须和退出登录一样彻底清空，否则界面仍会显示已删除的账号。
+  Future<void> deleteAccount({
+    required String challengeId,
+    required String code,
+    required String confirmation,
+    String? mfaCode,
+  }) => _run(() async {
+    await _api.deleteAccount(
+      challengeId: challengeId,
+      code: code,
+      confirmation: confirmation,
+      mfaCode: mfaCode,
+    );
+    _user = null;
+    _pendingSession = null;
+    _membership = null;
+    _referral = null;
+    _mfaStatus = null;
+    notifyListeners();
+    await _clearSummary();
+  });
+
   Future<void> logout() => _run(() async {
     try {
       await _api.logout();

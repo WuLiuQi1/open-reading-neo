@@ -212,6 +212,38 @@ class MemberAccountApiClient {
     'password': password,
   }, authenticated: true);
 
+  Future<MemberAccountDeletionPreview> accountDeletionPreview() async =>
+      MemberAccountDeletionPreview.fromJson(
+        await _jsonRequest('GET', '$authRoot/security/deletion/preview'),
+      );
+
+  Future<MemberEmailChallenge> requestAccountDeletionCode() async =>
+      MemberEmailChallenge.fromJson(
+        await _jsonRequest('POST', '$authRoot/security/deletion/code'),
+      );
+
+  Future<void> deleteAccount({
+    required String challengeId,
+    required String code,
+    required String confirmation,
+    String? mfaCode,
+  }) async {
+    await _emptyRequest(
+      'POST',
+      '$authRoot/security/deletion',
+      data: {
+        'challenge_id': challengeId,
+        'code': code.trim(),
+        'confirmation': confirmation.trim(),
+        'acknowledged': true,
+        if (mfaCode != null && mfaCode.trim().isNotEmpty)
+          'mfa_code': mfaCode.trim(),
+      },
+    );
+    // Only on success: a rejected code must leave the member signed in to retry.
+    await _tokenStore.clear();
+  }
+
   Future<MemberMfaStatus> mfaStatus() async => MemberMfaStatus.fromJson(
     await _jsonRequest('GET', '$authRoot/security/mfa/status'),
   );

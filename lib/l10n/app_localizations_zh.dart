@@ -6021,6 +6021,176 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get premiumBillingBodyOther =>
       '可通过当前提供的开通或兑换方式解锁会员。价格与支付方式以购买渠道展示为准，会员权益经验证后绑定当前开元阅读账号。';
+
+  @override
+  String get accountDeleteTitle => '注销账号';
+
+  @override
+  String get accountDeleteEntrySubtitle => '永久删除本账号与全部数据';
+
+  @override
+  String accountDeleteStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get accountDeleteReviewTitle => '注销后会发生什么';
+
+  @override
+  String get accountDeleteReviewBody => '请逐条读完。确认注销后，下面所有内容会被立即删除，我们无法为你找回。';
+
+  @override
+  String get accountDeleteCurrentAccount => '当前账号';
+
+  @override
+  String get accountDeleteJoined => '注册时间';
+
+  @override
+  String get accountDeletePremiumActive => '高级版已解锁（将被移除）';
+
+  @override
+  String get accountDeletePremiumNone => '高级版未解锁';
+
+  @override
+  String get accountDeleteHasTitle => '这个账号目前拥有';
+
+  @override
+  String accountDeleteHasSessions(int count) {
+    return '$count 个已登录设备';
+  }
+
+  @override
+  String accountDeleteHasPasskeys(int count) {
+    return '$count 个 Passkey';
+  }
+
+  @override
+  String accountDeleteHasOauth(int count) {
+    return '$count 个第三方登录绑定';
+  }
+
+  @override
+  String accountDeleteHasInvited(int count) {
+    return '$count 位通过你的邀请码加入的成员';
+  }
+
+  @override
+  String accountDeleteHasRedemptions(int count) {
+    return '$count 张已兑换的卡密';
+  }
+
+  @override
+  String get accountDeleteTermsTitle => '注销条款';
+
+  @override
+  String get accountDeleteTermsIrreversible =>
+      '账号注销不可撤销、不可恢复。一旦确认，我们没有任何技术手段还原被删除的数据——包括客服在内。';
+
+  @override
+  String get accountDeleteTermsIdentity => '账号本身会被删除：邮箱、用户名、昵称和头像。';
+
+  @override
+  String get accountDeleteTermsLogins =>
+      '全部登录方式会被删除：密码、Passkey，以及 Google、GitHub、Apple 的账号绑定。';
+
+  @override
+  String get accountDeleteTermsSessions => '所有设备上的登录状态会立即失效，包括手机、平板和电脑。';
+
+  @override
+  String get accountDeleteTermsMfa => '双重验证配置与全部恢复码会被删除。';
+
+  @override
+  String get accountDeleteTermsPremium =>
+      '高级版权益会被删除。无论通过卡密、邀请奖励还是 Apple 购买获得，都会一并失效。';
+
+  @override
+  String get accountDeleteTermsReferrals =>
+      '你的邀请码会失效，你与邀请人、被邀请人之间的邀请关系记录会被删除。已发放给他人的奖励不会被收回。';
+
+  @override
+  String get accountDeleteTermsRedemptions => '已经兑换过的卡密不会退还，也不会重新变成可用状态。';
+
+  @override
+  String get accountDeleteTermsApple =>
+      '你在 App Store 购买过终身高级版。注销不会退款，也不会取消任何 App Store 交易——退款只能向 Apple 申请。购买凭证会与你的账号解绑并保留，因此你之后可以用同一个 Apple ID 在新账号里点击「恢复购买」，重新拿回高级版权益。';
+
+  @override
+  String get accountDeleteTermsLocalData =>
+      '存在这台设备上的书籍、书架和阅读记录不会被删除，它们本来就只保存在你的设备里。如果也想清除，请在 App 内自行删除。';
+
+  @override
+  String get accountDeleteTermsTombstone =>
+      '我们只会保留一条注销记录，其中不含你的邮箱明文、也无法还原成个人信息。它的唯一用途是防止滥用，并让上面说的 Apple 购买恢复能够成立。';
+
+  @override
+  String get accountDeleteTermsRejoin =>
+      '注销之后，同一个邮箱可以重新注册。但那会是一个全新的空账号，不会带回任何旧数据或权益。';
+
+  @override
+  String get accountDeleteBlockedTitle => '这个账号暂时不能注销';
+
+  @override
+  String get accountDeleteBlockedOwner =>
+      '你是管理后台的所有者。请先把所有者身份移交给其他人，再回来注销账号，否则后台将无人可管理。';
+
+  @override
+  String get accountDeleteConsent => '我已完整阅读以上条款，理解账号注销不可恢复，并同意永久删除我的账号和全部数据。';
+
+  @override
+  String get accountDeleteConsentRequired => '请先勾选同意注销条款。';
+
+  @override
+  String get accountDeleteContinue => '我已了解，继续';
+
+  @override
+  String get accountDeleteVerifyTitle => '验证你的邮箱';
+
+  @override
+  String accountDeleteVerifyBody(String email) {
+    return '我们会向 $email 发送一个 6 位验证码，确认发起注销的确实是你本人。';
+  }
+
+  @override
+  String get accountDeleteSendCode => '发送注销验证码';
+
+  @override
+  String get accountDeleteResendCode => '重新发送';
+
+  @override
+  String get accountDeleteCodeSent => '验证码已发送，请在 10 分钟内完成注销。';
+
+  @override
+  String get accountDeleteConfirmTitle => '最后一步';
+
+  @override
+  String accountDeleteConfirmBody(String email) {
+    return '请输入你的账号邮箱 $email，确认你清楚正在删除哪个账号。';
+  }
+
+  @override
+  String get accountDeleteConfirmWarning => '点击下面的按钮后，账号会立即被永久删除。';
+
+  @override
+  String get accountDeleteConfirmField => '输入账号邮箱以确认';
+
+  @override
+  String get accountDeleteMfaHint => '此账号已开启双重验证，需要再输入一次动态码。';
+
+  @override
+  String get accountDeleteConfirmMismatch => '输入的邮箱与当前账号不一致。';
+
+  @override
+  String get accountDeleteAction => '永久注销账号';
+
+  @override
+  String get accountDeleteDoneTitle => '账号已注销';
+
+  @override
+  String get accountDeleteDoneBody =>
+      '你的账号和关联数据已被永久删除，所有设备上的登录状态已失效。感谢你曾经使用开元阅读。';
+
+  @override
+  String get accountDeleteDoneClose => '关闭';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -11921,4 +12091,174 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get premiumBillingBodyOther =>
       '可透過目前提供的開通或兌換方式解鎖會員。價格與付款方式以購買管道顯示為準，會員權益經驗證後綁定目前的開元閱讀帳號。';
+
+  @override
+  String get accountDeleteTitle => '註銷帳號';
+
+  @override
+  String get accountDeleteEntrySubtitle => '永久刪除本帳號與全部資料';
+
+  @override
+  String accountDeleteStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get accountDeleteReviewTitle => '註銷後會發生什麼';
+
+  @override
+  String get accountDeleteReviewBody => '請逐條讀完。確認註銷後，下面所有內容會被立即刪除，我們無法為你找回。';
+
+  @override
+  String get accountDeleteCurrentAccount => '目前帳號';
+
+  @override
+  String get accountDeleteJoined => '註冊時間';
+
+  @override
+  String get accountDeletePremiumActive => '進階版已解鎖（將被移除）';
+
+  @override
+  String get accountDeletePremiumNone => '進階版未解鎖';
+
+  @override
+  String get accountDeleteHasTitle => '這個帳號目前擁有';
+
+  @override
+  String accountDeleteHasSessions(int count) {
+    return '$count 個已登入裝置';
+  }
+
+  @override
+  String accountDeleteHasPasskeys(int count) {
+    return '$count 個 Passkey';
+  }
+
+  @override
+  String accountDeleteHasOauth(int count) {
+    return '$count 個第三方登入綁定';
+  }
+
+  @override
+  String accountDeleteHasInvited(int count) {
+    return '$count 位透過你的邀請碼加入的成員';
+  }
+
+  @override
+  String accountDeleteHasRedemptions(int count) {
+    return '$count 張已兌換的卡密';
+  }
+
+  @override
+  String get accountDeleteTermsTitle => '註銷條款';
+
+  @override
+  String get accountDeleteTermsIrreversible =>
+      '帳號註銷不可撤銷、不可復原。一旦確認，我們沒有任何技術手段還原被刪除的資料——包括客服在內。';
+
+  @override
+  String get accountDeleteTermsIdentity => '帳號本身會被刪除：電子郵件、使用者名稱、暱稱和頭像。';
+
+  @override
+  String get accountDeleteTermsLogins =>
+      '全部登入方式會被刪除：密碼、Passkey，以及 Google、GitHub、Apple 的帳號綁定。';
+
+  @override
+  String get accountDeleteTermsSessions => '所有裝置上的登入狀態會立即失效，包括手機、平板和電腦。';
+
+  @override
+  String get accountDeleteTermsMfa => '雙重驗證設定與全部恢復碼會被刪除。';
+
+  @override
+  String get accountDeleteTermsPremium =>
+      '進階版權益會被刪除。無論透過卡密、邀請獎勵還是 Apple 購買取得，都會一併失效。';
+
+  @override
+  String get accountDeleteTermsReferrals =>
+      '你的邀請碼會失效，你與邀請人、被邀請人之間的邀請關係記錄會被刪除。已發放給他人的獎勵不會被收回。';
+
+  @override
+  String get accountDeleteTermsRedemptions => '已經兌換過的卡密不會退還，也不會重新變成可用狀態。';
+
+  @override
+  String get accountDeleteTermsApple =>
+      '你在 App Store 購買過終身進階版。註銷不會退款，也不會取消任何 App Store 交易——退款只能向 Apple 申請。購買憑證會與你的帳號解除綁定並保留，因此你之後可以用同一個 Apple ID 在新帳號裡點擊「恢復購買」，重新拿回進階版權益。';
+
+  @override
+  String get accountDeleteTermsLocalData =>
+      '存在這台裝置上的書籍、書架和閱讀記錄不會被刪除，它們本來就只保存在你的裝置裡。如果也想清除，請在 App 內自行刪除。';
+
+  @override
+  String get accountDeleteTermsTombstone =>
+      '我們只會保留一條註銷記錄，其中不含你的電子郵件明文、也無法還原成個人資訊。它的唯一用途是防止濫用，並讓上面說的 Apple 購買恢復能夠成立。';
+
+  @override
+  String get accountDeleteTermsRejoin =>
+      '註銷之後，同一個電子郵件可以重新註冊。但那會是一個全新的空帳號，不會帶回任何舊資料或權益。';
+
+  @override
+  String get accountDeleteBlockedTitle => '這個帳號暫時不能註銷';
+
+  @override
+  String get accountDeleteBlockedOwner =>
+      '你是管理後台的擁有者。請先把擁有者身分移交給其他人，再回來註銷帳號，否則後台將無人可管理。';
+
+  @override
+  String get accountDeleteConsent => '我已完整閱讀以上條款，理解帳號註銷不可復原，並同意永久刪除我的帳號和全部資料。';
+
+  @override
+  String get accountDeleteConsentRequired => '請先勾選同意註銷條款。';
+
+  @override
+  String get accountDeleteContinue => '我已了解，繼續';
+
+  @override
+  String get accountDeleteVerifyTitle => '驗證你的電子郵件';
+
+  @override
+  String accountDeleteVerifyBody(String email) {
+    return '我們會向 $email 傳送一個 6 位驗證碼，確認發起註銷的確實是你本人。';
+  }
+
+  @override
+  String get accountDeleteSendCode => '傳送註銷驗證碼';
+
+  @override
+  String get accountDeleteResendCode => '重新傳送';
+
+  @override
+  String get accountDeleteCodeSent => '驗證碼已傳送，請在 10 分鐘內完成註銷。';
+
+  @override
+  String get accountDeleteConfirmTitle => '最後一步';
+
+  @override
+  String accountDeleteConfirmBody(String email) {
+    return '請輸入你的帳號電子郵件 $email，確認你清楚正在刪除哪個帳號。';
+  }
+
+  @override
+  String get accountDeleteConfirmWarning => '點擊下面的按鈕後，帳號會立即被永久刪除。';
+
+  @override
+  String get accountDeleteConfirmField => '輸入帳號電子郵件以確認';
+
+  @override
+  String get accountDeleteMfaHint => '此帳號已開啟雙重驗證，需要再輸入一次動態碼。';
+
+  @override
+  String get accountDeleteConfirmMismatch => '輸入的電子郵件與目前帳號不一致。';
+
+  @override
+  String get accountDeleteAction => '永久註銷帳號';
+
+  @override
+  String get accountDeleteDoneTitle => '帳號已註銷';
+
+  @override
+  String get accountDeleteDoneBody =>
+      '你的帳號和關聯資料已被永久刪除，所有裝置上的登入狀態已失效。感謝你曾經使用開元閱讀。';
+
+  @override
+  String get accountDeleteDoneClose => '關閉';
 }

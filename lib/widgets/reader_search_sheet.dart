@@ -32,14 +32,13 @@ class ReaderSearchResult {
 
 typedef ReaderSearchLoader = Stream<ReaderSearchDocument> Function();
 
-Future<void> showReaderSearchSheet(
+Future<ReaderSearchResult?> showReaderSearchSheet(
   BuildContext context, {
   required ReaderThemePalette palette,
   required ReaderSearchLoader loadDocuments,
   required int documentCount,
-  required ValueChanged<ReaderSearchResult> onResultSelected,
   String initialQuery = '',
-}) => showModalBottomSheet<void>(
+}) => showModalBottomSheet<ReaderSearchResult>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
@@ -48,7 +47,6 @@ Future<void> showReaderSearchSheet(
     palette: palette,
     loadDocuments: loadDocuments,
     documentCount: documentCount,
-    onResultSelected: onResultSelected,
     initialQuery: initialQuery,
   ),
 );
@@ -58,14 +56,12 @@ class _ReaderSearchSheet extends StatefulWidget {
     required this.palette,
     required this.loadDocuments,
     required this.documentCount,
-    required this.onResultSelected,
     required this.initialQuery,
   });
 
   final ReaderThemePalette palette;
   final ReaderSearchLoader loadDocuments;
   final int documentCount;
-  final ValueChanged<ReaderSearchResult> onResultSelected;
   final String initialQuery;
 
   @override
@@ -299,10 +295,7 @@ class _ReaderSearchSheetState extends State<_ReaderSearchSheet> {
                             ),
                           ),
                         ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          widget.onResultSelected(result);
-                        },
+                        onTap: () => Navigator.pop(context, result),
                       );
                     },
                   ),

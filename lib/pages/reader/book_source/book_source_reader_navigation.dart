@@ -28,14 +28,15 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
     _pauseAutoPageTurn();
     _controlsTimer?.cancel();
     _updateReaderState(() => _controlsVisible = false);
-    await showReaderSearchSheet(
+    final result = await showReaderSearchSheet(
       context,
       palette: _readerTheme,
       initialQuery: initialQuery,
       loadDocuments: _loadSearchDocuments,
       documentCount: _chapters.length,
-      onResultSelected: (result) => unawaited(_jumpToSearchResult(result)),
     );
+    if (!mounted || result == null) return;
+    await _jumpToSearchResult(result);
   }
 
   Future<void> _jumpToSearchResult(ReaderSearchResult result) async {
@@ -192,11 +193,19 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
         .startOffset;
   }
 
-  void _setPagedIndex(int index, {bool jumpPageView = false}) {
+  void _setPagedIndex(
+    int index, {
+    bool jumpPageView = false,
+    int? pagesReadDelta,
+  }) {
     if (_paginatedPages.isEmpty) return;
     final clamped = index.clamp(0, _paginatedPages.length - 1);
     final next = _usesTwoPageLayout ? _spreadStartForPage(clamped) : clamped;
-    if (next > _pageIndex) _sessionPagesRead++;
+    if (pagesReadDelta != null) {
+      _sessionPagesRead += pagesReadDelta;
+    } else if (next > _pageIndex) {
+      _sessionPagesRead++;
+    }
     if (next != _pageIndex) {
       _hideControlsForPageTurn();
       _updateReaderState(() => _pageIndex = next);
@@ -211,6 +220,12 @@ extension _BookSourceReaderNavigation on _BookSourceReaderPageState {
       unawaited(_preloadChapter(_chapterIndex + 1));
     }
     _scheduleProgressSave();
+  }
+
+  void _commitPendingSlidePage() {
+    final pending = _horizontalPageTurnTracker.take();
+    if (pending == null || pending.page == _pageIndex) return;
+    _setPagedIndex(pending.page, pagesReadDelta: pending.pagesReadDelta);
   }
 
   void _scheduleProgressSave() {

@@ -259,6 +259,125 @@ void main() {
   );
 
   testWidgets(
+    'EPUB full-text search opens a later page in the current chapter',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.binding.setSurfaceSize(const Size(480, 800));
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: ReaderPageMode.horizontalSlide.name,
+      });
+      final directory = Directory.systemTemp.createTempSync(
+        'open-reading-epub-search-same-chapter-',
+      );
+      final epub = File('${directory.path}/search-same-chapter.epub')
+        ..writeAsBytesSync(_epubFixture());
+      const searchTarget = 'Chapter 1 paragraph 47';
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: NativeReaderPage(
+              replaceRuleService: replaceRuleService,
+              book: Book(
+                title: 'EPUB same-chapter search fixture',
+                filePath: epub.path,
+                format: 'epub',
+                currentPage: 0,
+                fileModifiedTime: epub
+                    .lastModifiedSync()
+                    .millisecondsSinceEpoch,
+              ),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 60; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            if (find.byType(PageView).evaluate().isNotEmpty) return;
+          }
+        });
+        await _pumpUntil(
+          tester,
+          () => find.byType(PageView).evaluate().isNotEmpty,
+        );
+
+        expect(
+          find.textContaining(searchTarget, findRichText: true),
+          findsNothing,
+        );
+
+        await tester.tapAt(const Offset(240, 400));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(
+          find.byKey(const ValueKey('native-reader-bottom-controls')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('全文搜索'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('reader-full-text-search-field')),
+          searchTarget,
+        );
+        await tester.pump(const Duration(milliseconds: 251));
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 100; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            final result = find.descendant(
+              of: find.byType(ListTile),
+              matching: find.textContaining(searchTarget),
+            );
+            if (result.evaluate().isNotEmpty) return;
+          }
+        });
+        final resultTile = find.byType(ListTile);
+        expect(
+          find.descendant(
+            of: resultTile,
+            matching: find.textContaining(searchTarget),
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(resultTile);
+
+        final matchingBody = find.descendant(
+          of: find.byType(ReaderAnnotatedTextPage),
+          matching: find.textContaining(searchTarget, findRichText: true),
+        );
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 100; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+            if (matchingBody.evaluate().isNotEmpty) return;
+          }
+        });
+        await _pumpUntil(tester, () => matchingBody.evaluate().isNotEmpty);
+        expect(
+          find.byKey(const ValueKey('native-reader-positioning-placeholder')),
+          findsNothing,
+        );
+
+        final pageView = tester.widget<PageView>(find.byType(PageView));
+        final matchedLeaf = _pageLeafForControllerPage(tester, pageView);
+        expect(matchedLeaf.metadata.chapterTitle, 'Chapter 1');
+        expect(matchedLeaf.metadata.pageNumber, greaterThan(1));
+        expect(matchingBody, findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await drainReaderCache(tester);
+        await tester.binding.setSurfaceSize(null);
+        debugDefaultTargetPlatformOverride = null;
+        directory.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
     'EPUB continuous scroll hides the chapter opening until restore completes',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;

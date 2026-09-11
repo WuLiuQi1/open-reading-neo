@@ -321,6 +321,7 @@ class _NativeReaderPageState extends State<NativeReaderPage>
   final _horizontalPageIndexMap = _HorizontalPageIndexMap();
   int _pageIndex = 0;
   int? _anchorOffset;
+  int? _pendingRestoreChapterIndex;
   int? _verticalCanonicalOffset;
   String? _savedChapterId;
   bool _savedChapterResolved = false;

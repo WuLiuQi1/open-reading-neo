@@ -6,7 +6,7 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
     double restoreProgress = 0,
     bool saveCurrent = true,
   }) async {
-    if (index < 0 || index >= _chapters.length || _loadingContent) return;
+    if (index < 0 || index >= _chapters.length) return;
     if (saveCurrent && index > _chapterIndex) _sessionPagesRead++;
     if (saveCurrent && _content != null) unawaited(_saveProgress());
     if (!mounted) return;
@@ -86,6 +86,7 @@ extension _BookSourceReaderChapterLoading on _BookSourceReaderPageState {
       _restorePagedPosition = preparedLayout == null;
       if (preparedLayout != null) _restoreTextOffset = null;
       _ignoreSlidePageChanges = true;
+      _horizontalPageTurnTracker.clear();
       _pendingSlideChapterIndex = null;
       _pendingSlideBoundaryViewIndex = null;
     });

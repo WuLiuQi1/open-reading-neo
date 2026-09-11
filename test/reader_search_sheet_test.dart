@@ -165,6 +165,56 @@ void main() {
     expect(cancelled, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('selecting a result returns it after the sheet closes', (
+    tester,
+  ) async {
+    ReaderSearchResult? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () async {
+                  selected = await showReaderSearchSheet(
+                    context,
+                    palette: ReaderThemes.day,
+                    loadDocuments: () => Stream.value(
+                      const ReaderSearchDocument(
+                        chapterIndex: 2,
+                        chapterTitle: '第三章',
+                        text: '这里出现了目标词。',
+                      ),
+                    ),
+                    documentCount: 1,
+                  );
+                },
+                child: const Text('打开搜索'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('reader-full-text-search-field')),
+      '目标词',
+    );
+    await tester.pump(const Duration(milliseconds: 251));
+    await tester.pump();
+    expect(find.byType(ListTile), findsOneWidget);
+    await tester.tap(find.byType(ListTile));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsNothing);
+    expect(selected, isNotNull);
+    expect(selected!.chapterIndex, 2);
+    expect(selected!.chapterTitle, '第三章');
+    expect(selected!.excerpt, contains('目标词'));
+  });
 }
 
 Future<void> _pumpSearchHost(
@@ -183,7 +233,6 @@ Future<void> _pumpSearchHost(
                 palette: ReaderThemes.day,
                 loadDocuments: loadDocuments,
                 documentCount: documentCount,
-                onResultSelected: (_) {},
               ),
               child: const Text('打开搜索'),
             ),

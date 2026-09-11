@@ -187,7 +187,10 @@ extension _NativeReaderScaffold on _NativeReaderPageState {
                       if (usesTwoPageLayout) {
                         _pageIndex = _spreadStartForPage(_pageIndex);
                       }
-                      if (_restoreAnchorAfterLayout && _anchorOffset != null) {
+                      if (_restoreAnchorAfterLayout &&
+                          _anchorOffset != null &&
+                          (_pendingRestoreChapterIndex == null ||
+                              _pendingRestoreChapterIndex == _chapterIndex)) {
                         final anchor = _anchorOffset!;
                         final restoredIndex =
                             _pageMode == NativePageMode.verticalScroll
@@ -198,16 +201,13 @@ extension _NativeReaderScaffold on _NativeReaderPageState {
                               )
                             : anchor == 0 && pages.first.isChapterTitle
                             ? 0
-                            : pages.indexWhere(
-                                (page) =>
-                                    anchor >= page.startOffset &&
-                                    anchor < page.endOffset,
-                              );
+                            : readerTextPageIndexForOffset(pages, anchor);
                         if (restoredIndex >= 0) _pageIndex = restoredIndex;
                         if (usesTwoPageLayout) {
                           _pageIndex = _spreadStartForPage(_pageIndex);
                         }
                         _restoreAnchorAfterLayout = false;
+                        _pendingRestoreChapterIndex = null;
                         if (_pageMode == NativePageMode.verticalScroll &&
                             anchor > 0) {
                           _scheduleInitialContinuousScrollRestore(size);

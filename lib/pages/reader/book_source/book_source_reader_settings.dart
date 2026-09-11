@@ -57,6 +57,7 @@ extension _BookSourceReaderSettings on _BookSourceReaderPageState {
     if (repaginate) {
       _stopAutoPageTurn();
       _autoWholeBook = false;
+      _horizontalPageTurnTracker.clear();
     }
     final currentProgress = _currentReadingProgress;
     final currentPage = _pageMode == BookSourcePageMode.verticalScroll

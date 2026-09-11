@@ -153,13 +153,18 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
       );
     }
     _anchorOffset = locator?.textAnchor?.startOffsetUtf16;
+    _pendingRestoreChapterIndex = chapterIndex;
     _restoreAnchorAfterLayout = true;
+    final alreadyInChapter = chapterIndex == _chapterIndex;
     await _setChapter(
       chapterIndex,
       chapters.length,
       recenterContinuousScroll: false,
     );
-    if (_pageMode != NativePageMode.verticalScroll) return;
+    if (_pageMode != NativePageMode.verticalScroll) {
+      if (alreadyInChapter && mounted) _setReaderState(() {});
+      return;
+    }
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted || _verticalViewportSize.isEmpty) return;
     final parts = _continuousPartsFor(
@@ -180,6 +185,7 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
       _visibleContinuousParts = parts;
       _visiblePages = parts.map((part) => part.content).toList(growable: false);
       _restoreAnchorAfterLayout = false;
+      _pendingRestoreChapterIndex = null;
     });
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
@@ -221,7 +227,6 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
           ? 0
           : offset / chapter.plainText.length,
     );
-    final alreadyInChapter = chapterIndex == _chapterIndex;
     await _jumpToBookmark(
       Bookmark(
         bookId: widget.book.id ?? 0,
@@ -232,11 +237,6 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
       ),
       chapters,
     );
-    if (alreadyInChapter &&
-        mounted &&
-        _pageMode != NativePageMode.verticalScroll) {
-      _setReaderState(() {});
-    }
   }
 
   Future<void> _jumpToAnnotation(
@@ -312,14 +312,15 @@ extension _NativeReaderNavigation on _NativeReaderPageState {
   Future<void> _showFullTextSearch({String initialQuery = ''}) async {
     _pauseAutoPageTurn();
     _setReaderState(() => _controlsVisible = false);
-    await showReaderSearchSheet(
+    final result = await showReaderSearchSheet(
       context,
       palette: _readerTheme,
       initialQuery: initialQuery,
       loadDocuments: _loadSearchDocuments,
       documentCount: _loadedChapters.length,
-      onResultSelected: (result) => unawaited(_jumpToSearchResult(result)),
     );
+    if (!mounted || result == null) return;
+    await _jumpToSearchResult(result);
   }
 
   Future<void> _jumpToSearchResult(ReaderSearchResult result) async {

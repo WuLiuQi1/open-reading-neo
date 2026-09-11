@@ -28,6 +28,7 @@ import 'package:xxread/core/reader/reader_annotation.dart';
 import 'package:xxread/core/reader/reader_auto_page_turn_controller.dart';
 import 'package:xxread/core/reader/reader_custom_theme.dart';
 import 'package:xxread/core/reader/reader_font_profile.dart';
+import 'package:xxread/core/reader/horizontal_page_turn_tracker.dart';
 import 'package:xxread/core/reader/reader_leaf_status.dart';
 import 'package:xxread/core/reader/reader_layout.dart';
 import 'package:xxread/core/reader/reader_keep_screen_on.dart';
@@ -198,6 +199,8 @@ class _BookSourceReaderPageState extends State<BookSourceReaderPage>
   final ValueNotifier<double> _scrollProgress = ValueNotifier(0);
   final ReaderLeafStatusController _leafStatusController =
       ReaderLeafStatusController();
+  final HorizontalPageTurnTracker<int> _horizontalPageTurnTracker =
+      HorizontalPageTurnTracker<int>();
 
   List<BookSourceChapter> _chapters = const [];
   Map<String, String> _rawChapterTitlesById = const <String, String>{};

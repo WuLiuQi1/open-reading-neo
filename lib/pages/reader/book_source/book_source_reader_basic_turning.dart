@@ -170,11 +170,13 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
     final trailing = hasNextChapter ? nextPageCount : 0;
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (notification.depth != 0) return false;
         if (notification is ScrollStartNotification &&
             notification.dragDetails != null) {
           _markReaderAloudForManualPageTurn();
         }
         if (notification is! ScrollEndNotification) return false;
+        _commitPendingSlidePage();
         _schedulePendingSlideChapterCommit();
         return false;
       },
@@ -189,6 +191,7 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
           if (_ignoreSlidePageChanges) return;
           final page = viewIndex - _pageViewLeading;
           if (page < 0) {
+            _horizontalPageTurnTracker.clear();
             final previousPageIndex = previousPageCount + page;
             _queueSlideChapterCommit(
               chapterIndex: previousChapterIndex,
@@ -200,6 +203,7 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
             return;
           }
           if (page >= _pageCount) {
+            _horizontalPageTurnTracker.clear();
             final nextPageIndex = page - _pageCount;
             _queueSlideChapterCommit(
               chapterIndex: nextChapterIndex,
@@ -212,6 +216,25 @@ extension _BookSourceReaderBasicTurning on _BookSourceReaderPageState {
           }
           _pendingSlideChapterIndex = null;
           _pendingSlideBoundaryViewIndex = null;
+          if (_pageController.hasClients &&
+              _pageController.position.isScrollingNotifier.value) {
+            final target = _usesTwoPageLayout
+                ? _spreadStartForPage(page)
+                : page;
+            _horizontalPageTurnTracker.record(
+              page: target,
+              position: ReaderPagePosition(
+                chapterIndex: _chapterIndex,
+                pageIndex: target,
+              ),
+              committedPosition: ReaderPagePosition(
+                chapterIndex: _chapterIndex,
+                pageIndex: _pageIndex,
+              ),
+            );
+            return;
+          }
+          _horizontalPageTurnTracker.clear();
           _setPagedIndex(page);
         },
         itemBuilder: (context, viewIndex) {

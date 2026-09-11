@@ -508,6 +508,88 @@ void main() {
     },
   );
 
+  testWidgets(
+    'full-text search opens a later chapter containing the selected match',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        ReaderSettingsStore.pageModeKey: BookSourcePageMode.instantPage.name,
+      });
+      const searchTarget = 'later chapter unique search target';
+      final firstChapter = List.generate(
+        40,
+        (index) => 'First chapter paragraph $index stays on the opening page.',
+      ).join('\n');
+      final laterChapter = List.generate(
+        220,
+        (index) => index == 170
+            ? 'Paragraph $index contains the $searchTarget.'
+            : 'Paragraph $index keeps the later chapter long enough.',
+      ).join('\n');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: BookSourceReaderPage(
+            paginationCacheDao: _MemoryPaginationCacheDao(),
+            replaceRuleService: _replaceRules,
+            source: _testSource(),
+            book: const BookSourceBook(
+              id: 'book-1',
+              title: 'Search later chapter test',
+              author: 'Author',
+              description: '',
+              categories: [],
+            ),
+            client: _ConfigurableBookSourceClient({
+              'chapter-1': firstChapter,
+              'chapter-2': laterChapter,
+            }),
+            initialTheme: ReaderThemes.day,
+          ),
+        ),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey('book-source-reader-content')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(searchTarget, findRichText: true),
+        findsNothing,
+      );
+
+      await _showReaderControls(tester);
+      await tester.tap(find.byTooltip('全文搜索'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('reader-full-text-search-field')),
+        searchTarget,
+      );
+      await tester.pump(const Duration(milliseconds: 251));
+      final resultTile = find.byType(ListTile);
+      await _pumpUntilFound(
+        tester,
+        find.descendant(
+          of: resultTile,
+          matching: find.textContaining(searchTarget),
+        ),
+      );
+      await tester.tap(resultTile);
+
+      final matchedBody = find.descendant(
+        of: find.byType(ReaderAnnotatedTextPage),
+        matching: find.textContaining(searchTarget, findRichText: true),
+      );
+      await _pumpUntilFound(tester, matchedBody);
+      final matchedPage = tester.widget<ReaderPaperPageLeaf>(
+        find.byType(ReaderPaperPageLeaf),
+      );
+      expect(matchedPage.metadata.pageNumber, greaterThan(1));
+      expect(matchedBody, findsOneWidget);
+    },
+  );
+
   testWidgets('replacement rules clean source chapter titles and content', (
     tester,
   ) async {

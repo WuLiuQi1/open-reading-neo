@@ -152,7 +152,6 @@ extension _NativeReaderControls on _NativeReaderPageState {
           : offset / chapter.plainText.length,
       contentSignature: _currentContentSignature,
     );
-    final revealsWithinCurrentChapter = chapterIndex == _chapterIndex;
     await _jumpToBookmark(
       Bookmark(
         bookId: widget.book.id ?? 0,
@@ -163,11 +162,6 @@ extension _NativeReaderControls on _NativeReaderPageState {
       ),
       _loadedChapters,
     );
-    if (revealsWithinCurrentChapter &&
-        mounted &&
-        _pageMode != NativePageMode.verticalScroll) {
-      _setReaderState(() {});
-    }
   }
 
   Future<void> _persistReaderAloudPosition(ReaderAloudPosition position) async {

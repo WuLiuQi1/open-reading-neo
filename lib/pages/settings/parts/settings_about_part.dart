@@ -73,19 +73,20 @@ extension _SettingsAboutPart on _SettingsPageState {
             icon: Icons.history_rounded,
             onTap: _openChangelogHistory,
           ),
-          _buildAboutNavigationLink(
-            key: const ValueKey('settings-check-updates-link'),
-            title: l10n.updateCheckNow,
-            icon: Icons.system_update_alt_rounded,
-            onTap: _isCheckingForUpdates ? null : _checkForUpdates,
-            trailing: _isCheckingForUpdates
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : null,
-          ),
+          if (!AppDistribution.suppressesExternalUpdates)
+            _buildAboutNavigationLink(
+              key: const ValueKey('settings-check-updates-link'),
+              title: l10n.updateCheckNow,
+              icon: Icons.system_update_alt_rounded,
+              onTap: _isCheckingForUpdates ? null : _checkForUpdates,
+              trailing: _isCheckingForUpdates
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -388,6 +389,51 @@ void main() {
       expect(find.text('更换头像'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'offline account center still shows sign-in controls and a retry',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = MemberAccountController(
+        api: MemberAccountApiClient(
+          dio: Dio()..httpClientAdapter = _OfflineAdapter(),
+          tokenStore: _EmptyTokenStore(),
+        ),
+      );
+      await tester.runAsync(() async {
+        await expectLater(
+          controller.initialize(),
+          throwsA(isA<MemberAccountException>()),
+        );
+      });
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: controller,
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const AccountPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const ValueKey('account-load-error')), findsOneWidget);
+      expect(find.byKey(const ValueKey('account-load-retry')), findsOneWidget);
+      expect(find.text('邮箱'), findsOneWidget);
+      expect(find.text('下一步'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('account-provider-github')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 class _AccountAdapter implements HttpClientAdapter {
@@ -420,6 +466,20 @@ class _AccountAdapter implements HttpClientAdapter {
         Headers.contentTypeHeader: ['application/json'],
       },
     );
+  }
+}
+
+class _OfflineAdapter implements HttpClientAdapter {
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    throw const SocketException('offline');
   }
 }
 

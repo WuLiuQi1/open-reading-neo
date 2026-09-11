@@ -1,13 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/l10n/app_localizations.dart';
+import 'package:xxread/services/core/app_distribution.dart';
 import 'package:xxread/services/core/update_check_service.dart';
 import 'package:xxread/widgets/update_check_gate.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    AppDistribution.debugReset();
+  });
+  tearDown(() {
+    AppDistribution.debugReset();
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   testWidgets('same-version builds display fully and skip only one build', (
     tester,
@@ -281,6 +290,29 @@ void main() {
     expect(errors.single, isA<StateError>());
     expect(find.text('Update check failed'), findsNothing);
   });
+
+  testWidgets('Mac App Store builds skip website update prompts', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    AppDistribution.debugOverride(usesAppleBilling: true);
+    var checked = false;
+    await tester.pumpWidget(
+      _UpdateCheckTestApp(
+        service: _CountingUpdateCheckService(() => checked = true),
+        manual: true,
+      ),
+    );
+    await tester.tap(find.text('Check updates'));
+    await tester.pumpAndSettle();
+    expect(checked, isFalse);
+    expect(
+      find.text('This Mac App Store build updates through the App Store'),
+      findsOneWidget,
+    );
+    expect(find.text('A new version is available'), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
 }
 
 class _UpdateCheckTestApp extends StatelessWidget {
@@ -333,5 +365,17 @@ class _ThrowingUpdateCheckService extends UpdateCheckService {
   @override
   Future<UpdateCheckResult> check({String? currentVersion}) async {
     throw StateError('update endpoint unavailable');
+  }
+}
+
+class _CountingUpdateCheckService extends UpdateCheckService {
+  _CountingUpdateCheckService(this.onCheck);
+
+  final VoidCallback onCheck;
+
+  @override
+  Future<UpdateCheckResult> check({String? currentVersion}) async {
+    onCheck();
+    throw StateError('website updates must not run on Mac App Store builds');
   }
 }

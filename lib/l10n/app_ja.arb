@@ -1425,6 +1425,7 @@
   "settingsOfficialWebsiteOpenFailed": "公式サイトを開けませんでした",
   "updateCheckNow": "アップデートを確認",
   "updateCheckNowSubtitle": "GitHub または公式サイトから最新バージョンを確認します",
+  "updateAppStoreManaged": "この Mac App Store 版は App Store から更新されます",
   "updateAvailableTitle": "新しいバージョンがあります",
   "updateVersionSummary": "現在のバージョン：{currentVersion}\n最新バージョン：{latestVersion}",
   "updateNotesTitle": "更新内容",

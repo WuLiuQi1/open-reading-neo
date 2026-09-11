@@ -1425,6 +1425,7 @@
   "settingsOfficialWebsiteOpenFailed": "無法開啟官方網站",
   "updateCheckNow": "檢查更新",
   "updateCheckNowSubtitle": "從 GitHub 或官網取得最新版本",
+  "updateAppStoreManaged": "此 Mac App Store 版本由 App Store 提供更新",
   "updateAvailableTitle": "發現新版本",
   "updateVersionSummary": "目前版本：{currentVersion}\n最新版本：{latestVersion}",
   "updateNotesTitle": "更新說明",

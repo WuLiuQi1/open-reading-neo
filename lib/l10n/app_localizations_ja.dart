@@ -3226,6 +3226,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get updateCheckNowSubtitle => 'GitHub または公式サイトから最新バージョンを確認します';
 
   @override
+  String get updateAppStoreManaged => 'この Mac App Store 版は App Store から更新されます';
+
+  @override
   String get updateAvailableTitle => '新しいバージョンがあります';
 
   @override

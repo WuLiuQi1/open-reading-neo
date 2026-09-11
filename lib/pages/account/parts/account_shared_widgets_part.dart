@@ -52,6 +52,41 @@ class _SectionCard extends StatelessWidget {
   );
 }
 
+class _AccountLoadError extends StatelessWidget {
+  const _AccountLoadError({required this.message, this.onRetry});
+
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _SectionCard(
+      key: const ValueKey('account-load-error'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(Icons.wifi_off_rounded, color: scheme.error),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            key: const ValueKey('account-load-retry'),
+            onPressed: onRetry,
+            child: Text(context.l10n.retry),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Badge extends StatelessWidget {
   const _Badge({required this.label});
 

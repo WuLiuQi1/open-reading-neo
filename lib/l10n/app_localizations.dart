@@ -5968,6 +5968,12 @@ abstract class AppLocalizations {
   /// **'Get the latest version from GitHub or the official website'**
   String get updateCheckNowSubtitle;
 
+  /// No description provided for @updateAppStoreManaged.
+  ///
+  /// In en, this message translates to:
+  /// **'This Mac App Store build updates through the App Store'**
+  String get updateAppStoreManaged;
+
   /// No description provided for @updateAvailableTitle.
   ///
   /// In en, this message translates to:

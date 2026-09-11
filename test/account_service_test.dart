@@ -711,13 +711,13 @@ void main() {
         throwsA(isA<MemberAccountException>()),
       );
 
-      expect(controller.initialized, isFalse);
+      expect(controller.initialized, isTrue);
       expect(controller.summary, isNull);
       expect(await cache.load(), isNull);
       expect(controller.isAuthenticated, isFalse);
 
       online = true;
-      await controller.initialize();
+      await controller.initialize(force: true);
 
       expect(controller.initialized, isTrue);
       expect(controller.providers.apple, isTrue);
@@ -1106,6 +1106,154 @@ void main() {
       expect(storage.accessToken, 'pending-access');
       expect(storage.refreshToken, 'pending-refresh');
       expect(storage.mfaPending, isTrue);
+    },
+  );
+
+  test('refresh network failure keeps stored tokens', () async {
+    final storage = _MemoryTokenStore(
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+    );
+    final client = _client(
+      _RouteAdapter((options) {
+        expect(options.uri.path, '/api/v1/auth/refresh');
+        throw const SocketException('offline');
+      }),
+      storage,
+    );
+
+    await expectLater(
+      client.refreshSession(),
+      throwsA(
+        isA<MemberAccountException>().having(
+          (error) => error.code,
+          'code',
+          'network_unavailable',
+        ),
+      ),
+    );
+    expect(storage.accessToken, 'access-1');
+    expect(storage.refreshToken, 'refresh-1');
+  });
+
+  test(
+    'expired access plus refresh network failure keeps stored tokens',
+    () async {
+      final storage = _MemoryTokenStore(
+        accessToken: 'expired-access',
+        refreshToken: 'refresh-1',
+      );
+      final client = _client(
+        _RouteAdapter((options) {
+          if (options.uri.path == '/api/v1/auth/me') {
+            return _json({'detail': '登录状态已失效'}, status: 401);
+          }
+          expect(options.uri.path, '/api/v1/auth/refresh');
+          throw const SocketException('offline');
+        }),
+        storage,
+      );
+
+      await expectLater(
+        client.restoreSession(),
+        throwsA(
+          isA<MemberAccountException>().having(
+            (error) => error.code,
+            'code',
+            'network_unavailable',
+          ),
+        ),
+      );
+      expect(storage.accessToken, 'expired-access');
+      expect(storage.refreshToken, 'refresh-1');
+    },
+  );
+
+  test('refresh 401 clears stored tokens', () async {
+    final storage = _MemoryTokenStore(
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+    );
+    final client = _client(
+      _RouteAdapter((options) {
+        expect(options.uri.path, '/api/v1/auth/refresh');
+        return _json({'detail': '登录状态已失效'}, status: 401);
+      }),
+      storage,
+    );
+
+    await expectLater(
+      client.refreshSession(),
+      throwsA(
+        isA<MemberAccountException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          401,
+        ),
+      ),
+    );
+    expect(storage.accessToken, isNull);
+    expect(storage.refreshToken, isNull);
+  });
+
+  test(
+    'transient restore failure keeps tokens so a later retry can sign in',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = _MemoryTokenStore(
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+      );
+      var online = false;
+      final adapter = _RouteAdapter((options) {
+        if (!online) throw const SocketException('offline');
+        return switch (options.uri.path) {
+          '/api/v1/auth/config' => _json({
+            'providers': {
+              'apple': true,
+              'google': true,
+              'github': true,
+              'passkey': true,
+            },
+            'username': {'min_length': 3, 'max_length': 30},
+            'password': {'min_length': 12, 'max_length': 128},
+          }),
+          '/api/v1/membership/config' => _json({
+            'product': 'premium_lifetime',
+            'features': <String>[],
+          }),
+          '/api/v1/auth/me' => _json({'user': _user()}),
+          '/api/v1/membership' => _json({
+            'premium': false,
+            'features': <String, bool>{},
+            'entitlements': <Object>[],
+          }),
+          '/api/v1/membership/referral' => _json({
+            'invite_code': 'ORMYCODE1',
+            'invite_url': 'https://open.xxread.top/account?invite=ORMYCODE1',
+          }),
+          _ => throw StateError('Unexpected route ${options.uri.path}'),
+        };
+      });
+      final controller = MemberAccountController(
+        api: _client(adapter, storage),
+      );
+
+      await expectLater(
+        controller.initialize(),
+        throwsA(isA<MemberAccountException>()),
+      );
+      expect(controller.initialized, isTrue);
+      expect(controller.isAuthenticated, isFalse);
+      expect(storage.accessToken, 'access-1');
+      expect(storage.refreshToken, 'refresh-1');
+
+      online = true;
+      await controller.initialize(force: true);
+
+      expect(controller.isAuthenticated, isTrue);
+      expect(controller.user?.username, 'reader');
+      expect(storage.accessToken, 'access-1');
     },
   );
 

@@ -56,10 +56,10 @@ class _AccountPageState extends State<AccountPage> {
     });
   }
 
-  Future<void> _initializeAccount() async {
+  Future<void> _initializeAccount({bool force = false}) async {
     final account = context.read<MemberAccountController>();
     try {
-      await account.initialize();
+      await account.initialize(force: force);
       if (!mounted) return;
       _syncProfile(account.user);
     } catch (error) {
@@ -362,6 +362,15 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   List<Widget> _buildSignedOut(MemberAccountController account) => [
+    if (account.error != null) ...[
+      _AccountLoadError(
+        message: account.error!,
+        onRetry: account.loading
+            ? null
+            : () => unawaited(_initializeAccount(force: true)),
+      ),
+      const SizedBox(height: 16),
+    ],
     _AccountIntroCard(),
     const SizedBox(height: 16),
     _formCard(account),

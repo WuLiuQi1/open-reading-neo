@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/account/account.dart';
+import '../../services/core/app_distribution.dart';
 import '../../utils/localization_extension.dart';
 import '../../utils/page_style_helper.dart';
 import '../../widgets/premium_card_style.dart';
@@ -33,16 +33,13 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
   String? _message;
   bool _messageIsError = false;
 
-  bool get _applePlatform =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.macOS);
+  bool get _usesAppleBilling => AppDistribution.usesAppleBilling;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_applePlatform && widget.account.isAuthenticated) {
+    if (_usesAppleBilling && widget.account.isAuthenticated) {
       unawaited(widget.account.applePurchase.initialize());
     }
   }
@@ -193,7 +190,7 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                       ],
                     ]),
                     const SizedBox(height: 20),
-                    if (!premium || _applePlatform || status != null)
+                    if (!premium || _usesAppleBilling || status != null)
                       _section(
                         premium
                             ? l10n.premiumAccountBindingTitle
@@ -201,7 +198,7 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                         [
                           if (!account.isAuthenticated)
                             Text(l10n.premiumSignInRequired)
-                          else if (_applePlatform) ...[
+                          else if (_usesAppleBilling) ...[
                             if (!premium) ...[
                               if (purchase.product case final product?) ...[
                                 Text(
@@ -339,7 +336,7 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                     const SizedBox(height: 22),
                     if (!premium)
                       Text(
-                        _applePlatform
+                        _usesAppleBilling
                             ? l10n.premiumPurchaseConsent
                             : l10n.premiumPurchaseConsentOther,
                         textAlign: TextAlign.center,
@@ -364,7 +361,7 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
                           onPressed: () => _openPolicy(PremiumPolicy.privacy),
                           child: Text(l10n.premiumPrivacyPolicy),
                         ),
-                        if (_applePlatform)
+                        if (_usesAppleBilling)
                           TextButton(
                             key: const ValueKey('premium-eula-link'),
                             onPressed: () =>
@@ -385,8 +382,10 @@ class _PremiumMembershipPageState extends State<PremiumMembershipPage>
 
   void _openPolicy(PremiumPolicy policy) => Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) =>
-          PremiumPolicyPage(policy: policy, usesAppleBilling: _applePlatform),
+      builder: (_) => PremiumPolicyPage(
+        policy: policy,
+        usesAppleBilling: _usesAppleBilling,
+      ),
     ),
   );
 

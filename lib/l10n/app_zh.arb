@@ -1807,6 +1807,7 @@
   "settingsOfficialWebsiteOpenFailed": "无法打开官网",
   "updateCheckNow": "检查更新",
   "updateCheckNowSubtitle": "从 GitHub 或官网获取最新版本",
+  "updateAppStoreManaged": "此 Mac App Store 版本由 App Store 提供更新",
   "updateAvailableTitle": "发现新版本",
   "updateVersionSummary": "当前版本：{currentVersion}\n最新版本：{latestVersion}",
   "updateNotesTitle": "更新说明",

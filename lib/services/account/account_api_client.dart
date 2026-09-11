@@ -19,6 +19,14 @@ class MemberAccountException implements Exception {
   final String? code;
   final int? retryAfter;
 
+  bool get isTransientNetworkFailure =>
+      code == 'network_timeout' || code == 'network_unavailable';
+
+  bool get shouldDiscardSession {
+    if (isTransientNetworkFailure) return false;
+    return statusCode == 401;
+  }
+
   @override
   String toString() => message;
 }
@@ -415,8 +423,12 @@ class MemberAccountApiClient {
       return await _sessionRequest('$authRoot/refresh', {
         'refresh_token': refreshToken,
       });
-    } catch (_) {
-      await _tokenStore.clear();
+    } on MemberAccountException catch (error) {
+      // Only discard the stored session when the server actually rejects it.
+      // Timeouts, proxy drops, and DNS failures must not log the user out.
+      if (error.shouldDiscardSession) {
+        await _tokenStore.clear();
+      }
       rethrow;
     }
   }

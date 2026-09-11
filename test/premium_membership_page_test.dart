@@ -13,11 +13,18 @@ import 'package:xxread/l10n/app_localizations.dart';
 import 'package:xxread/pages/account/premium_membership_page.dart';
 import 'package:xxread/pages/account/premium_policy_page.dart';
 import 'package:xxread/services/account/account.dart';
+import 'package:xxread/services/core/app_distribution.dart';
 import 'package:xxread/widgets/app_brand_icon.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final screenshotDirectory = Platform.environment['PREMIUM_SCREENSHOT_DIR'];
+
+  setUp(AppDistribution.debugReset);
+  tearDown(() {
+    AppDistribution.debugReset();
+    _resetPlatform();
+  });
 
   setUpAll(() async {
     if (screenshotDirectory == null) return;
@@ -88,28 +95,65 @@ void main() {
     },
   );
 
-  testWidgets('macOS keeps store actions without refund entry points', (
-    tester,
-  ) async {
-    _usePlatform(TargetPlatform.macOS);
-    addTearDown(_resetPlatform);
-    final store = _FakeAppleStore();
-    final account = _TestAccount(store: store);
-    addTearDown(account.dispose);
-    addTearDown(store.close);
-    await _pumpPage(tester, account: account);
-    await tester.pumpAndSettle();
-    expect(find.text('¥28.00'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('account-apple-purchase')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('account-apple-restore')), findsOneWidget);
-    expect(find.byKey(const ValueKey('premium-refund')), findsNothing);
-    expect(find.byKey(const ValueKey('premium-apple-support')), findsNothing);
-    expect(find.byKey(const ValueKey('premium-eula-link')), findsOneWidget);
-    _resetPlatform();
-  });
+  testWidgets(
+    'macOS website builds keep redemption instead of App Store purchase',
+    (tester) async {
+      _usePlatform(TargetPlatform.macOS);
+      AppDistribution.debugOverride(usesAppleBilling: false);
+      final store = _FakeAppleStore();
+      final account = _TestAccount(store: store);
+      addTearDown(account.dispose);
+      addTearDown(store.close);
+      await _pumpPage(tester, account: account);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('account-redemption-code')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('account-redeem-premium')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('account-apple-purchase')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('account-apple-restore')), findsNothing);
+      expect(find.byKey(const ValueKey('premium-eula-link')), findsNothing);
+      _resetPlatform();
+    },
+  );
+
+  testWidgets(
+    'macOS App Store builds keep store actions without refund entry points',
+    (tester) async {
+      _usePlatform(TargetPlatform.macOS);
+      AppDistribution.debugOverride(usesAppleBilling: true);
+      final store = _FakeAppleStore();
+      final account = _TestAccount(store: store);
+      addTearDown(account.dispose);
+      addTearDown(store.close);
+      await _pumpPage(tester, account: account);
+      await tester.pumpAndSettle();
+      expect(find.text('¥28.00'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('account-apple-purchase')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('account-apple-restore')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('premium-refund')), findsNothing);
+      expect(find.byKey(const ValueKey('premium-apple-support')), findsNothing);
+      expect(find.byKey(const ValueKey('premium-eula-link')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('account-redemption-code')),
+        findsNothing,
+      );
+      _resetPlatform();
+    },
+  );
 
   testWidgets(
     'keeps restore available when the App Store product query fails',

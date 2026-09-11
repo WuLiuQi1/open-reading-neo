@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/core/app_distribution.dart';
 import '../services/core/app_update_download_service.dart';
 import '../services/core/update_check_service.dart';
 import '../utils/localization_extension.dart';
@@ -29,7 +30,7 @@ class _UpdateCheckGateState extends State<UpdateCheckGate> {
     super.initState();
     // Web 部署随 GitHub Release 自动替换静态文件，刷新页面即是最新版。
     // 浏览器中再请求官网/GitHub 更新接口只会引入 CORS 失败。
-    if (kIsWeb) return;
+    if (kIsWeb || AppDistribution.suppressesExternalUpdates) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(UpdatePromptController.check(context));
     });
@@ -51,6 +52,16 @@ class UpdatePromptController {
     AppUpdateDownloadService? downloadService,
     void Function(Object error, StackTrace stackTrace)? onError,
   }) async {
+    if (AppDistribution.suppressesExternalUpdates) {
+      if (manual && context.mounted) {
+        _showMessage(
+          context,
+          context.l10n.updateAppStoreManaged,
+          kind: SideToastKind.success,
+        );
+      }
+      return false;
+    }
     try {
       final result = await (service ?? UpdateCheckService()).check();
       if (!context.mounted) return false;

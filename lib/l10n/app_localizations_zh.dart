@@ -3184,6 +3184,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateCheckNowSubtitle => '从 GitHub 或官网获取最新版本';
 
   @override
+  String get updateAppStoreManaged => '此 Mac App Store 版本由 App Store 提供更新';
+
+  @override
   String get updateAvailableTitle => '发现新版本';
 
   @override
@@ -9158,6 +9161,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get updateCheckNowSubtitle => '從 GitHub 或官網取得最新版本';
+
+  @override
+  String get updateAppStoreManaged => '此 Mac App Store 版本由 App Store 提供更新';
 
   @override
   String get updateAvailableTitle => '發現新版本';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String additionalSourceProtocolsPreferenceKey =
@@ -9,7 +10,13 @@ const String privateBookSourceNetworkPreferenceKey =
 /// AppSettingsNotifier keeps this in sync with verified account membership.
 /// Never persist the entitlement or restore it from the account UI cache.
 class AdvancedFeatureAccess {
-  static bool premiumUnlocked = false;
+  static final ValueNotifier<bool> _premiumUnlocked = ValueNotifier(false);
+
+  static ValueListenable<bool> get premiumAccessChanges => _premiumUnlocked;
+
+  static bool get premiumUnlocked => _premiumUnlocked.value;
+
+  static set premiumUnlocked(bool value) => _premiumUnlocked.value = value;
 
   static Future<bool> additionalProtocolsEnabled() async {
     final preferences = await SharedPreferences.getInstance();

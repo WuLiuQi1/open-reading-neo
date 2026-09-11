@@ -3355,6 +3355,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Get the latest version from GitHub or the official website';
 
   @override
+  String get updateAppStoreManaged =>
+      'This Mac App Store build updates through the App Store';
+
+  @override
   String get updateAvailableTitle => 'A new version is available';
 
   @override

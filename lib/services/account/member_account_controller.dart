@@ -6,6 +6,7 @@ import 'package:passkeys/authenticator.dart';
 import 'package:passkeys/types.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../core/app_distribution.dart';
 import 'account_auth_callback_bridge.dart';
 import 'account_api_client.dart';
 import 'account_avatar_cache.dart';
@@ -109,20 +110,27 @@ class MemberAccountController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> initialize() async {
-    if (_initialized || _loading) return;
+  Future<void> initialize({bool force = false}) async {
+    if (_loading) return;
+    if (_initialized && !force) return;
     try {
       await _run(() async {
         await _restorePendingDeviceAuthorization();
         unawaited(_initializeAuthCallbackBridge());
         _summary = await _summaryCache.load();
         if (_summary != null) notifyListeners();
-        final configs = await Future.wait<Object?>([
-          _api.authConfig(),
-          _api.membershipConfig(),
-        ]);
-        _authConfig = configs[0] as MemberAuthConfig;
-        _membershipConfig = configs[1] as MemberMembershipConfig;
+        MemberAccountException? deferred;
+        try {
+          final configs = await Future.wait<Object?>([
+            _api.authConfig(),
+            _api.membershipConfig(),
+          ]);
+          _authConfig = configs[0] as MemberAuthConfig;
+          _membershipConfig = configs[1] as MemberMembershipConfig;
+        } on MemberAccountException catch (error) {
+          if (!error.isTransientNetworkFailure) rethrow;
+          deferred = error;
+        }
         try {
           final session = await _api.restoreSession();
           _acceptSession(session);
@@ -133,22 +141,35 @@ class MemberAccountController extends ChangeNotifier {
             await _persistSummary();
           }
         } on MemberAccountException catch (error) {
-          if (error.statusCode != 401) rethrow;
-          _user = null;
-          _pendingSession = null;
-          _membership = null;
-          _mfaStatus = null;
-          await _clearSummary();
+          if (error.statusCode == 401) {
+            _user = null;
+            _pendingSession = null;
+            _membership = null;
+            _mfaStatus = null;
+            await _clearSummary();
+          } else if (error.isTransientNetworkFailure) {
+            deferred ??= error;
+          } else {
+            rethrow;
+          }
         }
+        if (deferred != null) throw deferred;
       });
-      _initialized = true;
-    } catch (_) {
-      _user = null;
-      _pendingSession = null;
-      _membership = null;
-      _mfaStatus = null;
-      await _clearSummary();
+    } catch (error) {
+      if (error is! MemberAccountException ||
+          !error.isTransientNetworkFailure) {
+        _user = null;
+        _pendingSession = null;
+        _membership = null;
+        _mfaStatus = null;
+      }
       rethrow;
+    } finally {
+      // The account center must remain usable after a network failure. A
+      // spinner-only page with no retry is how users get stuck unable to
+      // sign in with or without a proxy.
+      _initialized = true;
+      notifyListeners();
     }
   }
 
@@ -664,9 +685,7 @@ class MemberAccountController extends ChangeNotifier {
       // The session and user returned by authentication are authoritative.
       // Membership is supplementary and can recover on a later account load.
     }
-    if (!kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.iOS ||
-            defaultTargetPlatform == TargetPlatform.macOS)) {
+    if (AppDistribution.usesAppleBilling) {
       try {
         await _applePurchase.initialize();
       } catch (_) {

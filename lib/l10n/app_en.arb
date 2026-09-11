@@ -2943,6 +2943,7 @@
   "settingsOfficialWebsiteOpenFailed": "Could not open the official website",
   "updateCheckNow": "Check for updates",
   "updateCheckNowSubtitle": "Get the latest version from GitHub or the official website",
+  "updateAppStoreManaged": "This Mac App Store build updates through the App Store",
   "updateAvailableTitle": "A new version is available",
   "updateVersionSummary": "Current version: {currentVersion}\nLatest version: {latestVersion}",
   "@updateVersionSummary": {

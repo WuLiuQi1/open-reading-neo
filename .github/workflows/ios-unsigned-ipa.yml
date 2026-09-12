@@ -1,0 +1,71 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "feature/**"
+    paths:
+      - ".github/workflows/ios-unsigned-ipa.yml"
+      - "assets/**"
+      - "ios/**"
+      - "lib/**"
+      - "pubspec.lock"
+      - "pubspec.yaml"
+      - "tool/patch_passkeys_darwin.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.44.4"
+
+jobs:
+  build:
+    name: Build unsigned iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Patch Apple plugin compatibility
+        run: python3 tool/patch_passkeys_darwin.py
+
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Build iOS release without code signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          rm -rf Payload build/ios/unsigned
+          mkdir -p Payload build/ios/unsigned
+          cp -R build/ios/iphoneos/Runner.app Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent \
+            Payload build/ios/unsigned/xxread-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xxread-ios-unsigned-ipa
+          path: build/ios/unsigned/xxread-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

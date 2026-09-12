@@ -212,33 +212,26 @@ extension _NativeReaderControls on _NativeReaderPageState {
     );
   }
 
-  Future<void> _showReaderAloudPanel() async {
+  Future<void> _showReaderAloudPlayer() async {
     final controller = _ensureReaderAloudController();
     if (controller == null) return;
     final ttsService = context.read<TtsService>();
     final aloudService = context.read<ReaderAloudService>();
-    await showReaderAloudPanelSheet(
+    await showReaderAloudPlayer(
       context: context,
       controller: controller,
       ttsService: ttsService,
       aloudService: aloudService,
       palette: _readerTheme,
       themeData: _readerThemeData,
+      author: widget.book.author,
     );
   }
 
-  /// Starts or resumes read-aloud on the first toolbar tap. Once playback is
-  /// active, the same button becomes the entry point for its settings panel.
+  /// Opens the audiobook player; the player starts playback when necessary.
   Future<void> _handleReaderAloudButtonPressed() async {
     _pauseAutoPageTurn();
-    final controller = _ensureReaderAloudController();
-    if (controller == null) return;
-    if (controller.state == ReaderAloudPlaybackState.playing ||
-        controller.state == ReaderAloudPlaybackState.loading) {
-      await _showReaderAloudPanel();
-      return;
-    }
-    await controller.start();
+    await _showReaderAloudPlayer();
   }
 
   Future<void> _showAskAiPanel(

@@ -9,8 +9,33 @@ import '../services/tts_service.dart';
 import '../services/tts_service_translator.dart';
 import '../utils/localization_extension.dart';
 import '../utils/reader_themes.dart';
+import 'generated_book_cover.dart';
 
-Future<void> showReaderAloudPanelSheet({
+Future<void> showReaderAloudPlayer({
+  required BuildContext context,
+  required ReaderAloudController controller,
+  required TtsService ttsService,
+  required ReaderAloudService aloudService,
+  required ReaderThemePalette palette,
+  required ThemeData themeData,
+  String author = '',
+}) => Navigator.of(context).push<void>(
+  MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (routeContext) => Theme(
+      data: themeData,
+      child: ReaderAloudPlayerPage(
+        controller: controller,
+        ttsService: ttsService,
+        aloudService: aloudService,
+        palette: palette,
+        author: author,
+      ),
+    ),
+  ),
+);
+
+Future<void> showReaderAloudSettingsSheet({
   required BuildContext context,
   required ReaderAloudController controller,
   required TtsService ttsService,
@@ -42,6 +67,451 @@ Future<void> showReaderAloudPanelSheet({
     ),
   ),
 );
+
+/// Kept for callers that still use the former settings-sheet entry point.
+@Deprecated('Use showReaderAloudPlayer or showReaderAloudSettingsSheet')
+Future<void> showReaderAloudPanelSheet({
+  required BuildContext context,
+  required ReaderAloudController controller,
+  required TtsService ttsService,
+  required ReaderAloudService aloudService,
+  required ReaderThemePalette palette,
+  required ThemeData themeData,
+}) => showReaderAloudSettingsSheet(
+  context: context,
+  controller: controller,
+  ttsService: ttsService,
+  aloudService: aloudService,
+  palette: palette,
+  themeData: themeData,
+);
+
+class ReaderAloudPlayerPage extends StatefulWidget {
+  const ReaderAloudPlayerPage({
+    super.key,
+    required this.controller,
+    required this.ttsService,
+    required this.aloudService,
+    required this.palette,
+    this.author = '',
+  });
+
+  final ReaderAloudController controller;
+  final TtsService ttsService;
+  final ReaderAloudService aloudService;
+  final ReaderThemePalette palette;
+  final String author;
+
+  @override
+  State<ReaderAloudPlayerPage> createState() => _ReaderAloudPlayerPageState();
+}
+
+class _ReaderAloudPlayerPageState extends State<ReaderAloudPlayerPage> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.ttsService.ensureVoicesLoaded());
+    unawaited(widget.aloudService.initialize());
+    if (!widget.controller.isActive) {
+      unawaited(widget.controller.start());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    return Scaffold(
+      backgroundColor: palette.background,
+      body: SafeArea(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            widget.controller,
+            widget.ttsService,
+            widget.aloudService,
+          ]),
+          builder: (context, _) {
+            final controller = widget.controller;
+            final chapter = controller.currentChapter;
+            final segment = controller.currentSegment;
+            final playing =
+                controller.state == ReaderAloudPlaybackState.playing;
+            final loading =
+                controller.state == ReaderAloudPlaybackState.loading;
+            final width = MediaQuery.sizeOf(context).width;
+            final contentWidth = width.clamp(0, 620).toDouble();
+            return Center(
+              child: SizedBox(
+                width: contentWidth,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: Row(
+                        children: [
+                          _roundButton(
+                            key: const ValueKey('reader-aloud-close'),
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            tooltip: MaterialLocalizations.of(
+                              context,
+                            ).closeButtonTooltip,
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  controller.source.bookTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(
+                                        color: palette.text,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                                if (chapter != null)
+                                  Text(
+                                    chapter.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: palette.secondaryText,
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          _roundButton(
+                            key: const ValueKey('reader-aloud-timer'),
+                            icon: controller.sleepDuration == null
+                                ? Icons.timer_outlined
+                                : Icons.timer_rounded,
+                            tooltip: context.l10n.ttsTimerStop,
+                            onPressed: _showSettings,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: width < 390 ? 156 : 184,
+                              height: width < 390 ? 218 : 258,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: palette.shadow.withValues(
+                                      alpha: 0.24,
+                                    ),
+                                    blurRadius: 28,
+                                    offset: const Offset(0, 14),
+                                  ),
+                                ],
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: GeneratedBookCover(
+                                title: controller.source.bookTitle,
+                                author: widget.author,
+                              ),
+                            ),
+                            const SizedBox(height: 34),
+                            SizedBox(
+                              height: 94,
+                              child: Center(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  child: Text(
+                                    segment?.text ?? context.l10n.ttsReading,
+                                    key: ValueKey(segment?.startOffset),
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: palette.text,
+                                          height: 1.65,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(99),
+                              child: LinearProgressIndicator(
+                                value: controller.chapterProgress,
+                                minHeight: 4,
+                                color: palette.accent,
+                                backgroundColor: palette.border.withValues(
+                                  alpha: 0.42,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 26),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _featureButton(
+                                  icon: Icons.speed_rounded,
+                                  label:
+                                      '${context.l10n.ttsSpeed} ${(widget.ttsService.speechRate * 2).toStringAsFixed(1)}×',
+                                  onPressed: _showSettings,
+                                ),
+                                _featureButton(
+                                  key: const ValueKey('reader-aloud-chapters'),
+                                  icon: Icons.format_list_bulleted_rounded,
+                                  label: context.l10n.currentChapter,
+                                  onPressed: _showChapters,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 28),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _transportButton(
+                                  icon: Icons.first_page_rounded,
+                                  tooltip: context.l10n.tapZonePreviousChapter,
+                                  onPressed:
+                                      chapter == null || chapter.index == 0
+                                      ? null
+                                      : () => unawaited(
+                                          controller.previousChapter(),
+                                        ),
+                                ),
+                                _transportButton(
+                                  icon: Icons.fast_rewind_rounded,
+                                  tooltip: context.l10n.ttsPreviousSentence,
+                                  onPressed: () =>
+                                      unawaited(controller.previous()),
+                                ),
+                                Semantics(
+                                  button: true,
+                                  label: playing
+                                      ? context.l10n.pause
+                                      : context.l10n.play,
+                                  child: IconButton.filled(
+                                    key: const ValueKey(
+                                      'reader-aloud-play-pause',
+                                    ),
+                                    onPressed: loading
+                                        ? null
+                                        : () => unawaited(
+                                            playing
+                                                ? controller.pause()
+                                                : controller.state ==
+                                                      ReaderAloudPlaybackState
+                                                          .paused
+                                                ? controller.resume()
+                                                : controller.start(),
+                                          ),
+                                    iconSize: 38,
+                                    padding: const EdgeInsets.all(20),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: palette.accent,
+                                      foregroundColor: palette.onAccent,
+                                    ),
+                                    icon: loading
+                                        ? const SizedBox.square(
+                                            dimension: 30,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                            ),
+                                          )
+                                        : Icon(
+                                            playing
+                                                ? Icons.pause_rounded
+                                                : Icons.play_arrow_rounded,
+                                          ),
+                                  ),
+                                ),
+                                _transportButton(
+                                  icon: Icons.fast_forward_rounded,
+                                  tooltip: context.l10n.ttsNextSentence,
+                                  onPressed: () => unawaited(controller.next()),
+                                ),
+                                _transportButton(
+                                  icon: Icons.last_page_rounded,
+                                  tooltip: context.l10n.tapZoneNextChapter,
+                                  onPressed:
+                                      chapter == null ||
+                                          chapter.index + 1 >=
+                                              controller.source.chapterCount
+                                      ? null
+                                      : () =>
+                                            unawaited(controller.nextChapter()),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
+                            OutlinedButton.icon(
+                              onPressed: _showSettings,
+                              icon: Icon(
+                                widget.aloudService.usesCloud
+                                    ? Icons.cloud_outlined
+                                    : Icons.record_voice_over_outlined,
+                              ),
+                              label: Text(
+                                widget.aloudService.usesCloud
+                                    ? _copy('云端朗读引擎', 'Cloud voice', 'クラウド音声')
+                                    : _copy('系统朗读引擎', 'System voice', 'システム音声'),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: palette.secondaryText,
+                                side: BorderSide(color: palette.border),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _roundButton({
+    Key? key,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) => IconButton.filledTonal(
+    key: key,
+    onPressed: onPressed,
+    tooltip: tooltip,
+    icon: Icon(icon),
+    style: IconButton.styleFrom(
+      backgroundColor: widget.palette.controlFill,
+      foregroundColor: widget.palette.text,
+    ),
+  );
+
+  Widget _featureButton({
+    Key? key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) => Column(
+    key: key,
+    children: [
+      IconButton.outlined(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        iconSize: 27,
+        padding: const EdgeInsets.all(15),
+        style: IconButton.styleFrom(
+          foregroundColor: widget.palette.text,
+          side: BorderSide(color: widget.palette.border),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelMedium?.copyWith(color: widget.palette.secondaryText),
+      ),
+    ],
+  );
+
+  Widget _transportButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) => IconButton(
+    onPressed: onPressed,
+    tooltip: tooltip,
+    icon: Icon(icon),
+    iconSize: 30,
+    color: widget.palette.text,
+    disabledColor: widget.palette.secondaryText.withValues(alpha: 0.28),
+  );
+
+  Future<void> _showSettings() => showReaderAloudSettingsSheet(
+    context: context,
+    controller: widget.controller,
+    ttsService: widget.ttsService,
+    aloudService: widget.aloudService,
+    palette: widget.palette,
+    themeData: Theme.of(context),
+  );
+
+  Future<void> _showChapters() async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: widget.palette.controlBar,
+      constraints: BoxConstraints(
+        maxWidth: 620,
+        maxHeight: MediaQuery.sizeOf(context).height * 0.68,
+      ),
+      builder: (context) => ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+        itemCount: widget.controller.source.chapterCount,
+        itemBuilder: (context, index) => FutureBuilder<ReaderAloudChapter?>(
+          future: widget.controller.source.loadChapter(index),
+          builder: (context, snapshot) {
+            final chapter = snapshot.data;
+            final selected = widget.controller.currentChapter?.index == index;
+            return ListTile(
+              selected: selected,
+              leading: selected
+                  ? Icon(Icons.graphic_eq_rounded, color: widget.palette.accent)
+                  : SizedBox(
+                      width: 24,
+                      child: Text(
+                        '${index + 1}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: widget.palette.secondaryText),
+                      ),
+                    ),
+              title: Text(
+                chapter?.title ?? context.l10n.readerChapterFallback(index + 1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: chapter == null
+                  ? null
+                  : () => Navigator.of(context).pop(index),
+            );
+          },
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      await widget.controller.playChapter(selected);
+    }
+  }
+
+  String _copy(String zh, String en, String ja) =>
+      switch (Localizations.localeOf(context).languageCode) {
+        'en' => en,
+        'ja' => ja,
+        _ => zh,
+      };
+}
 
 class ReaderAloudPanel extends StatefulWidget {
   const ReaderAloudPanel({

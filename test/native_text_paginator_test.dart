@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/core/reader/native_text_paginator.dart';
+import 'package:xxread/core/reader/reader_margin_settings.dart';
+import 'package:xxread/core/reader/reader_settings.dart';
 
 const _heightBehavior = TextHeightBehavior(
   applyHeightToFirstAscent: true,
@@ -28,6 +30,38 @@ void main() {
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('the widest typography still paginates on a small phone viewport', () {
+    const style = TextStyle(
+      fontSize: ReaderSettings.maxFontSize,
+      height: ReaderSettings.maxLineHeight,
+      letterSpacing: ReaderSettings.maxLetterSpacing,
+    );
+    final text = List.generate(
+      6,
+      (index) => '第$index段验证最大字号与最大页边距下的分页不会丢失正文。\n\n',
+    ).join();
+    // A 320x568 phone minus the widest horizontal and vertical margins.
+    const width = 320.0 - ReaderMarginSettings.horizontalMax * 2;
+    const height = 568.0 - ReaderMarginSettings.max * 2;
+    final paginator = NativeTextPaginator(
+      maxWidth: width,
+      maxHeight: height,
+      flowStyle: _flowStyle(style),
+    );
+
+    final pages = paginator.paginate(
+      text: text,
+      spanBuilder: (start, end) =>
+          TextSpan(text: text.substring(start, end), style: style),
+    );
+
+    expect(pages, isNotEmpty);
+    expect(
+      pages.map((page) => text.substring(page.start, page.end)).join(),
+      text,
+    );
+  });
 
   test('large text pages preserve content and fit complete visual lines', () {
     const style = TextStyle(fontSize: 32, height: 1.75, letterSpacing: 0.2);

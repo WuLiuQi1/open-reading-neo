@@ -382,12 +382,14 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
       onTap: () => unawaited(_changeFontFamily()),
     ),
     ReaderSettingSlider(
+      key: const ValueKey('reader-font-size-slider'),
       label: widget.fontSizeLabel,
       value: _fontSize,
       valueLabel: _fontSize.round().toString(),
-      min: 14,
-      max: 32,
-      divisions: 18,
+      min: ReaderSettings.minFontSize,
+      max: ReaderSettings.maxFontSize,
+      divisions: (ReaderSettings.maxFontSize - ReaderSettings.minFontSize)
+          .round(),
       onChanged: (value) => setState(() => _fontSize = value),
       onChangeEnd: widget.onFontSizeChanged,
     ),
@@ -427,12 +429,15 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
       onChangeEnd: widget.onFontWeightChanged,
     ),
     ReaderSettingSlider(
+      key: const ValueKey('reader-line-height-slider'),
       label: widget.lineHeightLabel,
       value: _lineHeight,
       valueLabel: _lineHeight.toStringAsFixed(1),
-      min: 1.4,
-      max: 2.1,
-      divisions: 7,
+      min: ReaderSettings.minLineHeight,
+      max: ReaderSettings.maxLineHeight,
+      divisions:
+          ((ReaderSettings.maxLineHeight - ReaderSettings.minLineHeight) * 10)
+              .round(),
       onChanged: (value) => setState(() => _lineHeight = value),
       onChangeEnd: widget.onLineHeightChanged,
     ),
@@ -492,7 +497,11 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
           valueLabel: _letterSpacing.toStringAsFixed(1),
           min: ReaderSettings.minLetterSpacing,
           max: ReaderSettings.maxLetterSpacing,
-          divisions: 12,
+          divisions:
+              ((ReaderSettings.maxLetterSpacing -
+                          ReaderSettings.minLetterSpacing) *
+                      10)
+                  .round(),
           onChanged: (value) => setState(() => _letterSpacing = value),
           onChangeEnd: widget.onLetterSpacingChanged,
         ),
@@ -546,7 +555,10 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
       valueLabel: _horizontalMargin.round().toString(),
       min: ReaderMarginSettings.horizontalMin,
       max: ReaderMarginSettings.horizontalMax,
-      divisions: 48,
+      divisions:
+          (ReaderMarginSettings.horizontalMax -
+                  ReaderMarginSettings.horizontalMin)
+              .round(),
       onChanged: (value) => setState(() => _horizontalMargin = value),
       onChangeEnd: widget.onHorizontalMarginChanged,
     ),
@@ -1795,9 +1807,10 @@ class ReaderMarginControls extends StatelessWidget {
         label: topLabel,
         value: topMargin,
         valueLabel: topMargin.round().toString(),
-        min: 0,
-        max: 40,
-        divisions: 40,
+        min: ReaderMarginSettings.min,
+        max: ReaderMarginSettings.max,
+        divisions: (ReaderMarginSettings.max - ReaderMarginSettings.min)
+            .round(),
         onChanged: onTopChanged,
         onChangeEnd: onTopChangeEnd,
       ),
@@ -1806,9 +1819,10 @@ class ReaderMarginControls extends StatelessWidget {
         label: bottomLabel,
         value: bottomMargin,
         valueLabel: bottomMargin.round().toString(),
-        min: 0,
-        max: 40,
-        divisions: 40,
+        min: ReaderMarginSettings.min,
+        max: ReaderMarginSettings.max,
+        divisions: (ReaderMarginSettings.max - ReaderMarginSettings.min)
+            .round(),
         onChanged: onBottomChanged,
         onChangeEnd: onBottomChangeEnd,
       ),

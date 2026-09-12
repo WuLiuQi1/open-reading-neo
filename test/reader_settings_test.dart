@@ -261,6 +261,19 @@ void main() {
     expect(restored.copyWith(paragraphSpacing: 9).paragraphSpacing, 2);
     expect(restored.copyWith(fontWeight: 349).fontWeight, 300);
     expect(restored.copyWith(fontWeight: 351).fontWeight, 400);
+    expect(
+      restored.copyWith(fontSize: 99).fontSize,
+      ReaderSettings.maxFontSize,
+    );
+    expect(restored.copyWith(fontSize: 1).fontSize, ReaderSettings.minFontSize);
+    expect(
+      restored.copyWith(lineHeight: 9).lineHeight,
+      ReaderSettings.maxLineHeight,
+    );
+    expect(
+      restored.copyWith(lineHeight: 0.1).lineHeight,
+      ReaderSettings.minLineHeight,
+    );
     expect(restored.copyWith(textBrightness: 120).textBrightness, 100);
     expect(restored.copyWith(textBrightness: -1).textBrightness, 0);
     expect(

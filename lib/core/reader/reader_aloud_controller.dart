@@ -516,6 +516,42 @@ class ReaderAloudController extends ChangeNotifier {
 
   Future<void> next() => _moveBy(1);
 
+  Future<void> previousChapter() => _moveToChapter(-1);
+
+  Future<void> nextChapter() => _moveToChapter(1);
+
+  /// Starts playback at the beginning of [chapterIndex].
+  Future<void> playChapter(int chapterIndex) async {
+    if (_disposed || chapterIndex < 0 || chapterIndex >= source.chapterCount) {
+      return;
+    }
+    final generation = ++_generation;
+    _clearContinuousUtterance();
+    _setState(ReaderAloudPlaybackState.loading);
+    _lastError = null;
+    await engine.stop();
+    if (!_isCurrent(generation)) return;
+    try {
+      final loaded = await _loadChapterAt(chapterIndex);
+      if (!loaded || !_isCurrent(generation)) return;
+      _resumeOffset = 0;
+      _setState(ReaderAloudPlaybackState.playing);
+      unawaited(_playCurrent(generation));
+    } catch (error) {
+      _fail(error, generation);
+    }
+  }
+
+  Future<void> _moveToChapter(int delta) async {
+    final current = _currentChapter?.index;
+    if (current == null) {
+      final position = await source.currentPosition();
+      await playChapter(position.chapterIndex + delta);
+      return;
+    }
+    await playChapter(current + delta);
+  }
+
   Future<void> stop() async {
     if (_state == ReaderAloudPlaybackState.playing) {
       _captureResumeOffset(keepFurthest: true);

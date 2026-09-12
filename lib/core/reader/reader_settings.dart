@@ -65,6 +65,8 @@ List<FontVariation> readerFontVariationsFromValue(
 @immutable
 class ReaderSettings {
   static const double defaultFontSize = 19;
+  static const double minFontSize = 12;
+  static const double maxFontSize = 48;
 
   /// Text brightness uses the active reader theme direction:
   /// dark: 0 is black and 100 is white; light: 0 is white and 100 is black.
@@ -75,9 +77,11 @@ class ReaderSettings {
   static const int minFontWeight = 300;
   static const int maxFontWeight = 700;
   static const int defaultFontWeight = 400;
+  static const double minLineHeight = 1.2;
+  static const double maxLineHeight = 3;
   static const double defaultLineHeight = 1.75;
   static const double minLetterSpacing = 0;
-  static const double maxLetterSpacing = 1.2;
+  static const double maxLetterSpacing = 3;
   static const double defaultLetterSpacing = 0;
   static const ReaderTextAlignment defaultTextAlignment =
       ReaderTextAlignment.natural;
@@ -149,14 +153,17 @@ class ReaderSettings {
     bool? chapterTitlePageEnabled,
   }) {
     return ReaderSettings(
-      fontSize: (fontSize ?? this.fontSize).clamp(14, 32),
+      fontSize: (fontSize ?? this.fontSize).clamp(minFontSize, maxFontSize),
       textBrightness: (textBrightness ?? this.textBrightness).clamp(
         minTextBrightness,
         maxTextBrightness,
       ),
       dimTextInDarkMode: dimTextInDarkMode ?? this.dimTextInDarkMode,
       fontWeight: normalizeReaderFontWeight(fontWeight ?? this.fontWeight),
-      lineHeight: (lineHeight ?? this.lineHeight).clamp(1.4, 2.1),
+      lineHeight: (lineHeight ?? this.lineHeight).clamp(
+        minLineHeight,
+        maxLineHeight,
+      ),
       letterSpacing: (letterSpacing ?? this.letterSpacing).clamp(
         minLetterSpacing,
         maxLetterSpacing,
@@ -267,7 +274,7 @@ class ReaderSettingsStore {
 
     return ReaderSettings(
       fontSize: (prefs.getDouble(fontSizeKey) ?? ReaderSettings.defaultFontSize)
-          .clamp(14, 32),
+          .clamp(ReaderSettings.minFontSize, ReaderSettings.maxFontSize),
       textBrightness: textBrightness.clamp(
         ReaderSettings.minTextBrightness,
         ReaderSettings.maxTextBrightness,
@@ -282,7 +289,10 @@ class ReaderSettingsStore {
           (prefs.getDouble(lineHeightKey) ??
                   prefs.getDouble(legacyBookSourceLineHeightKey) ??
                   ReaderSettings.defaultLineHeight)
-              .clamp(1.4, 2.1),
+              .clamp(
+                ReaderSettings.minLineHeight,
+                ReaderSettings.maxLineHeight,
+              ),
       letterSpacing:
           (prefs.getDouble(letterSpacingKey) ??
                   ReaderSettings.defaultLetterSpacing)

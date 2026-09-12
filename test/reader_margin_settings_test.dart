@@ -25,9 +25,12 @@ void main() {
     });
 
     test('prefers and clamps independently stored values', () {
-      final margins = ReaderMarginSettings.fromStored(top: 48, bottom: -2);
+      final margins = ReaderMarginSettings.fromStored(
+        top: ReaderMarginSettings.max + 8,
+        bottom: -2,
+      );
 
-      expect(margins.top, 40);
+      expect(margins.top, ReaderMarginSettings.max);
       expect(margins.bottom, 0);
     });
   });

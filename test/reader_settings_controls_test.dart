@@ -200,6 +200,26 @@ void main() {
       expect(find.text('Reader Serif'), findsOneWidget);
       expect(find.text('Overrides the book font'), findsOneWidget);
 
+      final fontSizeSlider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(const ValueKey('reader-font-size-slider')),
+          matching: find.byType(Slider),
+        ),
+      );
+      expect(fontSizeSlider.min, ReaderSettings.minFontSize);
+      expect(fontSizeSlider.max, ReaderSettings.maxFontSize);
+      expect(fontSizeSlider.divisions, 36);
+
+      final lineHeightSlider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(const ValueKey('reader-line-height-slider')),
+          matching: find.byType(Slider),
+        ),
+      );
+      expect(lineHeightSlider.min, ReaderSettings.minLineHeight);
+      expect(lineHeightSlider.max, ReaderSettings.maxLineHeight);
+      expect(lineHeightSlider.divisions, 18);
+
       final textBrightnessFinder = find.descendant(
         of: find.byKey(const ValueKey('reader-text-brightness-slider')),
         matching: find.byType(Slider),

@@ -11,6 +11,88 @@ import 'package:xxread/utils/reader_themes.dart';
 import 'package:xxread/widgets/reader_aloud_panel.dart';
 
 void main() {
+  testWidgets('audiobook player shows the current sentence and controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final tts = _PanelTtsService();
+    final aloud = ReaderAloudService(
+      systemEngine: tts,
+      settingsStore: _PanelSettingsStore(),
+      cloudClient: _PanelCloudClient(),
+      bytesPlayer: _PanelBytesPlayer(),
+    );
+    final controller = ReaderAloudController(
+      engine: aloud,
+      source: CallbackReaderAloudSource(
+        bookTitle: '测试书籍',
+        chapterCount: () => 2,
+        currentPosition: () async =>
+            const ReaderAloudPosition(chapterIndex: 0, offset: 0),
+        loadChapter: (index) async => ReaderAloudChapter(
+          index: index,
+          id: 'chapter-$index',
+          title: '第${index + 1}章',
+          text: index == 0 ? '正在朗读的第一句。第二句。' : '下一章第一句。',
+        ),
+        revealPosition: (_) async {},
+        persistPosition: (_) async {},
+      ),
+    );
+    addTearDown(() async {
+      controller.dispose();
+      aloud.dispose();
+      tts.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () => showReaderAloudPlayer(
+                context: context,
+                controller: controller,
+                ttsService: tts,
+                aloudService: aloud,
+                palette: ReaderThemes.day,
+                themeData: Theme.of(context),
+                author: '测试作者',
+              ),
+              child: const Text('open player'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open player'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('测试书籍'), findsOneWidget);
+    expect(find.text('第1章'), findsOneWidget);
+    expect(find.text('正在朗读的第一句。'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reader-aloud-play-pause')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('reader-aloud-chapters')), findsOneWidget);
+    expect(find.text('bgm'), findsNothing);
+    expect(find.text('原文'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('reader-aloud-chapters')));
+    await tester.pumpAndSettle();
+    expect(find.text('第2章'), findsOneWidget);
+    await tester.tap(find.text('第2章'));
+    await tester.pumpAndSettle();
+    expect(find.text('下一章第一句。'), findsOneWidget);
+  });
+
   testWidgets('audiobook sheet is bounded, draggable, and accepts any timer', (
     tester,
   ) async {

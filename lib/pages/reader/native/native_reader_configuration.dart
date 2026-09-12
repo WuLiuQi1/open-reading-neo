@@ -298,7 +298,10 @@ extension _NativeReaderConfiguration on _NativeReaderPageState {
       );
       _dimTextInDarkMode = dimTextInDarkMode ?? _dimTextInDarkMode;
       _fontWeight = normalizeReaderFontWeight(fontWeight ?? _fontWeight);
-      _lineHeight = (lineHeight ?? _lineHeight).clamp(1.4, 2.1);
+      _lineHeight = (lineHeight ?? _lineHeight).clamp(
+        ReaderSettings.minLineHeight,
+        ReaderSettings.maxLineHeight,
+      );
       _letterSpacing = (letterSpacing ?? _letterSpacing).clamp(
         ReaderSettings.minLetterSpacing,
         ReaderSettings.maxLetterSpacing,

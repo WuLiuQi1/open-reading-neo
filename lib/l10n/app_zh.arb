@@ -346,7 +346,7 @@
   "@highlights": {
     "description": "高亮功能"
   },
-  "ttsReading": "语音朗读",
+  "ttsReading": "听书",
   "@ttsReading": {
     "description": "TTS朗读功能"
   },
@@ -769,7 +769,7 @@
   "@resetDefault": {
     "description": "恢复默认按钮"
   },
-  "ttsPanelTitle": "语音朗读",
+  "ttsPanelTitle": "听书设置",
   "@ttsPanelTitle": {
     "description": "TTS面板标题"
   },

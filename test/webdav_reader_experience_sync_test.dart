@@ -401,7 +401,7 @@ void main() {
       );
 
       final restored = await const ReaderSettingsStore().load();
-      expect(restored.fontSize, 32);
+      expect(restored.fontSize, ReaderSettings.maxFontSize);
       expect(restored.pageMode, ReaderPageMode.verticalScroll);
     },
   );

@@ -820,7 +820,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get highlights => '高亮';
 
   @override
-  String get ttsReading => '语音朗读';
+  String get ttsReading => '听书';
 
   @override
   String get share => '分享';
@@ -1261,7 +1261,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get resetDefault => '恢复默认';
 
   @override
-  String get ttsPanelTitle => '语音朗读';
+  String get ttsPanelTitle => '听书设置';
 
   @override
   String get ttsPreviewEffect => '预览效果';
@@ -7009,7 +7009,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get highlights => '螢光標記';
 
   @override
-  String get ttsReading => '語音朗讀';
+  String get ttsReading => '聽書';
 
   @override
   String get share => '分享';
@@ -7410,7 +7410,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get resetDefault => '恢復預設';
 
   @override
-  String get ttsPanelTitle => '語音朗讀';
+  String get ttsPanelTitle => '聽書設定';
 
   @override
   String get ttsPreviewEffect => '預覽效果';

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -203,9 +204,7 @@ class _AccountPageState extends State<AccountPage> {
       final uri =
           authorization.verificationUriComplete ??
           authorization.verificationUri;
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        throw const MemberAccountException('无法打开安全登录页面');
-      }
+      if (!await _openExternalLoginUri(uri)) return;
       if (!mounted) return;
       setState(() {
         _deviceAuthorization = authorization;
@@ -259,6 +258,33 @@ class _AccountPageState extends State<AccountPage> {
       }
       _showError(error);
     }
+  }
+
+  /// Presents the GitHub/Google device-authorization URL. On iOS/macOS this
+  /// uses `ASWebAuthenticationSession` (via flutter_web_auth_2) so sign-in
+  /// stays inside the app instead of switching to the system browser (App
+  /// Store Guideline 4). The `xxread` scheme is already registered for this
+  /// purpose, so the sheet dismisses itself once the backend redirects to
+  /// it, racing the same way `account.waitForAuthCallback` already does for
+  /// the polling loop below. Returns false if the user cancelled.
+  Future<bool> _openExternalLoginUri(Uri uri) async {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      try {
+        await FlutterWebAuth2.authenticate(
+          url: uri.toString(),
+          callbackUrlScheme: 'xxread',
+        );
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      throw const MemberAccountException('无法打开安全登录页面');
+    }
+    return true;
   }
 
   Future<void> _loginWithApple() async {

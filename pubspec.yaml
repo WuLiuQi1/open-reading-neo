@@ -82,6 +82,7 @@ dependencies:
   in_app_purchase: ^3.3.0
   passkeys: ^2.22.0
   sign_in_with_apple: ^8.1.0
+  flutter_web_auth_2: ^5.1.0
 
 dev_dependencies:
   flutter_test:

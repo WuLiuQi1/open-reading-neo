@@ -375,6 +375,12 @@ extension _SettingsLayoutPart on _SettingsPageState {
   }
 
   Widget _buildSupportSettingsSection(AppLocalizations l10n) {
+    // Donations must go through In-App Purchase on Apple's billed
+    // storefronts (App Store Guideline 3.1.1), so this QR-code donation
+    // entry point is hidden there instead of being converted to an IAP.
+    if (AppDistribution.usesAppleBilling) {
+      return const SizedBox.shrink();
+    }
     return KeyedSubtree(
       key: _supportSectionKey,
       child: _buildSectionCard(

@@ -4,12 +4,14 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
+  desktop_webview_window
   flutter_js
   flutter_secure_storage_windows
   flutter_tts
   passkeys_windows
   pdfx
   url_launcher_windows
+  window_to_front
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

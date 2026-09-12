@@ -19,6 +19,7 @@ import 'package:xxread/pages/library/import_book/import_book_page.dart';
 import 'package:xxread/pages/library/library_page.dart';
 import 'package:xxread/pages/library/download_tasks_page.dart';
 import 'package:xxread/pages/settings/settings_page.dart';
+import 'package:xxread/services/core/app_distribution.dart';
 import 'package:xxread/services/core/app_settings_service.dart';
 import 'package:xxread/services/core/first_home_support_intro_service.dart';
 import 'package:xxread/services/ai/ai_chat_history_store.dart';
@@ -155,6 +156,9 @@ class _HomeShellPageState extends State<HomeShellPage> {
 
   Future<void> _maybeShowFirstHomeSupport() async {
     if (_supportIntroCheckStarted || !widget.showFirstHomeSupport) return;
+    // The donation entry point this overlay leads to is hidden on Apple's
+    // billed storefronts (App Store Guideline 3.1.1), so skip the prompt.
+    if (AppDistribution.usesAppleBilling) return;
     _supportIntroCheckStarted = true;
     final shouldShow = await const FirstHomeSupportIntroService()
         .claimIfUnseen();
